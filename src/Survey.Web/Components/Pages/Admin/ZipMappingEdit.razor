@@ -1,0 +1,87 @@
+@page "/admin/zip-mappings/new"
+@page "/admin/zip-mappings/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit ZIP Mapping" : "Add ZIP Mapping")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">ZIP Crosswalk Row</p>
+			<h1>@(Id.HasValue ? "Edit ZIP Mapping" : "Add ZIP Mapping")</h1>
+			<p>Create or correct a single ZIP-to-county rule when you do not want to re-import the whole crosswalk.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid">
+				<div class="field-stack">
+					<label>ZIP Code</label>
+					<InputText class="form-control" @bind-Value="_model.ZipCode" />
+					<ValidationMessage For="@(() => _model.ZipCode)" />
+				</div>
+				<div class="field-stack">
+					<label>County FIPS</label>
+					<InputText class="form-control" @bind-Value="_model.CountyFips" />
+					<ValidationMessage For="@(() => _model.CountyFips)" />
+				</div>
+				<div class="field-stack">
+					<label>County Name</label>
+					<InputText class="form-control" @bind-Value="_model.CountyName" />
+					<ValidationMessage For="@(() => _model.CountyName)" />
+				</div>
+				<div class="field-stack">
+					<label>State Code</label>
+					<InputText class="form-control" @bind-Value="_model.StateCode" />
+					<ValidationMessage For="@(() => _model.StateCode)" />
+				</div>
+				<div class="field-stack">
+					<label>Residential Ratio</label>
+					<InputNumber class="form-control" @bind-Value="_model.ResidentialRatio" />
+					<ValidationMessage For="@(() => _model.ResidentialRatio)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save Mapping</button>
+				<a class="btn btn-outline-primary" href="admin/zip-mappings">Back to ZIP Mappings</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private ZipCountyMappingEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetZipCountyMappingAsync(Id);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			await AdministrationService.SaveZipCountyMappingAsync(_model);
+			NavigationManager.NavigateTo("admin/zip-mappings");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

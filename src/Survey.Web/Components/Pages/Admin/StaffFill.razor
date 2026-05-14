@@ -1,0 +1,30 @@
+@page "/admin/assignments/{AssignmentId:int}/fill"
+@attribute [Authorize(Roles = $"{RoleNames.Admin},{RoleNames.Employee}")]
+@inject ISurveyExperienceService SurveyExperienceService
+
+<PageTitle>Fill Survey</PageTitle>
+
+@if (_session is null)
+{
+	<div class="status-card narrow-card">
+		<p class="eyebrow">Assignment</p>
+		<h1>That assignment couldn't be loaded.</h1>
+		<p class="mb-0">It may have been removed or the survey version is no longer available.</p>
+	</div>
+}
+else
+{
+	<SurveyForm Session="_session" />
+}
+
+@code {
+	[Parameter]
+	public int AssignmentId { get; set; }
+
+	private SurveySessionModel? _session;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_session = await SurveyExperienceService.GetStaffSessionAsync(AssignmentId);
+	}
+}

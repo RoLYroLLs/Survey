@@ -1,0 +1,89 @@
+@page "/admin/theme"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Theme</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Settings</p>
+			<h1>Theme</h1>
+			<p>Admins control the global color system here. Clicking a preset makes it the live theme for every visitor to the site.</p>
+		</div>
+	</div>
+
+	@if (_updated)
+	{
+		<div class="inline-banner">The site theme was updated and is now live for all users.</div>
+	}
+
+	<div class="form-card">
+		<div class="page-header">
+			<div>
+				<h2>Color System</h2>
+				<p>Choose one of the curated presets below. Changes apply immediately and are shared site-wide.</p>
+			</div>
+			@if (_model.UpdatedUtc.HasValue)
+			{
+				<span class="status-pill status-pill--muted">Updated @_model.UpdatedUtc.Value.LocalDateTime.ToString("g")</span>
+			}
+		</div>
+
+		<div class="theme-preset-grid">
+			@foreach (var option in _model.PresetOptions)
+			{
+				var isSelected = string.Equals(_model.ThemePresetKey, option.Key, StringComparison.OrdinalIgnoreCase);
+				<button class="theme-preset-card @(isSelected ? "theme-preset-card--selected" : null)"
+						type="button"
+						disabled="@_isApplyingTheme"
+						aria-pressed="@isSelected"
+						@onclick="() => ApplyThemeAsync(option.Key)">
+					<div class="theme-preset-card__top">
+						<div>
+							<h3>@option.Name</h3>
+							<p>@option.Description</p>
+						</div>
+						<span class="theme-preset-card__indicator" aria-hidden="true">@(isSelected ? "Live" : "Apply")</span>
+					</div>
+					<span class="theme-preset-card__swatch" style="@option.PreviewStyle"></span>
+					<div class="theme-preset-card__chips">
+						<span class="theme-preset-card__chip">Primary @option.PrimaryColor</span>
+						<span class="theme-preset-card__chip">Accent @option.AccentColor</span>
+						<span class="theme-preset-card__chip">Background @option.BackgroundColor</span>
+					</div>
+				</button>
+			}
+		</div>
+	</div>
+
+</div>
+
+@code {
+	[SupplyParameterFromQuery(Name = "updated")]
+	public int? Updated { get; set; }
+
+	private SiteSettingsEditModel _model = new();
+	private bool _updated;
+	private bool _isApplyingTheme;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetSiteSettingsAsync();
+		_updated = Updated == 1;
+	}
+
+	private async Task ApplyThemeAsync(string themePresetKey)
+	{
+		if (_isApplyingTheme || string.Equals(_model.ThemePresetKey, themePresetKey, StringComparison.OrdinalIgnoreCase))
+		{
+			return;
+		}
+
+		_isApplyingTheme = true;
+		_model.ThemePresetKey = themePresetKey;
+		await AdministrationService.SaveSiteSettingsAsync(_model);
+		NavigationManager.NavigateTo("admin/theme?updated=1", true);
+	}
+}

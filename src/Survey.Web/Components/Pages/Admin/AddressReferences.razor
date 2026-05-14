@@ -1,0 +1,149 @@
+@page "/admin/addresses/{Id:int}/references"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+
+<PageTitle>Address References</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>Address References</h1>
+			@if (_model is null)
+			{
+				<p>Loading address references...</p>
+			}
+			else
+			{
+				<p>@_model.FormattedAddress</p>
+			}
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="admin/addresses">Back to Addresses</a>
+			@if (_model is not null)
+			{
+				<a class="btn btn-primary" href="admin/addresses/@_model.Id/edit">Edit Address</a>
+			}
+		</div>
+	</div>
+
+	@if (_model is null)
+	{
+		<div class="list-card">
+			<p class="empty-state">Loading address references...</p>
+		</div>
+	}
+	else
+	{
+		<div class="dashboard-grid">
+			<div class="metric-card">
+				<p class="metric-card__label">Total References</p>
+				<p class="metric-card__value">@_model.ReferenceCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">People</p>
+				<p class="metric-card__value">@_model.People.Count</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Responses</p>
+				<p class="metric-card__value">@_model.Responses.Count</p>
+			</div>
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>People</h2>
+					<p>Recipient records that currently point to this shared address.</p>
+				</div>
+			</div>
+
+			@if (_model.People.Count == 0)
+			{
+				<p class="empty-state">No people currently reference this address.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Email</th>
+							<th>Phone</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _model.People)
+						{
+							<tr>
+								<td>@item.FullName</td>
+								<td>@item.Email</td>
+								<td>@item.PhoneNumber</td>
+								<td>
+									<div class="table-actions">
+										<a class="btn btn-sm btn-outline-primary" href="admin/people/@item.Id/edit">View Person</a>
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Responses</h2>
+					<p>Submitted survey snapshots that resolved to this shared address at submission time.</p>
+				</div>
+			</div>
+
+			@if (_model.Responses.Count == 0)
+			{
+				<p class="empty-state">No responses currently reference this address.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Respondent</th>
+							<th>Survey</th>
+							<th>Submitted</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _model.Responses)
+						{
+							<tr>
+								<td>@item.RespondentName</td>
+								<td>@item.SurveyName<br /><small>@item.VersionName</small></td>
+								<td>@item.SubmittedUtc.LocalDateTime.ToString("g")</td>
+								<td>
+									<div class="table-actions">
+										<a class="btn btn-sm btn-outline-primary" href="admin/responses/@item.Id">View Response</a>
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	}
+</div>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	private PostalAddressReferenceViewModel? _model;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetPostalAddressReferencesAsync(Id);
+	}
+}

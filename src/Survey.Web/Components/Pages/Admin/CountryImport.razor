@@ -1,0 +1,87 @@
+@page "/admin/countries/import"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+
+<PageTitle>Import Countries</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography Import</p>
+			<h1>Import Countries</h1>
+			<p>Import country rows with columns like <code>Name</code>, <code>Iso2</code>, and optional <code>Iso3</code>.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="/admin/import-samples/countries">Download Sample Excel</a>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (_result is not null)
+		{
+			<div class="inline-banner mb-3">
+				Imported @_result.ImportedRowCount country rows.
+			</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="ImportAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid form-grid--single">
+				<div class="field-stack">
+					<label>CSV File</label>
+					<InputFile OnChange="HandleFileChange" accept=".csv,text/csv" />
+				</div>
+				<div class="field-stack">
+					<label>CSV Content</label>
+					<InputTextArea class="form-control" rows="12" @bind-Value="_model.CsvContent" />
+					<ValidationMessage For="@(() => _model.CsvContent)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Import Countries</button>
+				<a class="btn btn-outline-primary" href="admin/countries">Back to Countries</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	private readonly CountryImportModel _model = new();
+	private GeographyImportResultModel? _result;
+	private string? _errorMessage;
+
+	private async Task HandleFileChange(InputFileChangeEventArgs args)
+	{
+		_errorMessage = null;
+		_result = null;
+
+		var file = args.File;
+		if (file is null)
+		{
+			return;
+		}
+
+		await using var stream = file.OpenReadStream(10 * 1024 * 1024);
+		using var reader = new StreamReader(stream);
+		_model.CsvContent = await reader.ReadToEndAsync();
+	}
+
+	private async Task ImportAsync()
+	{
+		try
+		{
+			_result = await AdministrationService.ImportCountriesAsync(_model);
+			_errorMessage = null;
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

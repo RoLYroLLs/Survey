@@ -1,0 +1,88 @@
+@page "/admin/state-provinces/new"
+@page "/admin/state-provinces/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit State / Territory" : "Add State / Territory")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>@(Id.HasValue ? "Edit State / Territory" : "Add State / Territory")</h1>
+			<p>Use the local code you want addresses and county imports to depend on, such as <code>FL</code>.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid form-grid--single">
+				<div class="field-stack">
+					<label>Country</label>
+					<InputSelect class="form-control" @bind-Value="_model.CountryId">
+						<option value="0">Select a country</option>
+						@foreach (var option in _model.CountryOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+					<ValidationMessage For="@(() => _model.CountryId)" />
+				</div>
+				<div class="field-stack">
+					<label>Name</label>
+					<InputText class="form-control" @bind-Value="_model.Name" />
+					<ValidationMessage For="@(() => _model.Name)" />
+				</div>
+				<div class="field-stack">
+					<label>Code</label>
+					<InputText class="form-control" @bind-Value="_model.Code" />
+					<ValidationMessage For="@(() => _model.Code)" />
+				</div>
+				<div class="field-stack">
+					<label>Type</label>
+					<InputText class="form-control" @bind-Value="_model.SubdivisionType" />
+					<ValidationMessage For="@(() => _model.SubdivisionType)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save State / Territory</button>
+				<a class="btn btn-outline-primary" href="admin/state-provinces">Back to States / Territories</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private StateProvinceEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetStateProvinceAsync(Id, null);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			await AdministrationService.SaveStateProvinceAsync(_model);
+			NavigationManager.NavigateTo("admin/state-provinces");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

@@ -1,0 +1,96 @@
+@page "/admin/zip-mappings/import"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+
+<PageTitle>Import ZIP Mappings</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">ZIP Crosswalk Import</p>
+			<h1>Import ZIP Mappings</h1>
+			<p>Upload or paste a ZIP-to-county CSV. Replacing existing rows is the safest option when refreshing the crosswalk.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="/admin/import-samples/zip-mappings">Download Sample Excel</a>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (_result is not null)
+		{
+			<div class="inline-banner mb-3">
+				Imported @_result.ImportedRowCount rows across @_result.DistinctZipCount ZIP codes and @_result.DistinctCountyCount counties.
+			</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="ImportAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid form-grid--single">
+				<div class="field-stack">
+					<label>CSV File</label>
+					<InputFile OnChange="HandleFileChange" accept=".csv,text/csv" />
+				</div>
+				<div class="field-stack">
+					<label>CSV Content</label>
+					<InputTextArea class="form-control" rows="12" @bind-Value="_model.CsvContent" />
+					<ValidationMessage For="@(() => _model.CsvContent)" />
+				</div>
+				<div class="field-stack">
+					<label>Replace Existing Rows</label>
+					<InputCheckbox class="form-check-input" @bind-Value="_model.ReplaceExisting" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Import Mappings</button>
+				<a class="btn btn-outline-primary" href="admin/zip-mappings">Back to ZIP Mappings</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	private readonly ZipCountyImportModel _model = new();
+	private ZipCountyImportResultModel? _result;
+	private string? _errorMessage;
+
+	protected override void OnInitialized()
+	{
+		_model.ReplaceExisting = true;
+	}
+
+	private async Task HandleFileChange(InputFileChangeEventArgs args)
+	{
+		_errorMessage = null;
+		_result = null;
+
+		var file = args.File;
+		if (file is null)
+		{
+			return;
+		}
+
+		await using var stream = file.OpenReadStream(10 * 1024 * 1024);
+		using var reader = new StreamReader(stream);
+		_model.CsvContent = await reader.ReadToEndAsync();
+	}
+
+	private async Task ImportAsync()
+	{
+		try
+		{
+			_result = await AdministrationService.ImportZipCountyMappingsAsync(_model);
+			_errorMessage = null;
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

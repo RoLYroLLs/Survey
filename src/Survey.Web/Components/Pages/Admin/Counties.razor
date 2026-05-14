@@ -1,0 +1,127 @@
+@page "/admin/counties"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Counties</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>Counties</h1>
+			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "Maintain the county list used for areas, goals, and postal-code rollups." : $"Showing counties for {_filterLabel}.")</p>
+		</div>
+		<div class="toolbar">
+			@if (StateProvinceId.HasValue)
+			{
+				<a class="btn btn-outline-primary" href="admin/counties">View All</a>
+			}
+			<a class="btn btn-outline-primary" href="/admin/import-samples/counties">Download Sample Excel</a>
+			<a class="btn btn-outline-primary" href="admin/counties/import">Import CSV</a>
+			<a class="btn btn-primary" href="admin/counties/new">Add County</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>County Rows</h2>
+				<p>Search by country, state, county name, or FIPS.</p>
+			</div>
+			<div class="toolbar">
+				<input class="form-control" placeholder="Search counties" @bind="_searchText" />
+				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
+				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No counties matched the current search.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Country</th>
+						<th>State / Territory</th>
+						<th>County</th>
+						<th>FIPS</th>
+						<th>Addresses</th>
+						<th>Areas</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.CountryName</td>
+							<td>@item.StateProvinceName (@item.StateProvinceCode)</td>
+							<td>@item.Name</td>
+							<td>@item.FipsCode</td>
+							<td>@item.AddressCount</td>
+							<td>@item.AreaCount</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="admin/addresses?countyId=@item.Id">Addresses</a>
+									<a class="btn btn-sm btn-outline-primary" href="admin/areas?countyId=@item.Id">Areas</a>
+									<a class="btn btn-sm btn-outline-primary" href="admin/counties/@item.Id/edit">Edit</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public int? StateProvinceId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	private IReadOnlyList<CountyListItem> _items = Array.Empty<CountyListItem>();
+	private string? _filterLabel;
+	private string _searchText = string.Empty;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetCountiesAsync(StateProvinceId, Search);
+		_filterLabel = _items.FirstOrDefault()?.StateProvinceFilterName;
+	}
+
+	private void ApplySearch()
+	{
+		var url = "admin/counties";
+		var queryParts = new List<string>();
+		if (StateProvinceId.HasValue)
+		{
+			queryParts.Add($"stateProvinceId={StateProvinceId.Value}");
+		}
+		if (!string.IsNullOrWhiteSpace(_searchText))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(_searchText)}");
+		}
+		if (queryParts.Count > 0)
+		{
+			url = $"{url}?{string.Join("&", queryParts)}";
+		}
+		NavigationManager.NavigateTo(url);
+	}
+
+	private void ClearSearch()
+	{
+		_searchText = string.Empty;
+		var url = StateProvinceId.HasValue
+			? $"admin/counties?stateProvinceId={StateProvinceId.Value}"
+			: "admin/counties";
+		NavigationManager.NavigateTo(url);
+	}
+}

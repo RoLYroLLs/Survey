@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <UserSecretsId>911dc3e9-0a46-45eb-a6f5-9f96bad1d7da</UserSecretsId>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Survey.Application\Survey.Application.csproj" />
+    <ProjectReference Include="..\Survey.Infrastructure\Survey.Infrastructure.csproj" />
+    <ProjectReference Include="..\Survey.Migrations.Sqlite\Survey.Migrations.Sqlite.csproj" />
+    <ProjectReference Include="..\Survey.Migrations.SqlServer\Survey.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\Survey.ServiceDefaults\Survey.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

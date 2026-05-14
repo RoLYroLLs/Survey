@@ -1,0 +1,94 @@
+@page "/admin/employees/new"
+@page "/admin/employees/{Id}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_model.IsNew ? "Add Employee" : "Edit Employee")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Employee Account</p>
+			<h1>@(_model.IsNew ? "Add Employee" : "Edit Employee")</h1>
+			<p>Admins can manage the role and password used for staff login.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid">
+				<div class="field-stack">
+					<label>First Name</label>
+					<InputText class="form-control" @bind-Value="_model.FirstName" />
+					<ValidationMessage For="@(() => _model.FirstName)" />
+				</div>
+				<div class="field-stack">
+					<label>Last Name</label>
+					<InputText class="form-control" @bind-Value="_model.LastName" />
+					<ValidationMessage For="@(() => _model.LastName)" />
+				</div>
+				<div class="field-stack">
+					<label>Email</label>
+					<InputText class="form-control" @bind-Value="_model.Email" />
+					<ValidationMessage For="@(() => _model.Email)" />
+				</div>
+				<div class="field-stack">
+					<label>Role</label>
+					<InputSelect class="form-select" @bind-Value="_model.RoleName">
+						<option value="@RoleNames.Employee">Employee</option>
+						<option value="@RoleNames.Admin">Admin</option>
+					</InputSelect>
+				</div>
+				<div class="field-stack">
+					<label>@(_model.IsNew ? "Password" : "New Password")</label>
+					<SecretInput class="form-control" @bind-Value="_model.Password" />
+					<ValidationMessage For="@(() => _model.Password)" />
+				</div>
+				<div class="field-stack">
+					<label>Confirm Password</label>
+					<SecretInput class="form-control" @bind-Value="_model.ConfirmPassword" />
+					<ValidationMessage For="@(() => _model.ConfirmPassword)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save Employee</button>
+				<a class="btn btn-outline-primary" href="admin/employees">Back to Employees</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public string? Id { get; set; }
+
+	private EmployeeEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetEmployeeAsync(Id);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			await AdministrationService.SaveEmployeeAsync(_model);
+			NavigationManager.NavigateTo("admin/employees");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

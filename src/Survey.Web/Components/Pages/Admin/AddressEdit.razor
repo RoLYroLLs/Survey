@@ -1,0 +1,160 @@
+@page "/admin/addresses/new"
+@page "/admin/addresses/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit Address" : "Add Address")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>@(Id.HasValue ? "Edit Address" : "Add Address")</h1>
+			<p>These addresses are shared references, so duplicates are prevented and reused automatically.</p>
+		</div>
+	</div>
+
+	<div class="form-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (_model.ReferenceCount > 0)
+		{
+			<div class="inline-banner mb-3">This address is currently referenced @_model.ReferenceCount time(s).</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid">
+				<div class="field-stack">
+					<label>Country</label>
+					<InputSelect class="form-control" @bind-Value="_model.CountryId" @bind-Value:after="OnCountryChangedAsync">
+						<option value="0">Select a country</option>
+						@foreach (var option in _model.CountryOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+					<ValidationMessage For="@(() => _model.CountryId)" />
+				</div>
+				<div class="field-stack">
+					<label>State / Territory</label>
+					<InputSelect class="form-control" @bind-Value="_model.StateProvinceId" @bind-Value:after="OnStateChangedAsync" disabled="@(!_canSelectState)">
+						<option value="0">Select a state or territory</option>
+						@foreach (var option in _model.StateProvinceOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+					<ValidationMessage For="@(() => _model.StateProvinceId)" />
+				</div>
+				<div class="field-stack">
+					<label>County</label>
+					<InputSelect class="form-control" @bind-Value="_selectedCountyId" @bind-Value:after="OnCountyChanged" disabled="@(!_canSelectCounty)">
+						<option value="">Select a county</option>
+						@foreach (var option in _model.CountyOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+				</div>
+				<div class="field-stack form-grid--single">
+					<label>Address Line 1</label>
+					<InputText class="form-control" @bind-Value="_model.AddressLine1" disabled="@(!_canEnterAddress)" />
+					<ValidationMessage For="@(() => _model.AddressLine1)" />
+				</div>
+				<div class="field-stack form-grid--single">
+					<label>Address Line 2</label>
+					<InputText class="form-control" @bind-Value="_model.AddressLine2" disabled="@(!_canEnterAddress)" />
+					<ValidationMessage For="@(() => _model.AddressLine2)" />
+				</div>
+				<div class="field-stack">
+					<label>City</label>
+					<InputText class="form-control" @bind-Value="_model.City" disabled="@(!_canEnterAddress)" />
+					<ValidationMessage For="@(() => _model.City)" />
+				</div>
+				<div class="field-stack">
+					<label>Postal Code</label>
+					<InputText class="form-control" @bind-Value="_model.PostalCode" disabled="@(!_canEnterAddress)" />
+					<ValidationMessage For="@(() => _model.PostalCode)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save Address</button>
+				<a class="btn btn-outline-primary" href="admin/addresses">Back to Addresses</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private PostalAddressEditModel _model = new();
+	private string? _errorMessage;
+	private string? _selectedCountyId;
+	private bool _canSelectState;
+	private bool _canSelectCounty;
+	private bool _canEnterAddress;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetPostalAddressAsync(Id);
+		_selectedCountyId = _model.CountyId?.ToString();
+		_errorMessage = null;
+		UpdateFormState();
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			_model.CountyId = int.TryParse(_selectedCountyId, out var countyId) ? countyId : null;
+			await AdministrationService.SavePostalAddressAsync(_model);
+			NavigationManager.NavigateTo("admin/addresses");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task OnCountryChangedAsync()
+	{
+		_model.StateProvinceId = 0;
+		_model.CountyId = null;
+		_selectedCountyId = null;
+		_model.StateProvinceOptions = _model.CountryId > 0
+			? await AdministrationService.GetStateProvinceSelectOptionsAsync(_model.CountryId)
+			: Array.Empty<SelectOption>();
+		_model.CountyOptions = Array.Empty<SelectOption>();
+		UpdateFormState();
+	}
+
+	private async Task OnStateChangedAsync()
+	{
+		_model.CountyId = null;
+		_selectedCountyId = null;
+		_model.CountyOptions = _model.StateProvinceId > 0
+			? await AdministrationService.GetCountySelectOptionsAsync(_model.StateProvinceId)
+			: Array.Empty<SelectOption>();
+		UpdateFormState();
+	}
+
+	private void UpdateFormState()
+	{
+		_canSelectState = _model.CountryId > 0;
+		_canSelectCounty = _model.StateProvinceId > 0;
+		_canEnterAddress = !string.IsNullOrWhiteSpace(_selectedCountyId);
+	}
+
+	private void OnCountyChanged()
+	{
+		UpdateFormState();
+	}
+}

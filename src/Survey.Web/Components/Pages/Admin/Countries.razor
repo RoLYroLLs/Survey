@@ -1,0 +1,99 @@
+@page "/admin/countries"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Countries</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>Countries</h1>
+			<p>Manage the top-level country reference list used by addresses, state records, and imports.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="/admin/import-samples/countries">Download Sample Excel</a>
+			<a class="btn btn-outline-primary" href="admin/countries/import">Import CSV</a>
+			<a class="btn btn-primary" href="admin/countries/new">Add Country</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Country Rows</h2>
+				<p>Search by country name or ISO code.</p>
+			</div>
+			<div class="toolbar">
+				<input class="form-control" placeholder="Search countries" @bind="_searchText" />
+				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
+				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No countries matched the current search.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>ISO2</th>
+						<th>ISO3</th>
+						<th>States / Territories</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.Name</td>
+							<td>@item.Iso2Code</td>
+							<td>@item.Iso3Code</td>
+							<td>@item.StateProvinceCount</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="admin/state-provinces?countryId=@item.Id">States</a>
+									<a class="btn btn-sm btn-outline-primary" href="admin/countries/@item.Id/edit">Edit</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	private IReadOnlyList<CountryListItem> _items = Array.Empty<CountryListItem>();
+	private string _searchText = string.Empty;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetCountriesAsync(Search);
+	}
+
+	private void ApplySearch()
+	{
+		var url = string.IsNullOrWhiteSpace(_searchText)
+			? "admin/countries"
+			: $"admin/countries?search={Uri.EscapeDataString(_searchText)}";
+		NavigationManager.NavigateTo(url);
+	}
+
+	private void ClearSearch()
+	{
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo("admin/countries");
+	}
+}

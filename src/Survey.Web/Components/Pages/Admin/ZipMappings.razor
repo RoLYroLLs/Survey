@@ -1,0 +1,100 @@
+@page "/admin/zip-mappings"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>ZIP Mappings</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">ZIP Crosswalk</p>
+			<h1>ZIP Mappings</h1>
+			<p>Maintain the ZIP-to-county lookup that powers automatic area reporting and goal progress.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="/admin/import-samples/zip-mappings">Download Sample Excel</a>
+			<a class="btn btn-outline-primary" href="admin/zip-mappings/import">Import CSV</a>
+			<a class="btn btn-primary" href="admin/zip-mappings/new">Add Mapping</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Lookup Rows</h2>
+				<p>Search by ZIP, county name, county FIPS, or state code. The list shows up to 250 rows at a time.</p>
+			</div>
+			<div class="toolbar">
+				<input class="form-control" placeholder="Search mappings" @bind="_searchText" />
+				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
+				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No ZIP mappings matched the current search.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>ZIP</th>
+						<th>County</th>
+						<th>County FIPS</th>
+						<th>State</th>
+						<th>Residential Ratio</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.ZipCode</td>
+							<td>@item.CountyName</td>
+							<td>@item.CountyFips</td>
+							<td>@item.StateCode</td>
+							<td>@item.ResidentialRatio.ToString("0.0000")</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="admin/zip-mappings/@item.Id/edit">Edit</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	private IReadOnlyList<ZipCountyMappingListItem> _items = Array.Empty<ZipCountyMappingListItem>();
+	private string _searchText = string.Empty;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetZipCountyMappingsAsync(Search);
+	}
+
+	private void ApplySearch()
+	{
+		var url = string.IsNullOrWhiteSpace(_searchText)
+			? "admin/zip-mappings"
+			: $"admin/zip-mappings?search={Uri.EscapeDataString(_searchText)}";
+		NavigationManager.NavigateTo(url);
+	}
+
+	private void ClearSearch()
+	{
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo("admin/zip-mappings");
+	}
+}

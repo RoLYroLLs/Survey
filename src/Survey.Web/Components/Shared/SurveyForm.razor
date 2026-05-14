@@ -1,0 +1,418 @@
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISurveyAdministrationService AdministrationService
+@inject ISurveyExperienceService SurveyExperienceService
+
+@if (_submitted)
+{
+	<div class="status-card narrow-card">
+		<p class="eyebrow">Submission Complete</p>
+		<h2>Thank you.</h2>
+		<p class="mb-0">@_resultMessage</p>
+	</div>
+}
+else
+{
+	<div class="survey-shell">
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<p class="eyebrow">@(_session.IsStaffMode ? "Staff Submission" : "Recipient Survey")</p>
+					<h2>@_session.SurveyName</h2>
+					<p>@_session.VersionName</p>
+				</div>
+				@if (_session.IsExpired)
+				{
+					<span class="status-pill status-pill--danger">Expired</span>
+				}
+				else if (_session.IsCompleted)
+				{
+					<span class="status-pill status-pill--muted">Already submitted</span>
+				}
+				else
+				{
+					<span class="status-pill">Active</span>
+				}
+			</div>
+
+			@if (!string.IsNullOrWhiteSpace(_errorMessage))
+			{
+				<div class="inline-banner inline-banner--danger mt-3">@_errorMessage</div>
+			}
+
+			@if (_session.IsExpired || _session.IsCompleted)
+			{
+				<div class="inline-banner mt-3">This assignment is no longer available for editing.</div>
+			}
+			else
+			{
+				<div class="survey-stepper mt-3">
+					<div class="@GetStepClass(0)">Contact</div>
+					@for (var index = 0; index < _session.Sections.Count; index++)
+					{
+						<div class="@GetStepClass(index + 1)">@_session.Sections[index].Title</div>
+					}
+				</div>
+			}
+		</div>
+
+		@if (!_session.IsExpired && !_session.IsCompleted)
+		{
+			<div class="form-card">
+				@if (_stepIndex == 0)
+				{
+					<div class="page-stack">
+						<div class="page-header">
+							<div>
+								<h2>Contact Information</h2>
+								<p>These details are prefilled when known and can be confirmed or corrected before submission.</p>
+							</div>
+						</div>
+
+						<div class="form-grid">
+							<div class="field-stack">
+								<label>First Name</label>
+								<input class="form-control" @bind="_submission.Contact.FirstName" />
+							</div>
+							<div class="field-stack">
+								<label>Middle Name</label>
+								<input class="form-control" @bind="_submission.Contact.MiddleName" />
+							</div>
+							<div class="field-stack">
+								<label>Last Name</label>
+								<input class="form-control" @bind="_submission.Contact.LastName" />
+							</div>
+							<div class="field-stack">
+								<label>Country</label>
+								<select class="form-control" @bind="_submission.Contact.CountryId" @bind:after="OnCountryChangedAsync">
+									<option value="0">Select a country</option>
+									@foreach (var option in _submission.Contact.CountryOptions)
+									{
+										<option value="@option.Value">@option.Label</option>
+									}
+								</select>
+							</div>
+							<div class="field-stack">
+								<label>State / Territory</label>
+								<select class="form-control" @bind="_submission.Contact.StateProvinceId" @bind:after="OnStateChangedAsync" disabled="@(!_canSelectState)">
+									<option value="0">Select a state or territory</option>
+									@foreach (var option in _submission.Contact.StateProvinceOptions)
+									{
+										<option value="@option.Value">@option.Label</option>
+									}
+								</select>
+							</div>
+							<div class="field-stack">
+								<label>County</label>
+								<select class="form-control" @bind="_selectedCountyId" @bind:after="OnCountyChanged" disabled="@(!_canSelectCounty)">
+									<option value="">Select a county</option>
+									@foreach (var option in _submission.Contact.CountyOptions)
+									{
+										<option value="@option.Value">@option.Label</option>
+									}
+								</select>
+							</div>
+							<div class="field-stack form-grid--single">
+								<label>Address Line 1</label>
+								<input class="form-control" @bind="_submission.Contact.AddressLine1" disabled="@(!_canEnterAddress)" />
+							</div>
+							<div class="field-stack form-grid--single">
+								<label>Address Line 2</label>
+								<input class="form-control" @bind="_submission.Contact.AddressLine2" disabled="@(!_canEnterAddress)" />
+							</div>
+							<div class="field-stack">
+								<label>City</label>
+								<input class="form-control" @bind="_submission.Contact.City" disabled="@(!_canEnterAddress)" />
+							</div>
+							<div class="field-stack">
+								<label>Postal Code</label>
+								<input class="form-control" @bind="_submission.Contact.PostalCode" disabled="@(!_canEnterAddress)" />
+							</div>
+							<div class="field-stack">
+								<label>Phone Number</label>
+								<input class="form-control" @bind="_submission.Contact.PhoneNumber" />
+							</div>
+							<div class="field-stack">
+								<label>Best Time to Contact</label>
+								<input class="form-control" @bind="_submission.Contact.BestTimeToContact" />
+							</div>
+							<div class="field-stack">
+								<label>Email</label>
+								<input class="form-control" type="email" @bind="_submission.Contact.Email" />
+							</div>
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="page-stack">
+						<div class="page-header">
+							<div>
+								<h2>@CurrentSection!.Title</h2>
+								@if (!string.IsNullOrWhiteSpace(CurrentSection.Description))
+								{
+									<p>@CurrentSection.Description</p>
+								}
+							</div>
+						</div>
+
+						@foreach (var question in CurrentSection.Questions)
+						{
+							<div class="question-card">
+								<p class="question-card__prompt">@question.Prompt @(question.IsRequired ? "*" : string.Empty)</p>
+								@if (!string.IsNullOrWhiteSpace(question.HelpText))
+								{
+									<p class="question-card__help">@question.HelpText</p>
+								}
+
+								@if (question.Type == SurveyQuestionType.YesNo)
+								{
+									<div class="option-stack">
+										<label class="option-row">
+											<input type="radio" name="question-@question.Id" checked="@(GetAnswer(question.Id).YesNoAnswer == true)" @onchange="@(() => SetYesNo(question.Id, true))" />
+											<span>Yes</span>
+										</label>
+										<label class="option-row">
+											<input type="radio" name="question-@question.Id" checked="@(GetAnswer(question.Id).YesNoAnswer == false)" @onchange="@(() => SetYesNo(question.Id, false))" />
+											<span>No</span>
+										</label>
+									</div>
+								}
+								else if (question.Type == SurveyQuestionType.SingleChoice)
+								{
+									<div class="option-stack">
+										@foreach (var option in question.Options)
+										{
+											<label class="option-row">
+												<input type="radio" name="question-@question.Id" checked="@(GetAnswer(question.Id).SelectedOptionId == GetOptionId(option))" @onchange="@(() => SetSelectedOption(question.Id, GetOptionId(option)))" />
+												<span>@option.Label</span>
+											</label>
+										}
+									</div>
+								}
+								else if (question.Type == SurveyQuestionType.MultiSelect)
+								{
+									<div class="option-stack">
+										@foreach (var option in question.Options)
+										{
+											<label class="option-row">
+												<input type="checkbox" checked="@GetAnswer(question.Id).SelectedOptionIds.Contains(GetOptionId(option))" @onchange="@((ChangeEventArgs args) => ToggleSelectedOption(question.Id, GetOptionId(option), args.Value is bool checkedValue && checkedValue))" />
+												<span>@option.Label</span>
+											</label>
+										}
+									</div>
+								}
+								else
+								{
+									<textarea class="form-control" rows="5" @bind="GetAnswer(question.Id).TextAnswer"></textarea>
+								}
+							</div>
+						}
+					</div>
+				}
+
+				<div class="form-footer">
+					@if (_stepIndex > 0)
+					{
+						<button class="btn btn-outline-primary" @onclick="PreviousStep" type="button">Previous</button>
+					}
+					@if (_stepIndex < _session.Sections.Count)
+					{
+						<button class="btn btn-primary" @onclick="NextStep" type="button">Next</button>
+					}
+					else
+					{
+						<button class="btn btn-primary" @onclick="SubmitAsync" type="button">Submit Survey</button>
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+@code {
+	[Parameter]
+	[EditorRequired]
+	public SurveySessionModel Session { get; set; } = default!;
+
+	private SurveySessionModel _session = default!;
+	private SurveySubmissionModel _submission = default!;
+	private int _stepIndex;
+	private bool _submitted;
+	private string _resultMessage = string.Empty;
+	private string? _errorMessage;
+	private string? _selectedCountyId;
+	private bool _canSelectState;
+	private bool _canSelectCounty;
+	private bool _canEnterAddress;
+
+	protected override void OnParametersSet()
+	{
+		if (_session == Session)
+		{
+			return;
+		}
+
+		_session = Session;
+		_submission = new SurveySubmissionModel
+		{
+			AssignmentId = Session.AssignmentId,
+			Token = Session.Token,
+			IsStaffMode = Session.IsStaffMode,
+			Contact = new RespondentContactModel
+			{
+				FirstName = Session.Contact.FirstName,
+				MiddleName = Session.Contact.MiddleName,
+				LastName = Session.Contact.LastName,
+				AddressLine1 = Session.Contact.AddressLine1,
+				AddressLine2 = Session.Contact.AddressLine2,
+				City = Session.Contact.City,
+				CountryId = Session.Contact.CountryId,
+				StateProvinceId = Session.Contact.StateProvinceId,
+				CountyId = Session.Contact.CountyId,
+				PostalCode = Session.Contact.PostalCode,
+				PhoneNumber = Session.Contact.PhoneNumber,
+				BestTimeToContact = Session.Contact.BestTimeToContact,
+				Email = Session.Contact.Email,
+				CountryOptions = Session.Contact.CountryOptions,
+				StateProvinceOptions = Session.Contact.StateProvinceOptions,
+				CountyOptions = Session.Contact.CountyOptions
+			},
+			Answers = Session.Sections
+				.SelectMany(section => section.Questions)
+				.Select(question => new SurveyAnswerInputModel { QuestionId = question.Id })
+				.ToList()
+		};
+		_selectedCountyId = _submission.Contact.CountyId?.ToString();
+		UpdateFormState();
+		_stepIndex = 0;
+		_submitted = false;
+		_resultMessage = string.Empty;
+		_errorMessage = null;
+	}
+
+	private SurveyAnswerInputModel GetAnswer(int questionId)
+	{
+		return _submission.Answers.First(answer => answer.QuestionId == questionId);
+	}
+
+	private SurveySectionStepModel? CurrentSection =>
+		_stepIndex > 0 && _stepIndex <= _session.Sections.Count
+			? _session.Sections[_stepIndex - 1]
+			: null;
+
+	private static int GetOptionId(SelectOption option)
+	{
+		return int.Parse(option.Value);
+	}
+
+	private void SetYesNo(int questionId, bool value)
+	{
+		GetAnswer(questionId).YesNoAnswer = value;
+	}
+
+	private void SetSelectedOption(int questionId, int optionId)
+	{
+		GetAnswer(questionId).SelectedOptionId = optionId;
+	}
+
+	private void ToggleSelectedOption(int questionId, int optionId, bool isSelected)
+	{
+		var answer = GetAnswer(questionId);
+		if (isSelected)
+		{
+			if (!answer.SelectedOptionIds.Contains(optionId))
+			{
+				answer.SelectedOptionIds.Add(optionId);
+			}
+
+			return;
+		}
+
+		answer.SelectedOptionIds.Remove(optionId);
+	}
+
+	private void NextStep()
+	{
+		_errorMessage = null;
+		if (_stepIndex < _session.Sections.Count)
+		{
+			_stepIndex++;
+		}
+	}
+
+	private void PreviousStep()
+	{
+		_errorMessage = null;
+		if (_stepIndex > 0)
+		{
+			_stepIndex--;
+		}
+	}
+
+	private async Task SubmitAsync()
+	{
+		try
+		{
+			_submission.Contact.CountyId = int.TryParse(_selectedCountyId, out var countyId) ? countyId : null;
+			var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+			var submittedByUserId = _session.IsStaffMode
+				? authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+				: null;
+			var result = await SurveyExperienceService.SubmitAsync(_submission, submittedByUserId);
+			if (!result.Succeeded)
+			{
+				_errorMessage = result.Message;
+				return;
+			}
+
+			_submitted = true;
+			_resultMessage = result.Message;
+			_errorMessage = null;
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task OnCountryChangedAsync()
+	{
+		_submission.Contact.StateProvinceId = 0;
+		_submission.Contact.CountyId = null;
+		_selectedCountyId = null;
+		_submission.Contact.StateProvinceOptions = _submission.Contact.CountryId > 0
+			? await AdministrationService.GetStateProvinceSelectOptionsAsync(_submission.Contact.CountryId)
+			: Array.Empty<SelectOption>();
+		_submission.Contact.CountyOptions = Array.Empty<SelectOption>();
+		UpdateFormState();
+	}
+
+	private async Task OnStateChangedAsync()
+	{
+		_submission.Contact.CountyId = null;
+		_selectedCountyId = null;
+		_submission.Contact.CountyOptions = _submission.Contact.StateProvinceId > 0
+			? await AdministrationService.GetCountySelectOptionsAsync(_submission.Contact.StateProvinceId)
+			: Array.Empty<SelectOption>();
+		UpdateFormState();
+	}
+
+	private void UpdateFormState()
+	{
+		_canSelectState = _submission.Contact.CountryId > 0;
+		_canSelectCounty = _submission.Contact.StateProvinceId > 0;
+		_canEnterAddress = !string.IsNullOrWhiteSpace(_selectedCountyId);
+	}
+
+	private void OnCountyChanged()
+	{
+		UpdateFormState();
+	}
+
+	private string GetStepClass(int index)
+	{
+		return index == _stepIndex
+			? "survey-stepper__item active"
+			: "survey-stepper__item";
+	}
+}

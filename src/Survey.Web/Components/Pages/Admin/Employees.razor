@@ -1,0 +1,94 @@
+@page "/admin/employees"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Employees</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Staff Access</p>
+			<h1>Employees</h1>
+			<p>Admins can manage survey builder access and staff-assisted completion access from here.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-primary" href="admin/employees/new">Add Employee</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Employee Accounts</h2>
+				<p>Search by name, email, username, or role.</p>
+			</div>
+			<div class="toolbar">
+				<input class="form-control" placeholder="Search employees" @bind="_searchText" />
+				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
+				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No employee accounts matched the current search.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Email</th>
+						<th>Role</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.FirstName @item.LastName</td>
+							<td>@item.Email</td>
+							<td>@item.RoleName</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="admin/employees/@item.Id/edit">Edit</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	private IReadOnlyList<EmployeeListItem> _items = Array.Empty<EmployeeListItem>();
+	private string _searchText = string.Empty;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetEmployeesAsync(Search);
+	}
+
+	private void ApplySearch()
+	{
+		var url = string.IsNullOrWhiteSpace(_searchText)
+			? "admin/employees"
+			: $"admin/employees?search={Uri.EscapeDataString(_searchText)}";
+		NavigationManager.NavigateTo(url);
+	}
+
+	private void ClearSearch()
+	{
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo("admin/employees");
+	}
+}

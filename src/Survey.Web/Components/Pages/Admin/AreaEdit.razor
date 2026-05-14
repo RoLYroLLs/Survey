@@ -1,0 +1,116 @@
+@page "/admin/areas/new"
+@page "/admin/areas/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit Area" : "Add Area")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geographic Area</p>
+			<h1>@(Id.HasValue ? "Edit Area" : "Add Area")</h1>
+			<p>Assign counties to this area so ZIP-based responses can roll up automatically without managing individual ZIP codes by hand.</p>
+		</div>
+	</div>
+
+	<div class="form-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (_model.CountyOptions.Count == 0)
+		{
+			<div class="inline-banner mb-3">Add or import counties first if you want county choices to appear here.</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid form-grid--single">
+				<div class="field-stack">
+					<label>Name</label>
+					<InputText class="form-control" @bind-Value="_model.Name" />
+					<ValidationMessage For="@(() => _model.Name)" />
+				</div>
+				<div class="field-stack">
+					<label>Description</label>
+					<InputTextArea class="form-control" rows="4" @bind-Value="_model.Description" />
+					<ValidationMessage For="@(() => _model.Description)" />
+				</div>
+				<div class="field-stack">
+					<label>Counties</label>
+					@if (_model.CountyOptions.Count == 0)
+					{
+						<p class="helper-copy mb-0">No counties are available yet.</p>
+					}
+					else
+					{
+						<div class="checkbox-grid">
+							@foreach (var county in _model.CountyOptions)
+							{
+								<label class="checkbox-card">
+									<input
+										type="checkbox"
+										checked="@_model.SelectedCountyFips.Contains(county.CountyFips, StringComparer.OrdinalIgnoreCase)"
+										@onchange="@((ChangeEventArgs args) => ToggleCounty(county.CountyFips, args.Value is bool isChecked && isChecked))" />
+									<span>@county.CountyName, @county.StateCode</span>
+									<small>@county.ZipCount ZIPs</small>
+								</label>
+							}
+						</div>
+					}
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save Area</button>
+				<a class="btn btn-outline-primary" href="admin/areas">Back to Areas</a>
+				<a class="btn btn-outline-primary" href="admin/counties/import">Import Counties</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private AreaEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetAreaAsync(Id);
+		_errorMessage = null;
+	}
+
+	private void ToggleCounty(string countyFips, bool isSelected)
+	{
+		if (isSelected)
+		{
+			if (!_model.SelectedCountyFips.Contains(countyFips, StringComparer.OrdinalIgnoreCase))
+			{
+				_model.SelectedCountyFips.Add(countyFips);
+			}
+
+			return;
+		}
+
+		_model.SelectedCountyFips.RemoveAll(value => string.Equals(value, countyFips, StringComparison.OrdinalIgnoreCase));
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			await AdministrationService.SaveAreaAsync(_model);
+			NavigationManager.NavigateTo("admin/areas");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

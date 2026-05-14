@@ -1,0 +1,121 @@
+@page "/admin/versions/new"
+@page "/admin/versions/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit Version" : "Add Version")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Survey Version</p>
+			<h1>@(Id.HasValue ? "Edit Version" : "Add Version")</h1>
+			<p>Create a versioned question set that can later be published and assigned.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (_model.IsLocked)
+		{
+			<div class="inline-banner mb-3">This version is locked because it already has assignments. Clone it to change survey content, but you can still archive it.</div>
+		}
+
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid">
+				<div class="field-stack">
+					<label>Survey</label>
+					<InputSelect class="form-select" @bind-Value="_model.SurveyDefinitionId" disabled="@_model.Id.HasValue">
+						@foreach (var option in _model.SurveyOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+				</div>
+				<div class="field-stack">
+					<label>Display Name</label>
+					<InputText class="form-control" @bind-Value="_model.DisplayName" disabled="@_model.IsLocked" />
+					<ValidationMessage For="@(() => _model.DisplayName)" />
+				</div>
+				<div class="field-stack">
+					<label>Version Number</label>
+					<InputNumber class="form-control" @bind-Value="_model.VersionNumber" disabled="@_model.IsLocked" />
+					<ValidationMessage For="@(() => _model.VersionNumber)" />
+				</div>
+				<div class="field-stack">
+					<label>Published</label>
+					<InputCheckbox class="form-check-input" @bind-Value="_model.IsPublished" disabled="@_model.IsLocked" />
+				</div>
+				<div class="field-stack">
+					<label>Archived</label>
+					<InputCheckbox class="form-check-input" @bind-Value="_model.IsArchived" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save Version</button>
+				<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to Versions</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyDefinitionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public bool ShowArchived { get; set; }
+
+	private SurveyVersionEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetSurveyVersionAsync(Id, SurveyDefinitionId);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveSurveyVersionAsync(_model);
+			if (_model.Id.HasValue)
+			{
+				NavigationManager.NavigateTo(GetBackUrl(_model.IsArchived));
+			}
+			else
+			{
+				NavigationManager.NavigateTo($"admin/sections?surveyVersionId={savedId}&surveyDefinitionId={_model.SurveyDefinitionId}");
+			}
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private string GetBackUrl(bool? isArchived = null)
+	{
+		var archived = isArchived ?? (ShowArchived || _model.IsArchived);
+		if (SurveyDefinitionId.HasValue || _model.SurveyDefinitionId > 0)
+		{
+			var surveyDefinitionId = SurveyDefinitionId ?? _model.SurveyDefinitionId;
+			return archived
+				? $"admin/versions?surveyDefinitionId={surveyDefinitionId}&showArchived=true"
+				: $"admin/versions?surveyDefinitionId={surveyDefinitionId}";
+		}
+
+		return archived ? "admin/versions?showArchived=true" : "admin/versions";
+	}
+}

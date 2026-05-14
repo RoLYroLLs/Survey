@@ -1,0 +1,95 @@
+@page "/admin/assignments"
+@attribute [Authorize(Roles = $"{RoleNames.Admin},{RoleNames.Employee}")]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Assignments</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Survey Delivery</p>
+			<h1>Assignments</h1>
+			<p>Create one-time links for recipients and open staff-assisted completion when needed.</p>
+		</div>
+		<div class="toolbar">
+			<AuthorizeView Roles="@RoleNames.Admin">
+				<Authorized>
+					<a class="btn btn-primary" href="admin/assignments/new">Add Assignment</a>
+				</Authorized>
+			</AuthorizeView>
+		</div>
+	</div>
+
+	<div class="list-card">
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No assignments have been issued yet.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Person</th>
+						<th>Survey</th>
+						<th>Token</th>
+						<th>Expires</th>
+						<th>Status</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.PersonName</td>
+							<td>@item.SurveyName<br /><small>@item.VersionName</small></td>
+							<td>@item.PublicToken</td>
+							<td>@(item.ExpiresAtUtc?.LocalDateTime.ToString("g") ?? "Never")</td>
+							<td>
+								@if (item.IsCompleted)
+								{
+									<span class="status-pill status-pill--muted">Completed</span>
+								}
+								else if (item.IsExpired)
+								{
+									<span class="status-pill status-pill--danger">Expired</span>
+								}
+								else
+								{
+									<span class="status-pill">Active</span>
+								}
+							</td>
+							<td>
+								<div class="table-actions">
+									<AuthorizeView Roles="@RoleNames.Admin">
+										<Authorized>
+											<a class="btn btn-sm btn-outline-primary" href="admin/assignments/@item.Id/edit">Edit</a>
+										</Authorized>
+									</AuthorizeView>
+									<a class="btn btn-sm btn-outline-primary" href="admin/assignments/@item.Id/fill">Fill</a>
+									<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => OpenPublicLink(item.PublicToken)">Open Link</button>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	private IReadOnlyList<SurveyAssignmentListItem> _items = Array.Empty<SurveyAssignmentListItem>();
+
+	protected override async Task OnInitializedAsync()
+	{
+		_items = await AdministrationService.GetAssignmentsAsync();
+	}
+
+	private void OpenPublicLink(string token)
+	{
+		NavigationManager.NavigateTo($"/survey/{token}");
+	}
+}

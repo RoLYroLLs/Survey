@@ -1,0 +1,129 @@
+@page "/admin"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Admin</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Admin</p>
+			<h1>Survey operations dashboard</h1>
+			<p>Use the management lists to build survey versions, issue links, and monitor submissions.</p>
+		</div>
+	</div>
+
+	<div class="dashboard-grid">
+		<div class="metric-card">
+			<p class="metric-card__label">Surveys</p>
+			<p class="metric-card__value">@_surveyCount</p>
+		</div>
+		<div class="metric-card">
+			<p class="metric-card__label">People</p>
+			<p class="metric-card__value">@_personCount</p>
+		</div>
+		<div class="metric-card">
+			<p class="metric-card__label">Areas</p>
+			<p class="metric-card__value">@_areaCount</p>
+		</div>
+		<div class="metric-card">
+			<p class="metric-card__label">Goals</p>
+			<p class="metric-card__value">@_goalCount</p>
+		</div>
+		<div class="metric-card">
+			<p class="metric-card__label">Assignments</p>
+			<p class="metric-card__value">@_assignmentCount</p>
+		</div>
+		<div class="metric-card">
+			<p class="metric-card__label">Responses</p>
+			<p class="metric-card__value">@_responseCount</p>
+		</div>
+	</div>
+
+	<section class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Favorite Goals</h2>
+				<p>Pin the goals you want this dashboard to keep in view.</p>
+			</div>
+			<div class="toolbar">
+				<a class="btn btn-outline-primary" href="admin/goals">Manage Goals</a>
+			</div>
+		</div>
+
+		@if (_favoriteGoals.Count == 0)
+		{
+			<p class="empty-state">No goals have been favorited yet.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Goal</th>
+						<th>Progress</th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _favoriteGoals)
+					{
+						<tr>
+							<td>@item.GoalName</td>
+							<td>@item.ProgressPercent.ToString("0.0")% (@item.CompletedResponses / @item.TargetResponseCount)</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</section>
+
+	<div class="card-grid">
+		<section class="content-card">
+			<h2>Build Surveys</h2>
+			<p>Create a survey, add versions, define sections, and author question sets with list pages and separate edit screens.</p>
+			<a class="btn btn-outline-primary" href="admin/surveys">Open Survey Builder</a>
+		</section>
+		<section class="content-card">
+			<h2>Issue Links</h2>
+			<p>Create one assignment per person and survey version, then share the generated tokenized URL through your existing outreach process.</p>
+			<a class="btn btn-outline-primary" href="admin/assignments">Manage Assignments</a>
+		</section>
+		<section class="content-card">
+			<h2>Review Results</h2>
+			<p>Track submissions, inspect each response snapshot, and verify whether a submission was self-service or staff-assisted.</p>
+			<a class="btn btn-outline-primary" href="admin/responses">View Responses</a>
+		</section>
+		<section class="content-card">
+			<h2>Track Area Goals</h2>
+			<p>Import ZIP mappings, group counties into named areas, and compare live response counts against your goals.</p>
+			<a class="btn btn-outline-primary" href="admin/reports">Open Reports</a>
+		</section>
+	</div>
+</div>
+
+@code {
+	private int _surveyCount;
+	private int _areaCount;
+	private int _goalCount;
+	private int _personCount;
+	private int _assignmentCount;
+	private int _responseCount;
+	private IReadOnlyList<DashboardFavoriteGoalItem> _favoriteGoals = Array.Empty<DashboardFavoriteGoalItem>();
+
+	protected override async Task OnInitializedAsync()
+	{
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		var userId = authenticationState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+		_surveyCount = (await AdministrationService.GetSurveyDefinitionsAsync()).Count;
+		_areaCount = (await AdministrationService.GetAreasAsync()).Count;
+		_goalCount = (await AdministrationService.GetGoalsAsync()).Count;
+		_personCount = (await AdministrationService.GetPeopleAsync()).Count;
+		_assignmentCount = (await AdministrationService.GetAssignmentsAsync()).Count;
+		_responseCount = (await AdministrationService.GetResponsesAsync()).Count;
+		_favoriteGoals = string.IsNullOrWhiteSpace(userId)
+			? []
+			: await AdministrationService.GetDashboardFavoriteGoalsAsync(userId);
+	}
+}

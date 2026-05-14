@@ -1,0 +1,83 @@
+@page "/admin/counties/new"
+@page "/admin/counties/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit County" : "Add County")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>@(Id.HasValue ? "Edit County" : "Add County")</h1>
+			<p>County FIPS codes let goals and ZIP crosswalks line up without manual remapping.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid form-grid--single">
+				<div class="field-stack">
+					<label>State / Territory</label>
+					<InputSelect class="form-control" @bind-Value="_model.StateProvinceId">
+						<option value="0">Select a state or territory</option>
+						@foreach (var option in _model.StateProvinceOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+					<ValidationMessage For="@(() => _model.StateProvinceId)" />
+				</div>
+				<div class="field-stack">
+					<label>Name</label>
+					<InputText class="form-control" @bind-Value="_model.Name" />
+					<ValidationMessage For="@(() => _model.Name)" />
+				</div>
+				<div class="field-stack">
+					<label>FIPS Code</label>
+					<InputText class="form-control" @bind-Value="_model.FipsCode" />
+					<ValidationMessage For="@(() => _model.FipsCode)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save County</button>
+				<a class="btn btn-outline-primary" href="admin/counties">Back to Counties</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private CountyEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetCountyAsync(Id, null);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			await AdministrationService.SaveCountyAsync(_model);
+			NavigationManager.NavigateTo("admin/counties");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

@@ -1,0 +1,64 @@
+@page "/admin/people"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+
+<PageTitle>People</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Recipients</p>
+			<h1>People</h1>
+			<p>Recipient contact details prefill into survey assignments and remain editable during completion.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-primary" href="admin/people/new">Add Person</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No people have been added yet.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>ZIP</th>
+						<th>Email</th>
+						<th>Phone</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@string.Join(" ", new[] { item.FirstName, item.MiddleName, item.LastName }.Where(part => !string.IsNullOrWhiteSpace(part)))</td>
+							<td>@item.PostalCode</td>
+							<td>@item.Email</td>
+							<td>@item.PhoneNumber</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="admin/people/@item.Id/edit">Edit</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	private IReadOnlyList<PersonListItem> _items = Array.Empty<PersonListItem>();
+
+	protected override async Task OnInitializedAsync()
+	{
+		_items = await AdministrationService.GetPeopleAsync();
+	}
+}

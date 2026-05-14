@@ -1,0 +1,264 @@
+@implements IAsyncDisposable
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJSRuntime JSRuntime
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+
+<div class="nav-shell">
+	<div class="nav-shell__brand">
+		<a href="" class="nav-shell__brand-link">Survey</a>
+		<p class="nav-shell__caption">Author surveys, issue one-time links, and collect structured responses.</p>
+	</div>
+
+	<nav class="nav-shell__links">
+		<AuthorizeView Roles="@StaffRoles">
+			<Authorized Context="staffContext">
+				@if (IsSettingsSection)
+				{
+					<p class="nav-shell__caption">Settings</p>
+					<a class="nav-shell__back-link" href="admin">Back</a>
+					<NavLink class="nav-shell__link" href="admin/account">Account</NavLink>
+					<AuthorizeView Roles="@RoleNames.Admin">
+						<Authorized Context="settingsAdminContext">
+							<NavLink class="nav-shell__link" href="admin/theme" Match="NavLinkMatch.All">Theme</NavLink>
+							<NavLink class="nav-shell__link" href="admin/employees">Employees</NavLink>
+							<NavLink class="nav-shell__link" href="admin/countries">Countries</NavLink>
+							<NavLink class="nav-shell__link" href="admin/state-provinces">States / Territories</NavLink>
+							<NavLink class="nav-shell__link" href="admin/counties">Counties</NavLink>
+							<NavLink class="nav-shell__link" href="admin/addresses">Addresses</NavLink>
+							<NavLink class="nav-shell__link" href="admin/zip-mappings">ZIP Mappings</NavLink>
+						</Authorized>
+					</AuthorizeView>
+				}
+				else
+				{
+					<AuthorizeView Roles="@RoleNames.Admin">
+						<Authorized Context="mainAdminContext">
+							<p class="nav-shell__caption">Overview</p>
+							<NavLink class="nav-shell__link" href="admin">Dashboard</NavLink>
+						</Authorized>
+					</AuthorizeView>
+					<p class="nav-shell__caption">Survey Operations</p>
+					<NavLink class="nav-shell__link" href="admin/assignments">Assignments</NavLink>
+					<AuthorizeView Roles="@RoleNames.Admin">
+						<Authorized Context="operationsAdminContext">
+							<NavLink class="nav-shell__link" href="admin/people">People</NavLink>
+							<NavLink class="nav-shell__link" href="admin/responses">Responses</NavLink>
+
+							<p class="nav-shell__caption">Survey Builder</p>
+							<NavLink class="nav-shell__link" href="admin/surveys">Surveys</NavLink>
+							<NavLink class="nav-shell__link" href="admin/versions">Versions</NavLink>
+
+							<p class="nav-shell__caption">Reporting</p>
+							<NavLink class="nav-shell__link" href="admin/reports">Reports</NavLink>
+							<NavLink class="nav-shell__link" href="admin/goals">Goals</NavLink>
+							<NavLink class="nav-shell__link" href="admin/areas">Areas</NavLink>
+						</Authorized>
+					</AuthorizeView>
+				}
+			</Authorized>
+		</AuthorizeView>
+
+	</nav>
+
+	<div class="nav-shell__account">
+		<AuthorizeView>
+			<Authorized Context="userContext">
+				<div class="nav-shell__account-card" @ref="_accountCardElement">
+					<button class="nav-shell__account-trigger" type="button" @onclick="ToggleAccountMenu" aria-expanded="@_isAccountMenuOpen" aria-label="Open account menu">
+						<span class="nav-shell__avatar" aria-hidden="true">
+							@if (!string.IsNullOrWhiteSpace(_accountAvatarUrl))
+							{
+								<img class="nav-shell__avatar-image" src="@_accountAvatarUrl" alt="" />
+							}
+							else
+							{
+								<span class="nav-shell__avatar-fallback">
+									<span class="nav-shell__avatar-head"></span>
+									<span class="nav-shell__avatar-body"></span>
+								</span>
+							}
+						</span>
+						<span class="nav-shell__account-summary @(HasAccountName ? null : "nav-shell__account-summary--compact")">
+							@if (HasAccountName)
+							{
+								<span class="nav-shell__account-name">@_currentUser!.DisplayName</span>
+								<span class="nav-shell__account-subtitle">@GetAccountEmail(userContext.User)</span>
+							}
+							else
+							{
+								<span class="nav-shell__account-name nav-shell__account-name--single">@GetAccountEmail(userContext.User)</span>
+							}
+						</span>
+						<span class="nav-shell__account-more" aria-hidden="true">...</span>
+					</button>
+					@if (_isAccountMenuOpen)
+					{
+						<div class="nav-shell__account-popover">
+							<p class="nav-shell__account-email">@GetAccountEmail(userContext.User)</p>
+							<AuthorizeView Roles="@StaffRoles">
+								<Authorized>
+									<a class="nav-shell__popover-item" href="admin/account">Settings</a>
+								</Authorized>
+							</AuthorizeView>
+							<form action="Account/Logout" method="post" class="nav-shell__popover-form">
+								<AntiforgeryToken />
+								<input type="hidden" name="ReturnUrl" value="@currentUrl" />
+								<button type="submit" class="nav-shell__popover-item">Logout</button>
+							</form>
+						</div>
+					}
+				</div>
+			</Authorized>
+			<NotAuthorized>
+				<div class="nav-shell__account-card">
+					<p class="nav-shell__account-label">Staff access</p>
+					<NavLink class="nav-shell__meta-link" href="Account/Login">Login</NavLink>
+				</div>
+			</NotAuthorized>
+		</AuthorizeView>
+	</div>
+</div>
+
+@code {
+	private const string StaffRoles = $"{RoleNames.Admin},{RoleNames.Employee}";
+	private static readonly string[] AdminSettingsPrefixes =
+	[
+		"admin/account",
+		"admin/theme",
+		"admin/employees",
+		"admin/countries",
+		"admin/state-provinces",
+		"admin/counties",
+		"admin/addresses",
+		"admin/zip-mappings"
+	];
+	private string? currentUrl;
+	private bool _isAccountMenuOpen;
+	private ApplicationUser? _currentUser;
+	private string? _accountAvatarUrl;
+	private ElementReference _accountCardElement;
+	private IJSObjectReference? _navMenuModule;
+	private DotNetObjectReference<NavMenu>? _dotNetReference;
+	private bool _isOutsideClickHandlerRegistered;
+	private bool _shouldSyncOutsideClickHandler;
+
+	private bool IsSettingsSection =>
+		!string.IsNullOrWhiteSpace(currentUrl)
+		&& AdminSettingsPrefixes.Any(prefix => currentUrl.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+	private bool HasAccountName =>
+		!string.IsNullOrWhiteSpace(_currentUser?.FirstName)
+		|| !string.IsNullOrWhiteSpace(_currentUser?.LastName);
+
+	protected override async Task OnInitializedAsync()
+	{
+		currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+		NavigationManager.LocationChanged += OnLocationChanged;
+		await LoadCurrentUserAsync();
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			_navMenuModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/navMenu.js");
+			_dotNetReference = DotNetObjectReference.Create(this);
+			_shouldSyncOutsideClickHandler = true;
+		}
+
+		if (_navMenuModule is null || !_shouldSyncOutsideClickHandler)
+		{
+			return;
+		}
+
+		if (_isAccountMenuOpen)
+		{
+			await _navMenuModule.InvokeVoidAsync("registerAccountMenuOutsideClick", _accountCardElement, _dotNetReference);
+		}
+		else if (_isOutsideClickHandlerRegistered)
+		{
+			await _navMenuModule.InvokeVoidAsync("unregisterAccountMenuOutsideClick");
+		}
+
+		_isOutsideClickHandlerRegistered = _isAccountMenuOpen;
+		_shouldSyncOutsideClickHandler = false;
+	}
+
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+		CloseAccountMenu();
+		StateHasChanged();
+	}
+
+	private void ToggleAccountMenu()
+	{
+		_isAccountMenuOpen = !_isAccountMenuOpen;
+		_shouldSyncOutsideClickHandler = true;
+	}
+
+	private void CloseAccountMenu()
+	{
+		if (!_isAccountMenuOpen)
+		{
+			return;
+		}
+
+		_isAccountMenuOpen = false;
+		_shouldSyncOutsideClickHandler = true;
+	}
+
+	[JSInvokable]
+	public Task CloseAccountMenuFromJs()
+	{
+		if (!_isAccountMenuOpen)
+		{
+			return Task.CompletedTask;
+		}
+
+		_isAccountMenuOpen = false;
+		_shouldSyncOutsideClickHandler = true;
+		return InvokeAsync(StateHasChanged);
+	}
+
+	private string GetAccountEmail(ClaimsPrincipal principal)
+	{
+		return _currentUser?.Email
+			?? principal.Identity?.Name
+			?? "Signed in";
+	}
+
+	private async Task LoadCurrentUserAsync()
+	{
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		var principal = authenticationState.User;
+		if (principal?.Identity?.IsAuthenticated != true)
+		{
+			return;
+		}
+
+		_currentUser = await UserManager.GetUserAsync(principal);
+		_accountAvatarUrl = principal.FindFirst("picture")?.Value
+			?? principal.FindFirst("avatar_url")?.Value;
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+
+		if (_navMenuModule is not null)
+		{
+			try
+			{
+				await _navMenuModule.InvokeVoidAsync("disposeAccountMenuOutsideClick");
+				await _navMenuModule.DisposeAsync();
+			}
+			catch (JSDisconnectedException)
+			{
+			}
+		}
+
+		_dotNetReference?.Dispose();
+	}
+}

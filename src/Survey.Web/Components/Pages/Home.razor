@@ -1,0 +1,32 @@
+@page "/"
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Survey</PageTitle>
+
+<div class="list-card">
+	<p class="empty-state">Redirecting...</p>
+</div>
+
+@code {
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (!firstRender)
+		{
+			return;
+		}
+
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		var user = authenticationState.User;
+		var target = "Account/Login";
+
+		if (user.Identity?.IsAuthenticated == true)
+		{
+			target = user.IsInRole(RoleNames.Admin)
+				? "admin"
+				: "admin/assignments";
+		}
+
+		NavigationManager.NavigateTo(target, forceLoad: true);
+	}
+}

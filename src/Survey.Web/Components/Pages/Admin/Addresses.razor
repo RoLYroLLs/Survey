@@ -1,0 +1,131 @@
+@page "/admin/addresses"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Addresses</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>Addresses</h1>
+			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "Shared addresses are reused automatically when people or survey submissions enter the same location." : $"Showing addresses for {_filterLabel}.")</p>
+		</div>
+		<div class="toolbar">
+			@if (CountyId.HasValue)
+			{
+				<a class="btn btn-outline-primary" href="admin/addresses">View All</a>
+			}
+			<a class="btn btn-outline-primary" href="/admin/import-samples/addresses">Download Sample Excel</a>
+			<a class="btn btn-outline-primary" href="admin/addresses/import">Import CSV</a>
+			<a class="btn btn-primary" href="admin/addresses/new">Add Address</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Address Rows</h2>
+				<p>Search by street, city, postal code, or the formatted address. The list shows up to 250 rows at a time.</p>
+			</div>
+			<div class="toolbar">
+				<input class="form-control" placeholder="Search addresses" @bind="_searchText" />
+				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
+				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No addresses matched the current search.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Address</th>
+						<th>County</th>
+						<th>Country</th>
+						<th>References</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.FormattedAddress</td>
+							<td>@item.CountyName</td>
+							<td>@item.CountryCode</td>
+							<td>
+								@if (item.ReferenceCount > 0)
+								{
+									<a href="admin/addresses/@item.Id/references">@item.ReferenceCount</a>
+								}
+								else
+								{
+									@item.ReferenceCount
+								}
+							</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="admin/addresses/@item.Id/references">References</a>
+									<a class="btn btn-sm btn-outline-primary" href="admin/addresses/@item.Id/edit">Edit</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? CountyId { get; set; }
+
+	private IReadOnlyList<PostalAddressListItem> _items = Array.Empty<PostalAddressListItem>();
+	private string _searchText = string.Empty;
+	private string? _filterLabel;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetPostalAddressesAsync(Search, CountyId);
+		_filterLabel = CountyId.HasValue ? _items.FirstOrDefault()?.CountyName : null;
+	}
+
+	private void ApplySearch()
+	{
+		var url = "admin/addresses";
+		var queryParts = new List<string>();
+		if (CountyId.HasValue)
+		{
+			queryParts.Add($"countyId={CountyId.Value}");
+		}
+		if (!string.IsNullOrWhiteSpace(_searchText))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(_searchText)}");
+		}
+		if (queryParts.Count > 0)
+		{
+			url = $"{url}?{string.Join("&", queryParts)}";
+		}
+		NavigationManager.NavigateTo(url);
+	}
+
+	private void ClearSearch()
+	{
+		_searchText = string.Empty;
+		var url = CountyId.HasValue
+			? $"admin/addresses?countyId={CountyId.Value}"
+			: "admin/addresses";
+		NavigationManager.NavigateTo(url);
+	}
+}

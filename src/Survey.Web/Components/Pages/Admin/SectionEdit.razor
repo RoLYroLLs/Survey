@@ -1,0 +1,121 @@
+@page "/admin/sections/new"
+@page "/admin/sections/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit Section" : "Add Section")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Survey Section</p>
+			<h1>@(Id.HasValue ? "Edit Section" : "Add Section")</h1>
+			<p>Sections determine the multi-step flow for the survey form.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (_model.IsLocked)
+		{
+			<div class="inline-banner mb-3">This section belongs to a locked survey version.</div>
+		}
+
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (_model.IsLocked && !Id.HasValue)
+		{
+			<div class="form-footer">
+				<a class="btn btn-outline-primary" href="@GetSectionsUrl()">Back to Sections</a>
+			</div>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<label>Survey Version</label>
+						<InputSelect class="form-select" @bind-Value="_model.SurveyVersionId" disabled="@_model.Id.HasValue">
+							@foreach (var option in _model.SurveyVersionOptions)
+							{
+								<option value="@option.Value">@option.Label</option>
+							}
+						</InputSelect>
+					</div>
+					<div class="field-stack">
+						<label>Title</label>
+						<InputText class="form-control" @bind-Value="_model.Title" disabled="@_model.IsLocked" />
+						<ValidationMessage For="@(() => _model.Title)" />
+					</div>
+					<div class="field-stack">
+						<label>Description</label>
+						<InputTextArea class="form-control" rows="4" @bind-Value="_model.Description" disabled="@_model.IsLocked" />
+					</div>
+					<div class="field-stack">
+						<label>Sort Order</label>
+						<InputNumber class="form-control" @bind-Value="_model.SortOrder" disabled="@_model.IsLocked" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit" disabled="@_model.IsLocked">Save Section</button>
+					<a class="btn btn-outline-primary" href="@GetSectionsUrl()">Back to Sections</a>
+				</div>
+			</EditForm>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyVersionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyDefinitionId { get; set; }
+
+	private SurveySectionEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetSurveySectionAsync(Id, SurveyVersionId);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveSurveySectionAsync(_model);
+			var section = await AdministrationService.GetSurveySectionAsync(savedId, null);
+			NavigationManager.NavigateTo(GetQuestionsUrl(section.Id ?? savedId, section.SurveyVersionId, section.SurveyDefinitionId));
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private string GetSectionsUrl()
+	{
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"admin/sections?surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"admin/sections?surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetQuestionsUrl(int surveySectionId, int surveyVersionId, int surveyDefinitionId)
+	{
+		return surveyDefinitionId > 0
+			? $"admin/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"admin/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+}

@@ -1,0 +1,29 @@
+@page "/survey/{Token}"
+@inject ISurveyExperienceService SurveyExperienceService
+
+<PageTitle>Survey</PageTitle>
+
+@if (_session is null)
+{
+	<div class="status-card narrow-card">
+		<p class="eyebrow">Survey Link</p>
+		<h1>We couldn't find that survey.</h1>
+		<p class="mb-0">Please confirm the link or contact the employee who sent it.</p>
+	</div>
+}
+else
+{
+	<SurveyForm Session="_session" />
+}
+
+@code {
+	[Parameter]
+	public string Token { get; set; } = string.Empty;
+
+	private SurveySessionModel? _session;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_session = await SurveyExperienceService.GetPublicSessionAsync(Token);
+	}
+}

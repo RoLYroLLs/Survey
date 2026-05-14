@@ -1,0 +1,77 @@
+@page "/admin/countries/new"
+@page "/admin/countries/{Id:int}/edit"
+@attribute [Authorize(Roles = RoleNames.Admin)]
+@inject ISurveyAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit Country" : "Add Country")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geography</p>
+			<h1>@(Id.HasValue ? "Edit Country" : "Add Country")</h1>
+			<p>Use ISO codes so imports and address matching can stay reliable across environments.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid form-grid--single">
+				<div class="field-stack">
+					<label>Name</label>
+					<InputText class="form-control" @bind-Value="_model.Name" />
+					<ValidationMessage For="@(() => _model.Name)" />
+				</div>
+				<div class="field-stack">
+					<label>ISO2 Code</label>
+					<InputText class="form-control" @bind-Value="_model.Iso2Code" />
+					<ValidationMessage For="@(() => _model.Iso2Code)" />
+				</div>
+				<div class="field-stack">
+					<label>ISO3 Code</label>
+					<InputText class="form-control" @bind-Value="_model.Iso3Code" />
+					<ValidationMessage For="@(() => _model.Iso3Code)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save Country</button>
+				<a class="btn btn-outline-primary" href="admin/countries">Back to Countries</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private CountryEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetCountryAsync(Id);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			await AdministrationService.SaveCountryAsync(_model);
+			NavigationManager.NavigateTo("admin/countries");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}
