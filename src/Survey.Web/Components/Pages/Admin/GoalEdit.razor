@@ -1,17 +1,20 @@
 @page "/admin/goals/new"
+@page "/admin/goals/{Id:int}"
 @page "/admin/goals/{Id:int}/edit"
+@implements IDisposable
 @attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Goal" : "Add Goal")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Response Goal</p>
-			<h1>@(Id.HasValue ? "Edit Goal" : "Add Goal")</h1>
-			<p>Track response targets by area and optionally narrow the count to one survey family.</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update a response goal.</p>
 		</div>
 	</div>
 
@@ -21,59 +24,97 @@
 			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
 		}
 
-		<EditForm Model="_model" OnValidSubmit="SaveAsync">
-			<DataAnnotationsValidator />
-			<div class="form-grid form-grid--single">
-				<div class="field-stack">
-					<label>Name</label>
-					<InputText class="form-control" @bind-Value="_model.Name" />
-					<ValidationMessage For="@(() => _model.Name)" />
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Name</strong>
+						<span>@DisplayOrDash(_model.Name)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Description</strong>
+						<span>@DisplayOrDash(_model.Description)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Area</strong>
+						<span>@GetAreaLabel()</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Survey Filter</strong>
+						<span>@GetSurveyLabel()</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Target Responses</strong>
+						<span>@_model.TargetResponseCount</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Start Date</strong>
+						<span>@FormatDate(_model.StartDate)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>End Date</strong>
+						<span>@FormatDate(_model.EndDate)</span>
+					</div>
 				</div>
-				<div class="field-stack">
-					<label>Description</label>
-					<InputTextArea class="form-control" rows="4" @bind-Value="_model.Description" />
-					<ValidationMessage For="@(() => _model.Description)" />
-				</div>
-				<div class="field-stack">
-					<label>Area</label>
-					<InputSelect class="form-select" @bind-Value="_model.AreaId">
-						@foreach (var option in _model.AreaOptions)
-						{
-							<option value="@option.Value">@option.Label</option>
-						}
-					</InputSelect>
-					<ValidationMessage For="@(() => _model.AreaId)" />
-				</div>
-				<div class="field-stack">
-					<label>Survey Filter</label>
-					<InputSelect class="form-select" @bind-Value="_model.SurveyDefinitionId">
-						<option value="">All Surveys</option>
-						@foreach (var option in _model.SurveyOptions)
-						{
-							<option value="@option.Value">@option.Label</option>
-						}
-					</InputSelect>
-				</div>
-				<div class="field-stack">
-					<label>Target Responses</label>
-					<InputNumber class="form-control" @bind-Value="_model.TargetResponseCount" />
-					<ValidationMessage For="@(() => _model.TargetResponseCount)" />
-				</div>
-				<div class="field-stack">
-					<label>Start Date</label>
-					<InputDate class="form-control" @bind-Value="_model.StartDate" />
-				</div>
-				<div class="field-stack">
-					<label>End Date</label>
-					<InputDate class="form-control" @bind-Value="_model.EndDate" />
-				</div>
-			</div>
 
-			<div class="form-footer">
-				<button class="btn btn-primary" type="submit">Save Goal</button>
-				<a class="btn btn-outline-primary" href="admin/goals">Back to Goals</a>
+				<div class="form-footer">
+					<a class="btn btn-primary" href="/admin/goals/@Id/edit">Edit Goal</a>
+					<a class="btn btn-outline-primary" href="admin/goals">Back to Goals</a>
+				</div>
 			</div>
-		</EditForm>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<label>Name</label>
+						<InputText class="form-control" @bind-Value="_model.Name" />
+						<ValidationMessage For="@(() => _model.Name)" />
+					</div>
+					<div class="field-stack">
+						<label>Description</label>
+						<InputTextArea class="form-control" rows="4" @bind-Value="_model.Description" />
+						<ValidationMessage For="@(() => _model.Description)" />
+					</div>
+					<div class="field-stack">
+						<label>Area</label>
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.AreaId"
+										  Options="_model.AreaOptions" />
+						<ValidationMessage For="@(() => _model.AreaId)" />
+					</div>
+					<div class="field-stack">
+						<label>Survey Filter</label>
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.SurveyDefinitionId"
+										  Options="_model.SurveyOptions"
+										  IncludeEmptyOption="true"
+										  EmptyOptionLabel="All Surveys" />
+					</div>
+					<div class="field-stack">
+						<label>Target Responses</label>
+						<InputNumber class="form-control" @bind-Value="_model.TargetResponseCount" />
+						<ValidationMessage For="@(() => _model.TargetResponseCount)" />
+					</div>
+					<div class="field-stack">
+						<label>Start Date</label>
+						<InputDate class="form-control" @bind-Value="_model.StartDate" />
+					</div>
+					<div class="field-stack">
+						<label>End Date</label>
+						<InputDate class="form-control" @bind-Value="_model.EndDate" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Goal</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/admin/goals/{Id.Value}" : "admin/goals")">Cancel</a>
+				</div>
+			</EditForm>
+		}
 	</div>
 </div>
 
@@ -83,6 +124,12 @@
 
 	private GoalEditModel _model = new();
 	private string? _errorMessage;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -90,16 +137,69 @@
 		_errorMessage = null;
 	}
 
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
 	private async Task SaveAsync()
 	{
 		try
 		{
-			await AdministrationService.SaveGoalAsync(_model);
-			NavigationManager.NavigateTo("admin/goals");
+			var savedId = await AdministrationService.SaveGoalAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Goal saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"admin/goals/{savedId}");
 		}
 		catch (Exception ex)
 		{
-			_errorMessage = ex.Message;
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
 		}
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Goal";
+		}
+
+		return Id.HasValue ? "Edit Goal" : "Add Goal";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private string GetAreaLabel()
+	{
+		if (!_model.AreaId.HasValue)
+		{
+			return "All Areas";
+		}
+
+		return _model.AreaOptions.FirstOrDefault(option => option.Value == _model.AreaId.Value.ToString())?.Label ?? "-";
+	}
+
+	private string GetSurveyLabel()
+	{
+		if (! _model.SurveyDefinitionId.HasValue)
+		{
+			return "All Surveys";
+		}
+
+		return _model.SurveyOptions.FirstOrDefault(option => option.Value == _model.SurveyDefinitionId.Value.ToString())?.Label ?? "-";
+	}
+
+	private static string FormatDate(DateOnly? value)
+	{
+		return value?.ToString("MM/dd/yyyy") ?? "-";
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
 	}
 }

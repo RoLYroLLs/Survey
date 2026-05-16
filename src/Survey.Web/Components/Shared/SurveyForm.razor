@@ -1,6 +1,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ISurveyAdministrationService AdministrationService
 @inject ISurveyExperienceService SurveyExperienceService
+@inject ToastService ToastService
 
 @if (_submitted)
 {
@@ -64,7 +65,7 @@ else
 						<div class="page-header">
 							<div>
 								<h2>Contact Information</h2>
-								<p>These details are prefilled when known and can be confirmed or corrected before submission.</p>
+								<p>These details come from the assigned person and location, and can be confirmed or corrected before submission.</p>
 							</div>
 						</div>
 
@@ -82,50 +83,12 @@ else
 								<input class="form-control" @bind="_submission.Contact.LastName" />
 							</div>
 							<div class="field-stack">
-								<label>Country</label>
-								<select class="form-control" @bind="_submission.Contact.CountryId" @bind:after="OnCountryChangedAsync">
-									<option value="0">Select a country</option>
-									@foreach (var option in _submission.Contact.CountryOptions)
-									{
-										<option value="@option.Value">@option.Label</option>
-									}
-								</select>
-							</div>
-							<div class="field-stack">
-								<label>State / Territory</label>
-								<select class="form-control" @bind="_submission.Contact.StateProvinceId" @bind:after="OnStateChangedAsync" disabled="@(!_canSelectState)">
-									<option value="0">Select a state or territory</option>
-									@foreach (var option in _submission.Contact.StateProvinceOptions)
-									{
-										<option value="@option.Value">@option.Label</option>
-									}
-								</select>
-							</div>
-							<div class="field-stack">
-								<label>County</label>
-								<select class="form-control" @bind="_selectedCountyId" @bind:after="OnCountyChanged" disabled="@(!_canSelectCounty)">
-									<option value="">Select a county</option>
-									@foreach (var option in _submission.Contact.CountyOptions)
-									{
-										<option value="@option.Value">@option.Label</option>
-									}
-								</select>
-							</div>
-							<div class="field-stack form-grid--single">
-								<label>Address Line 1</label>
-								<input class="form-control" @bind="_submission.Contact.AddressLine1" disabled="@(!_canEnterAddress)" />
-							</div>
-							<div class="field-stack form-grid--single">
-								<label>Address Line 2</label>
-								<input class="form-control" @bind="_submission.Contact.AddressLine2" disabled="@(!_canEnterAddress)" />
-							</div>
-							<div class="field-stack">
-								<label>City</label>
-								<input class="form-control" @bind="_submission.Contact.City" disabled="@(!_canEnterAddress)" />
-							</div>
-							<div class="field-stack">
-								<label>Postal Code</label>
-								<input class="form-control" @bind="_submission.Contact.PostalCode" disabled="@(!_canEnterAddress)" />
+								<label>Phone Type</label>
+								<SearchableSelect class="form-control"
+												  @bind-Value="_submission.Contact.PhoneLabel"
+												  Options="ContactOptionCatalog.PhoneTypeOptions"
+												  IncludeEmptyOption="true"
+												  EmptyOptionLabel="Select a type" />
 							</div>
 							<div class="field-stack">
 								<label>Phone Number</label>
@@ -133,12 +96,61 @@ else
 							</div>
 							<div class="field-stack">
 								<label>Best Time to Contact</label>
-								<input class="form-control" @bind="_submission.Contact.BestTimeToContact" />
+								<SearchableSelect class="form-control"
+												  @bind-Value="_submission.Contact.BestTimeToContact"
+												  Options="ContactOptionCatalog.BestTimeOptions"
+												  IncludeEmptyOption="true"
+												  EmptyOptionLabel="Select a time" />
 							</div>
 							<div class="field-stack">
-								<label>Email</label>
+								<label>Preferred Contact Method</label>
+								<SearchableSelect class="form-control"
+												  @bind-Value="_submission.Contact.PreferredContactMethod"
+												  Options="ContactOptionCatalog.PreferredContactMethodOptions"
+												  IncludeEmptyOption="true"
+												  EmptyOptionLabel="Select a method" />
+							</div>
+							<div class="field-stack">
+								<label>Email Type</label>
+								<SearchableSelect class="form-control"
+												  @bind-Value="_submission.Contact.EmailLabel"
+												  Options="ContactOptionCatalog.EmailTypeOptions"
+												  IncludeEmptyOption="true"
+												  EmptyOptionLabel="Select a type" />
+							</div>
+							<div class="field-stack">
+								<label>Email Address</label>
 								<input class="form-control" type="email" @bind="_submission.Contact.Email" />
 							</div>
+						</div>
+
+						<div class="card-grid mt-4">
+							<section class="content-card">
+								<div class="page-header">
+									<div>
+										<h2>Physical Address</h2>
+										<p>Use the saved profile address if it better matches the current response.</p>
+									</div>
+									<div class="toolbar">
+										<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyProfilePhysicalToPhysical">Same as Profile Address</button>
+									</div>
+								</div>
+								@AddressFields(_submission.Contact.PhysicalAddress, AddressMode.Physical)
+							</section>
+
+							<section class="content-card">
+								<div class="page-header">
+									<div>
+										<h2>Mailing Address</h2>
+										<p>Copy from the physical address or from the saved profile mailing address when that is quicker.</p>
+									</div>
+									<div class="toolbar">
+										<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyPhysicalToMailing">Same as Physical Address</button>
+										<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyProfileMailingToMailing">Same as Profile Mailing</button>
+									</div>
+								</div>
+								@AddressFields(_submission.Contact.MailingAddress, AddressMode.Mailing)
+							</section>
 						</div>
 					</div>
 				}
@@ -240,10 +252,12 @@ else
 	private bool _submitted;
 	private string _resultMessage = string.Empty;
 	private string? _errorMessage;
-	private string? _selectedCountyId;
-	private bool _canSelectState;
-	private bool _canSelectCounty;
-	private bool _canEnterAddress;
+
+	private enum AddressMode
+	{
+		Physical,
+		Mailing
+	}
 
 	protected override void OnParametersSet()
 	{
@@ -263,32 +277,76 @@ else
 				FirstName = Session.Contact.FirstName,
 				MiddleName = Session.Contact.MiddleName,
 				LastName = Session.Contact.LastName,
-				AddressLine1 = Session.Contact.AddressLine1,
-				AddressLine2 = Session.Contact.AddressLine2,
-				City = Session.Contact.City,
-				CountryId = Session.Contact.CountryId,
-				StateProvinceId = Session.Contact.StateProvinceId,
-				CountyId = Session.Contact.CountyId,
-				PostalCode = Session.Contact.PostalCode,
 				PhoneNumber = Session.Contact.PhoneNumber,
+				PhoneLabel = Session.Contact.PhoneLabel,
 				BestTimeToContact = Session.Contact.BestTimeToContact,
+				PreferredContactMethod = Session.Contact.PreferredContactMethod,
 				Email = Session.Contact.Email,
-				CountryOptions = Session.Contact.CountryOptions,
-				StateProvinceOptions = Session.Contact.StateProvinceOptions,
-				CountyOptions = Session.Contact.CountyOptions
+				EmailLabel = Session.Contact.EmailLabel,
+				PhysicalAddress = CloneAddress(Session.Contact.PhysicalAddress),
+				MailingAddress = CloneAddress(Session.Contact.MailingAddress),
+				ProfilePhysicalAddress = CloneAddress(Session.Contact.ProfilePhysicalAddress),
+				ProfileMailingAddress = CloneAddress(Session.Contact.ProfileMailingAddress)
 			},
 			Answers = Session.Sections
 				.SelectMany(section => section.Questions)
 				.Select(question => new SurveyAnswerInputModel { QuestionId = question.Id })
 				.ToList()
 		};
-		_selectedCountyId = _submission.Contact.CountyId?.ToString();
-		UpdateFormState();
 		_stepIndex = 0;
 		_submitted = false;
 		_resultMessage = string.Empty;
 		_errorMessage = null;
 	}
+
+	private RenderFragment AddressFields(AddressInputModel address, AddressMode mode) => @<div class="form-grid">
+		<div class="field-stack form-grid--single">
+			<label>Country</label>
+			<SearchableSelect class="form-control"
+							  @bind-Value="address.CountryId"
+							  AfterValueChanged="() => OnCountryChangedAsync(address)"
+							  Options="address.CountryOptions"
+							  IncludeEmptyOption="true"
+							  EmptyOptionLabel="Select a country"
+							  EmptyOptionValue="0" />
+		</div>
+		<div class="field-stack">
+			<label>State / Territory</label>
+			<SearchableSelect class="form-control"
+							  @bind-Value="address.StateProvinceId"
+							  AfterValueChanged="() => OnStateChangedAsync(address)"
+							  Options="address.StateProvinceOptions"
+							  IncludeEmptyOption="true"
+							  EmptyOptionLabel="Select a state or territory"
+							  EmptyOptionValue="0"
+							  Disabled="@(address.CountryId <= 0)" />
+		</div>
+		<div class="field-stack">
+			<label>County</label>
+			<SearchableSelect class="form-control"
+							  @bind-Value="address.CountyId"
+							  Options="address.CountyOptions"
+							  IncludeEmptyOption="true"
+							  EmptyOptionLabel="Select a county"
+							  Disabled="@(address.StateProvinceId <= 0)" />
+		</div>
+		<div class="field-stack form-grid--single">
+			<label>Address Line 1</label>
+			<InputText class="form-control" @bind-Value="address.AddressLine1" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+		<div class="field-stack form-grid--single">
+			<label>Address Line 2</label>
+			<InputText class="form-control" @bind-Value="address.AddressLine2" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+		<div class="field-stack">
+			<label>City</label>
+			<InputText class="form-control" @bind-Value="address.City" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+		<div class="field-stack">
+			<label>Postal Code</label>
+			<InputText class="form-control" @bind-Value="address.PostalCode" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+	</div>;
 
 	private SurveyAnswerInputModel GetAnswer(int questionId)
 	{
@@ -333,6 +391,11 @@ else
 
 	private void NextStep()
 	{
+		if (!ValidateCurrentStep())
+		{
+			return;
+		}
+
 		_errorMessage = null;
 		if (_stepIndex < _session.Sections.Count)
 		{
@@ -351,9 +414,13 @@ else
 
 	private async Task SubmitAsync()
 	{
+		if (!ValidateCurrentStep())
+		{
+			return;
+		}
+
 		try
 		{
-			_submission.Contact.CountyId = int.TryParse(_selectedCountyId, out var countyId) ? countyId : null;
 			var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
 			var submittedByUserId = _session.IsStaffMode
 				? authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -362,51 +429,146 @@ else
 			if (!result.Succeeded)
 			{
 				_errorMessage = result.Message;
+				if (_session.IsStaffMode)
+				{
+					ToastService.ShowError(result.Message, "Submission failed");
+				}
 				return;
 			}
 
 			_submitted = true;
 			_resultMessage = result.Message;
 			_errorMessage = null;
+			if (_session.IsStaffMode)
+			{
+				ToastService.ShowSuccess(result.Message, "Survey submitted");
+			}
 		}
 		catch (Exception ex)
 		{
 			_errorMessage = ex.Message;
+			if (_session.IsStaffMode)
+			{
+				ToastService.ShowError(ex.Message, "Submission failed");
+			}
 		}
 	}
 
-	private async Task OnCountryChangedAsync()
+	private bool ValidateCurrentStep()
 	{
-		_submission.Contact.StateProvinceId = 0;
-		_submission.Contact.CountyId = null;
-		_selectedCountyId = null;
-		_submission.Contact.StateProvinceOptions = _submission.Contact.CountryId > 0
-			? await AdministrationService.GetStateProvinceSelectOptionsAsync(_submission.Contact.CountryId)
+		return _stepIndex == 0
+			? ValidateContactStep()
+			: ValidateQuestionStep();
+	}
+
+	private bool ValidateContactStep()
+	{
+		var validationErrors = new List<ValidationResult>();
+		var isValid = ValidateObject(_submission.Contact, validationErrors);
+
+		if (isValid)
+		{
+			_errorMessage = null;
+			return true;
+		}
+
+		_errorMessage = validationErrors.FirstOrDefault()?.ErrorMessage ?? "Complete the required contact information before continuing.";
+		return false;
+	}
+
+	private bool ValidateQuestionStep()
+	{
+		if (CurrentSection is null)
+		{
+			_errorMessage = null;
+			return true;
+		}
+
+		foreach (var question in CurrentSection.Questions.Where(question => question.IsRequired))
+		{
+			var answer = GetAnswer(question.Id);
+			if (question.Type == SurveyQuestionType.YesNo && answer.YesNoAnswer is null)
+			{
+				_errorMessage = $"Answer the required question: {question.Prompt}";
+				return false;
+			}
+
+			if (question.Type == SurveyQuestionType.SingleChoice && answer.SelectedOptionId is null)
+			{
+				_errorMessage = $"Choose an option for: {question.Prompt}";
+				return false;
+			}
+
+			if (question.Type == SurveyQuestionType.MultiSelect && answer.SelectedOptionIds.Count == 0)
+			{
+				_errorMessage = $"Choose at least one option for: {question.Prompt}";
+				return false;
+			}
+
+			if (question.Type == SurveyQuestionType.LongText && string.IsNullOrWhiteSpace(answer.TextAnswer))
+			{
+				_errorMessage = $"Enter a response for: {question.Prompt}";
+				return false;
+			}
+		}
+
+		_errorMessage = null;
+		return true;
+	}
+
+	private static bool ValidateObject(object model, List<ValidationResult> validationErrors)
+	{
+		return Validator.TryValidateObject(model, new ValidationContext(model), validationErrors, true);
+	}
+
+	private async Task OnCountryChangedAsync(AddressInputModel address)
+	{
+		address.StateProvinceId = 0;
+		address.CountyId = null;
+		address.StateProvinceOptions = address.CountryId > 0
+			? await AdministrationService.GetStateProvinceSelectOptionsAsync(address.CountryId)
 			: Array.Empty<SelectOption>();
-		_submission.Contact.CountyOptions = Array.Empty<SelectOption>();
-		UpdateFormState();
+		address.CountyOptions = Array.Empty<SelectOption>();
 	}
 
-	private async Task OnStateChangedAsync()
+	private async Task OnStateChangedAsync(AddressInputModel address)
 	{
-		_submission.Contact.CountyId = null;
-		_selectedCountyId = null;
-		_submission.Contact.CountyOptions = _submission.Contact.StateProvinceId > 0
-			? await AdministrationService.GetCountySelectOptionsAsync(_submission.Contact.StateProvinceId)
+		address.CountyId = null;
+		address.CountyOptions = address.StateProvinceId > 0
+			? await AdministrationService.GetCountySelectOptionsAsync(address.StateProvinceId)
 			: Array.Empty<SelectOption>();
-		UpdateFormState();
 	}
 
-	private void UpdateFormState()
+	private void CopyProfilePhysicalToPhysical()
 	{
-		_canSelectState = _submission.Contact.CountryId > 0;
-		_canSelectCounty = _submission.Contact.StateProvinceId > 0;
-		_canEnterAddress = !string.IsNullOrWhiteSpace(_selectedCountyId);
+		_submission.Contact.PhysicalAddress = CloneAddress(_submission.Contact.ProfilePhysicalAddress);
 	}
 
-	private void OnCountyChanged()
+	private void CopyPhysicalToMailing()
 	{
-		UpdateFormState();
+		_submission.Contact.MailingAddress = CloneAddress(_submission.Contact.PhysicalAddress);
+	}
+
+	private void CopyProfileMailingToMailing()
+	{
+		_submission.Contact.MailingAddress = CloneAddress(_submission.Contact.ProfileMailingAddress);
+	}
+
+	private static AddressInputModel CloneAddress(AddressInputModel source)
+	{
+		return new AddressInputModel
+		{
+			AddressLine1 = source.AddressLine1,
+			AddressLine2 = source.AddressLine2,
+			City = source.City,
+			CountryId = source.CountryId,
+			StateProvinceId = source.StateProvinceId,
+			CountyId = source.CountyId,
+			PostalCode = source.PostalCode,
+			CountryOptions = source.CountryOptions,
+			StateProvinceOptions = source.StateProvinceOptions,
+			CountyOptions = source.CountyOptions
+		};
 	}
 
 	private string GetStepClass(int index)

@@ -1,17 +1,20 @@
 @page "/admin/employees/new"
+@page "/admin/employees/{Id}"
 @page "/admin/employees/{Id}/edit"
+@implements IDisposable
 @attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
-<PageTitle>@(_model.IsNew ? "Add Employee" : "Edit Employee")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Employee Account</p>
-			<h1>@(_model.IsNew ? "Add Employee" : "Edit Employee")</h1>
-			<p>Admins can manage the role and password used for staff login.</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update an employee account.</p>
 		</div>
 	</div>
 
@@ -21,48 +24,78 @@
 			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
 		}
 
-		<EditForm Model="_model" OnValidSubmit="SaveAsync">
-			<DataAnnotationsValidator />
-			<div class="form-grid">
-				<div class="field-stack">
-					<label>First Name</label>
-					<InputText class="form-control" @bind-Value="_model.FirstName" />
-					<ValidationMessage For="@(() => _model.FirstName)" />
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>First Name</strong>
+						<span>@DisplayOrDash(_model.FirstName)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Last Name</strong>
+						<span>@DisplayOrDash(_model.LastName)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Email</strong>
+						<span>@DisplayOrDash(_model.Email)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Role</strong>
+						<span>@DisplayOrDash(_model.RoleName)</span>
+					</div>
 				</div>
-				<div class="field-stack">
-					<label>Last Name</label>
-					<InputText class="form-control" @bind-Value="_model.LastName" />
-					<ValidationMessage For="@(() => _model.LastName)" />
-				</div>
-				<div class="field-stack">
-					<label>Email</label>
-					<InputText class="form-control" @bind-Value="_model.Email" />
-					<ValidationMessage For="@(() => _model.Email)" />
-				</div>
-				<div class="field-stack">
-					<label>Role</label>
-					<InputSelect class="form-select" @bind-Value="_model.RoleName">
-						<option value="@RoleNames.Employee">Employee</option>
-						<option value="@RoleNames.Admin">Admin</option>
-					</InputSelect>
-				</div>
-				<div class="field-stack">
-					<label>@(_model.IsNew ? "Password" : "New Password")</label>
-					<SecretInput class="form-control" @bind-Value="_model.Password" />
-					<ValidationMessage For="@(() => _model.Password)" />
-				</div>
-				<div class="field-stack">
-					<label>Confirm Password</label>
-					<SecretInput class="form-control" @bind-Value="_model.ConfirmPassword" />
-					<ValidationMessage For="@(() => _model.ConfirmPassword)" />
-				</div>
-			</div>
 
-			<div class="form-footer">
-				<button class="btn btn-primary" type="submit">Save Employee</button>
-				<a class="btn btn-outline-primary" href="admin/employees">Back to Employees</a>
+				<div class="form-footer">
+					<a class="btn btn-primary" href="/admin/employees/@Id/edit">Edit Employee</a>
+					<a class="btn btn-outline-primary" href="admin/employees">Back to Employees</a>
+				</div>
 			</div>
-		</EditForm>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid">
+					<div class="field-stack">
+						<label>First Name</label>
+						<InputText class="form-control" @bind-Value="_model.FirstName" />
+						<ValidationMessage For="@(() => _model.FirstName)" />
+					</div>
+					<div class="field-stack">
+						<label>Last Name</label>
+						<InputText class="form-control" @bind-Value="_model.LastName" />
+						<ValidationMessage For="@(() => _model.LastName)" />
+					</div>
+					<div class="field-stack">
+						<label>Email</label>
+						<InputText class="form-control" @bind-Value="_model.Email" />
+						<ValidationMessage For="@(() => _model.Email)" />
+					</div>
+					<div class="field-stack">
+						<label>Role</label>
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.RoleName"
+										  Options="_roleOptions" />
+					</div>
+					<div class="field-stack">
+						<label>@(_model.IsNew ? "Password" : "New Password")</label>
+						<SecretInput class="form-control" @bind-Value="_model.Password" />
+						<ValidationMessage For="@(() => _model.Password)" />
+					</div>
+					<div class="field-stack">
+						<label>Confirm Password</label>
+						<SecretInput class="form-control" @bind-Value="_model.ConfirmPassword" />
+						<ValidationMessage For="@(() => _model.ConfirmPassword)" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Employee</button>
+					<a class="btn btn-outline-primary" href="@(!string.IsNullOrWhiteSpace(Id) ? $"/admin/employees/{Id}" : "admin/employees")">Cancel</a>
+				</div>
+			</EditForm>
+		}
 	</div>
 </div>
 
@@ -72,6 +105,17 @@
 
 	private EmployeeEditModel _model = new();
 	private string? _errorMessage;
+	private bool IsViewMode => !string.IsNullOrWhiteSpace(Id) && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+	private static readonly IReadOnlyList<SelectOption> _roleOptions =
+	[
+		new() { Value = RoleNames.Employee, Label = "Employee" },
+		new() { Value = RoleNames.Admin, Label = "Admin" }
+	];
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -79,16 +123,44 @@
 		_errorMessage = null;
 	}
 
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
 	private async Task SaveAsync()
 	{
 		try
 		{
-			await AdministrationService.SaveEmployeeAsync(_model);
-			NavigationManager.NavigateTo("admin/employees");
+			var savedId = await AdministrationService.SaveEmployeeAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Employee saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"admin/employees/{savedId}");
 		}
 		catch (Exception ex)
 		{
-			_errorMessage = ex.Message;
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
 		}
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Employee";
+		}
+
+		return _model.IsNew ? "Add Employee" : "Edit Employee";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
 	}
 }

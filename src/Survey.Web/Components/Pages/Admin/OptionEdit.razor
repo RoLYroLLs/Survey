@@ -3,6 +3,7 @@
 @attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
 <PageTitle>@(Id.HasValue ? "Edit Option" : "Add Option")</PageTitle>
 
@@ -41,12 +42,10 @@
 				<div class="form-grid form-grid--single">
 					<div class="field-stack">
 						<label>Question</label>
-						<InputSelect class="form-select" @bind-Value="_model.SurveyQuestionId" disabled="@_model.Id.HasValue">
-							@foreach (var option in _model.SurveyQuestionOptions)
-							{
-								<option value="@option.Value">@option.Label</option>
-							}
-						</InputSelect>
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.SurveyQuestionId"
+										  Options="_model.SurveyQuestionOptions"
+										  Disabled="@_model.Id.HasValue" />
 					</div>
 					<div class="field-stack">
 						<label>Label</label>
@@ -102,12 +101,15 @@
 	{
 		try
 		{
-			await AdministrationService.SaveQuestionOptionAsync(_model);
-			NavigationManager.NavigateTo(GetOptionsUrl());
+			var savedId = await AdministrationService.SaveQuestionOptionAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Option saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"admin/options/{savedId}?surveyQuestionId={_model.SurveyQuestionId}&surveySectionId={_model.SurveySectionId}&surveyVersionId={_model.SurveyVersionId}&surveyDefinitionId={_model.SurveyDefinitionId}");
 		}
 		catch (Exception ex)
 		{
-			_errorMessage = ex.Message;
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
 		}
 	}
 
@@ -115,10 +117,10 @@
 	{
 		if (string.IsNullOrWhiteSpace(_model.QuestionPrompt))
 		{
-			return "Options are only meaningful for single-choice and multi-select questions.";
+			return "View or update an option for the selected question.";
 		}
 
-		return $"Manage an answer choice for '{_model.QuestionPrompt}'.";
+		return $"View or update an answer choice for '{_model.QuestionPrompt}'.";
 	}
 
 	private string GetOptionsUrl()

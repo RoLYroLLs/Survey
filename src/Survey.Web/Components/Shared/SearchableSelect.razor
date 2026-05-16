@@ -1,0 +1,444 @@
+@typeparam TValue
+@inherits InputBase<TValue>
+@implements IAsyncDisposable
+@using System.Globalization
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="@BuildWrapperClass()" @onfocusout="HandleFocusOut">
+	<div class="searchable-select__control" @ref="_controlElement">
+		<input class="@BuildInputClass()"
+			   @ref="_inputElement"
+			   type="text"
+			   value="@_inputText"
+			   placeholder="@GetPlaceholder()"
+			   autocomplete="off"
+			   disabled="@Disabled"
+			   @onfocus="HandleFocus"
+			   @onclick="HandleClick"
+			   @oninput="HandleInput" />
+		<span class="searchable-select__chevron" aria-hidden="true">v</span>
+	</div>
+
+	@if (_isOpen)
+	{
+		<div class="searchable-select__menu" @ref="_menuElement">
+			@foreach (var option in GetSelectableOptions())
+			{
+				<button class="@BuildOptionClass(option.Value)"
+						type="button"
+						@onmousedown:preventDefault="true"
+						@onclick="() => SelectOptionAsync(option.Value)">
+					@option.Label
+				</button>
+			}
+
+			@if (!GetSelectableOptions().Any())
+			{
+				<div class="searchable-select__empty">No matches found.</div>
+			}
+		</div>
+	}
+</div>
+
+@code {
+	[Parameter]
+	public IReadOnlyList<SelectOption> Options { get; set; } = Array.Empty<SelectOption>();
+
+	[Parameter]
+	public bool Disabled { get; set; }
+
+	[Parameter]
+	public bool IncludeEmptyOption { get; set; }
+
+	[Parameter]
+	public string EmptyOptionLabel { get; set; } = "Select an option";
+
+	[Parameter]
+	public string EmptyOptionValue { get; set; } = string.Empty;
+
+	[Parameter]
+	public string SearchPlaceholder { get; set; } = "Type to search...";
+
+	[Parameter]
+	public EventCallback AfterValueChanged { get; set; }
+
+	private bool _isOpen;
+	private string _inputText = string.Empty;
+	private IReadOnlyList<SelectOption> _filteredOptions = Array.Empty<SelectOption>();
+	private int _highlightedIndex = -1;
+	private ElementReference _controlElement;
+	private ElementReference _inputElement;
+	private ElementReference _menuElement;
+	private bool _shouldPositionMenu;
+	private bool _jsAvailable;
+	private bool _filterActive;
+	private bool _resetSearchOnNextInput;
+	private bool _shouldSelectAllText;
+	private DotNetObjectReference<SearchableSelect<TValue>>? _dotNetRef;
+	private bool _keyHandlerRegistered;
+
+	protected override void OnParametersSet()
+	{
+		_filteredOptions = FilterOptions();
+		if (!_isOpen)
+		{
+			_inputText = GetSelectedLabel();
+			_filterActive = false;
+			_resetSearchOnNextInput = false;
+		}
+	}
+
+	protected override bool TryParseValueFromString(string? value, out TValue result, out string validationErrorMessage)
+	{
+		if (BindConverter.TryConvertTo<TValue>(value, CultureInfo.CurrentCulture, out var parsedValue))
+		{
+			result = parsedValue;
+			validationErrorMessage = null!;
+			return true;
+		}
+
+		result = default!;
+		validationErrorMessage = $"The selected value is not valid for {FieldIdentifier.FieldName}.";
+		return false;
+	}
+
+	private void HandleFocus(FocusEventArgs _)
+	{
+		if (Disabled)
+		{
+			return;
+		}
+
+		_isOpen = true;
+		_inputText = GetSelectedLabel();
+		_filterActive = false;
+		_resetSearchOnNextInput = true;
+		_filteredOptions = FilterOptions();
+		_highlightedIndex = GetDefaultHighlightedIndex();
+		_shouldPositionMenu = true;
+		_shouldSelectAllText = true;
+	}
+
+	private void HandleClick()
+	{
+		if (Disabled)
+		{
+			return;
+		}
+
+		_isOpen = true;
+		_inputText = GetSelectedLabel();
+		_filterActive = false;
+		_resetSearchOnNextInput = true;
+		_filteredOptions = FilterOptions();
+		_highlightedIndex = GetDefaultHighlightedIndex();
+		_shouldPositionMenu = true;
+		_shouldSelectAllText = true;
+	}
+
+	private void HandleInput(ChangeEventArgs args)
+	{
+		var incomingText = args.Value?.ToString() ?? string.Empty;
+		if (_resetSearchOnNextInput)
+		{
+			var selectedLabel = GetSelectedLabel();
+			if (!string.IsNullOrEmpty(selectedLabel)
+				&& incomingText.StartsWith(selectedLabel, StringComparison.Ordinal)
+				&& incomingText.Length > selectedLabel.Length)
+			{
+				incomingText = incomingText.Substring(selectedLabel.Length);
+			}
+
+			_resetSearchOnNextInput = false;
+		}
+
+		_inputText = incomingText;
+		_filterActive = true;
+		_isOpen = true;
+		_filteredOptions = FilterOptions();
+		_highlightedIndex = GetDefaultHighlightedIndex();
+		_shouldPositionMenu = true;
+		_shouldSelectAllText = false;
+	}
+
+	private async Task SelectOptionAsync(string value)
+	{
+		CurrentValueAsString = value;
+		_inputText = GetSelectedLabel();
+		_isOpen = false;
+		_filterActive = false;
+		_filteredOptions = FilterOptions();
+		_highlightedIndex = -1;
+		_shouldPositionMenu = false;
+		_resetSearchOnNextInput = false;
+		await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
+		await JSRuntime.InvokeVoidAsync("surveySearchableSelect.blurInput", _inputElement);
+		await AfterValueChanged.InvokeAsync();
+	}
+
+	private async Task HandleFocusOut(FocusEventArgs _)
+	{
+		_isOpen = false;
+		_inputText = GetSelectedLabel();
+		_filteredOptions = FilterOptions();
+		_filterActive = false;
+		_highlightedIndex = -1;
+		_shouldPositionMenu = false;
+		_resetSearchOnNextInput = false;
+		await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
+	}
+
+	[JSInvokable]
+	public async Task HandleSpecialKeyFromJs(string key)
+	{
+		var options = GetSelectableOptions();
+		var shouldRefresh = false;
+
+		if (key == "Escape")
+		{
+			_isOpen = false;
+			_inputText = GetSelectedLabel();
+			_filteredOptions = FilterOptions();
+			_filterActive = false;
+			_highlightedIndex = -1;
+			_shouldPositionMenu = false;
+			_resetSearchOnNextInput = false;
+			shouldRefresh = true;
+			await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
+			await InvokeAsync(StateHasChanged);
+			return;
+		}
+		else if (key == "ArrowDown")
+		{
+			if (!_isOpen)
+			{
+				_isOpen = true;
+				_filteredOptions = FilterOptions();
+				_shouldPositionMenu = true;
+			}
+
+			if (options.Count > 0)
+			{
+				_highlightedIndex = _highlightedIndex < 0
+					? 0
+					: Math.Min(_highlightedIndex + 1, options.Count - 1);
+				shouldRefresh = true;
+
+				if (_jsAvailable)
+				{
+					await JSRuntime.InvokeVoidAsync("surveySearchableSelect.updateHighlightedOption", _menuElement, _highlightedIndex);
+				}
+			}
+		}
+		else if (key == "ArrowUp")
+		{
+			if (!_isOpen)
+			{
+				_isOpen = true;
+				_filteredOptions = FilterOptions();
+				_shouldPositionMenu = true;
+			}
+
+			if (options.Count > 0)
+			{
+				_highlightedIndex = _highlightedIndex < 0
+					? options.Count - 1
+					: Math.Max(_highlightedIndex - 1, 0);
+				shouldRefresh = true;
+
+				if (_jsAvailable)
+				{
+					await JSRuntime.InvokeVoidAsync("surveySearchableSelect.updateHighlightedOption", _menuElement, _highlightedIndex);
+				}
+			}
+		}
+		else if (key == "Enter" || key == "Tab")
+		{
+			if (_highlightedIndex >= 0 && _highlightedIndex < options.Count)
+			{
+				await SelectOptionAsync(options[_highlightedIndex].Value);
+				return;
+			}
+
+			var firstOption = options.FirstOrDefault();
+			if (firstOption is not null)
+			{
+				await SelectOptionAsync(firstOption.Value);
+				return;
+			}
+		}
+
+		if (shouldRefresh)
+		{
+			await InvokeAsync(StateHasChanged);
+		}
+	}
+
+	private IReadOnlyList<SelectOption> GetFilteredOptions()
+	{
+		return _filteredOptions;
+	}
+
+	private IReadOnlyList<SelectOption> GetSelectableOptions()
+	{
+		var options = new List<SelectOption>();
+		if (IncludeEmptyOption && ShouldShowEmptyOption())
+		{
+			options.Add(new SelectOption
+			{
+				Value = EmptyOptionValue,
+				Label = EmptyOptionLabel
+			});
+		}
+
+		options.AddRange(_filteredOptions);
+		return options;
+	}
+
+	private IReadOnlyList<SelectOption> FilterOptions()
+	{
+		if (string.IsNullOrWhiteSpace(_inputText))
+		{
+			return Options;
+		}
+
+		if (!_filterActive)
+		{
+			return Options;
+		}
+
+		var searchText = _inputText.Trim();
+		return Options
+			.Where(option =>
+				option.Label.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+				|| option.Value.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+			.ToList();
+	}
+
+	private bool ShouldShowEmptyOption()
+	{
+		return string.IsNullOrWhiteSpace(_inputText);
+	}
+
+	private string BuildInputClass()
+	{
+		return string.IsNullOrWhiteSpace(CssClass)
+			? "form-select searchable-select__input"
+			: $"{CssClass} searchable-select__input";
+	}
+
+	private string BuildWrapperClass()
+	{
+		return _isOpen ? "searchable-select searchable-select--open" : "searchable-select";
+	}
+
+	private string BuildOptionClass(string value)
+	{
+		var options = GetSelectableOptions();
+		var currentIndex = options
+			.Select((option, index) => new { option.Value, index })
+			.FirstOrDefault(item => string.Equals(item.Value, value, StringComparison.Ordinal))
+			?.index ?? -1;
+		var classes = new List<string> { "searchable-select__option" };
+
+		if (string.Equals(value, CurrentValueAsString, StringComparison.Ordinal))
+		{
+			classes.Add("searchable-select__option--selected");
+		}
+
+		if (currentIndex == _highlightedIndex)
+		{
+			classes.Add("searchable-select__option--highlighted");
+		}
+
+		return string.Join(" ", classes);
+	}
+
+	private string GetPlaceholder()
+	{
+		return _isOpen ? SearchPlaceholder : string.Empty;
+	}
+
+	private string GetSelectedLabel()
+	{
+		if (string.IsNullOrEmpty(CurrentValueAsString))
+		{
+			return string.Empty;
+		}
+
+		if (string.Equals(CurrentValueAsString, EmptyOptionValue, StringComparison.Ordinal))
+		{
+			return IncludeEmptyOption ? string.Empty : EmptyOptionLabel;
+		}
+
+		return Options.FirstOrDefault(option => string.Equals(option.Value, CurrentValueAsString, StringComparison.Ordinal))?.Label ?? string.Empty;
+	}
+
+	private int GetDefaultHighlightedIndex()
+	{
+		var options = GetSelectableOptions();
+		if (options.Count == 0)
+		{
+			return -1;
+		}
+
+		var selectedIndex = options
+			.Select((option, index) => new { option.Value, index })
+			.FirstOrDefault(item => string.Equals(item.Value, CurrentValueAsString, StringComparison.Ordinal))
+			?.index ?? -1;
+
+		return selectedIndex >= 0 ? selectedIndex : 0;
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (!_keyHandlerRegistered)
+		{
+			_dotNetRef ??= DotNetObjectReference.Create(this);
+			await JSRuntime.InvokeVoidAsync("surveySearchableSelect.registerInputKeyHandler", _inputElement, _dotNetRef);
+			_keyHandlerRegistered = true;
+		}
+
+		if (_isOpen && _shouldPositionMenu)
+		{
+			_shouldPositionMenu = false;
+			await JSRuntime.InvokeVoidAsync("surveySearchableSelect.positionMenu", _controlElement, _menuElement);
+			await JSRuntime.InvokeVoidAsync("surveySearchableSelect.updateHighlightedOption", _menuElement, _highlightedIndex);
+		}
+
+		if (_isOpen && _shouldSelectAllText)
+		{
+			_shouldSelectAllText = false;
+			await JSRuntime.InvokeVoidAsync("surveySearchableSelect.selectInputText", _inputElement);
+		}
+
+		_jsAvailable = true;
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		if (!_jsAvailable)
+		{
+			return;
+		}
+
+		try
+		{
+			if (_keyHandlerRegistered)
+			{
+				await JSRuntime.InvokeVoidAsync("surveySearchableSelect.unregisterInputKeyHandler", _inputElement);
+			}
+
+			await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
+		}
+		catch (InvalidOperationException)
+		{
+		}
+		catch (JSDisconnectedException)
+		{
+		}
+
+		_dotNetRef?.Dispose();
+	}
+}

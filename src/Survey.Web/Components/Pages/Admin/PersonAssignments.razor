@@ -1,22 +1,21 @@
-@page "/admin/assignments"
-@attribute [Authorize(Roles = $"{RoleNames.Admin},{RoleNames.Employee}")]
+@page "/admin/people/{PersonId:int}/assignments"
+@attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
-@inject ToastService ToastService
 @using Microsoft.AspNetCore.Components
 
-<PageTitle>Assignments</PageTitle>
+<PageTitle>Person Assignments</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
-			<p class="eyebrow">Survey Delivery</p>
-			<h1>@(ShowArchived ? "Archived Assignments" : "Assignments")</h1>
+			<p class="eyebrow">Recipient Assignments</p>
+			<h1>@(ShowArchived ? $"Archived Assignments for {_personName}" : $"Assignments for {_personName}")</h1>
 			<p>@(ShowArchived
-				? "View archived survey assignments."
-				: "View the survey assignments that have been created.")</p>
+				? "View this person's archived assignments across all saved locations."
+				: "View this person's assignments across all saved locations.")</p>
 		</div>
-		<div class="toolbar toolbar--assignments">
+		<div class="toolbar">
 			<div class="field-stack mb-0">
 				<label>Status</label>
 				<SearchableSelect class="form-select"
@@ -26,29 +25,22 @@
 								  IncludeEmptyOption="true"
 								  EmptyOptionLabel="All" />
 			</div>
-			<a class="btn btn-outline-primary" href="@GetArchivedUrl()">@(ShowArchived ? "Back to Assignments" : "Archived Assignments")</a>
-			@if (!ShowArchived)
-			{
-				<AuthorizeView Roles="@RoleNames.Admin">
-					<Authorized>
-						<a class="btn btn-primary" href="/admin/assignments/new">Add Assignment</a>
-					</Authorized>
-				</AuthorizeView>
-			}
+			<a class="btn btn-outline-primary" href="@GetArchivedUrl()">Archived Assignments</a>
+			<a class="btn btn-outline-primary" href="/admin/people/@PersonId">Back to Person</a>
+			<a class="btn btn-outline-primary" href="@GetAllAssignmentsUrl()">View All Assignments</a>
 		</div>
 	</div>
 
 	<div class="list-card">
 		@if (_items.Count == 0)
 		{
-			<p class="empty-state">No assignments have been issued yet.</p>
+			<p class="empty-state">This person does not have any assignments yet.</p>
 		}
 		else
 		{
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Person</th>
 						<th>Location</th>
 						<th>Survey</th>
 						<th>Expires</th>
@@ -61,7 +53,6 @@
 					@foreach (var item in _items)
 					{
 						<tr>
-							<td>@item.PersonName</td>
 							<td>@item.LocationName</td>
 							<td>@item.SurveyName<br /><small>@item.VersionName</small></td>
 							<td>@(item.ExpiresAtUtc?.LocalDateTime.ToString("g") ?? "Never")</td>
@@ -95,13 +86,6 @@
 									{
 										<button class="btn btn-sm btn-muted-disabled" type="button" disabled>Fill</button>
 									}
-									<AuthorizeView Roles="@RoleNames.Admin">
-										<Authorized>
-											<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ToggleArchiveAsync(item)">
-												@(item.IsArchived ? "Unarchive" : "Archive")
-											</button>
-										</Authorized>
-									</AuthorizeView>
 								</div>
 							</td>
 						</tr>
@@ -113,6 +97,9 @@
 </div>
 
 @code {
+	[Parameter]
+	public int PersonId { get; set; }
+
 	[SupplyParameterFromQuery]
 	public bool ShowArchived { get; set; }
 
@@ -120,6 +107,7 @@
 	public string? Status { get; set; }
 
 	private IReadOnlyList<SurveyAssignmentListItem> _items = Array.Empty<SurveyAssignmentListItem>();
+	private string _personName = "Person";
 	private static readonly IReadOnlyList<SelectOption> _statusOptions =
 	[
 		new() { Value = "active", Label = "Active" },
@@ -129,10 +117,35 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_items = await AdministrationService.GetAssignmentsAsync(archivedOnly: ShowArchived, statusFilter: Status);
+		var person = await AdministrationService.GetPersonAsync(PersonId);
+		_personName = string.Join(" ", new[] { person.FirstName, person.MiddleName, person.LastName }.Where(part => !string.IsNullOrWhiteSpace(part)));
+		_items = await AdministrationService.GetAssignmentsAsync(PersonId, ShowArchived, Status);
 	}
 
 	private string GetAssignmentUrl(int assignmentId)
+	{
+		var queryParts = new List<string> { $"personId={PersonId}" };
+		if (ShowArchived)
+		{
+			queryParts.Add("showArchived=true");
+		}
+
+		if (!string.IsNullOrWhiteSpace(Status))
+		{
+			queryParts.Add($"status={Uri.EscapeDataString(Status)}");
+		}
+
+		return $"/admin/assignments/{assignmentId}?{string.Join("&", queryParts)}";
+	}
+
+	private string GetArchivedUrl()
+	{
+		return ShowArchived
+			? BuildAssignmentsUrl(false, Status)
+			: BuildAssignmentsUrl(true, Status);
+	}
+
+	private string GetAllAssignmentsUrl()
 	{
 		var queryParts = new List<string>();
 		if (ShowArchived)
@@ -146,15 +159,8 @@
 		}
 
 		return queryParts.Count == 0
-			? $"/admin/assignments/{assignmentId}"
-			: $"/admin/assignments/{assignmentId}?{string.Join("&", queryParts)}";
-	}
-
-	private string GetArchivedUrl()
-	{
-		return ShowArchived
-			? BuildAssignmentsUrl(false, Status)
-			: BuildAssignmentsUrl(true, Status);
+			? "/admin/assignments"
+			: $"/admin/assignments?{string.Join("&", queryParts)}";
 	}
 
 	private Task OnStatusChangedAsync()
@@ -163,24 +169,7 @@
 		return Task.CompletedTask;
 	}
 
-	private async Task ToggleArchiveAsync(SurveyAssignmentListItem item)
-	{
-		try
-		{
-			var isArchived = !item.IsArchived;
-			await AdministrationService.SetAssignmentArchivedAsync(item.Id, isArchived);
-			ToastService.ShowSuccess(
-				isArchived ? "Assignment archived successfully." : "Assignment restored successfully.",
-				isArchived ? "Archived" : "Restored");
-			_items = await AdministrationService.GetAssignmentsAsync(archivedOnly: ShowArchived, statusFilter: Status);
-		}
-		catch (Exception ex)
-		{
-			ToastService.ShowError(ex.Message, "Archive failed");
-		}
-	}
-
-	private static string BuildAssignmentsUrl(bool showArchived, string? status)
+	private string BuildAssignmentsUrl(bool showArchived, string? status)
 	{
 		var queryParts = new List<string>();
 		if (showArchived)
@@ -194,7 +183,7 @@
 		}
 
 		return queryParts.Count == 0
-			? "/admin/assignments"
-			: $"/admin/assignments?{string.Join("&", queryParts)}";
+			? $"/admin/people/{PersonId}/assignments"
+			: $"/admin/people/{PersonId}/assignments?{string.Join("&", queryParts)}";
 	}
 }

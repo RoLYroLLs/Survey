@@ -1,17 +1,20 @@
 @page "/admin/addresses/new"
+@page "/admin/addresses/{Id:int}"
 @page "/admin/addresses/{Id:int}/edit"
+@implements IDisposable
 @attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Address" : "Add Address")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Geography</p>
-			<h1>@(Id.HasValue ? "Edit Address" : "Add Address")</h1>
-			<p>These addresses are shared references, so duplicates are prevented and reused automatically.</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update a shared address record.</p>
 		</div>
 	</div>
 
@@ -26,68 +29,110 @@
 			<div class="inline-banner mb-3">This address is currently referenced @_model.ReferenceCount time(s).</div>
 		}
 
-		<EditForm Model="_model" OnValidSubmit="SaveAsync">
-			<DataAnnotationsValidator />
-			<div class="form-grid">
-				<div class="field-stack">
-					<label>Country</label>
-					<InputSelect class="form-control" @bind-Value="_model.CountryId" @bind-Value:after="OnCountryChangedAsync">
-						<option value="0">Select a country</option>
-						@foreach (var option in _model.CountryOptions)
-						{
-							<option value="@option.Value">@option.Label</option>
-						}
-					</InputSelect>
-					<ValidationMessage For="@(() => _model.CountryId)" />
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Country</strong>
+						<span>@GetSelectedOptionLabel(_model.CountryOptions, _model.CountryId)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>State / Territory</strong>
+						<span>@GetSelectedOptionLabel(_model.StateProvinceOptions, _model.StateProvinceId)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>County</strong>
+						<span>@GetSelectedOptionLabel(_model.CountyOptions, _selectedCountyId)</span>
+					</div>
 				</div>
-				<div class="field-stack">
-					<label>State / Territory</label>
-					<InputSelect class="form-control" @bind-Value="_model.StateProvinceId" @bind-Value:after="OnStateChangedAsync" disabled="@(!_canSelectState)">
-						<option value="0">Select a state or territory</option>
-						@foreach (var option in _model.StateProvinceOptions)
-						{
-							<option value="@option.Value">@option.Label</option>
-						}
-					</InputSelect>
-					<ValidationMessage For="@(() => _model.StateProvinceId)" />
-				</div>
-				<div class="field-stack">
-					<label>County</label>
-					<InputSelect class="form-control" @bind-Value="_selectedCountyId" @bind-Value:after="OnCountyChanged" disabled="@(!_canSelectCounty)">
-						<option value="">Select a county</option>
-						@foreach (var option in _model.CountyOptions)
-						{
-							<option value="@option.Value">@option.Label</option>
-						}
-					</InputSelect>
-				</div>
-				<div class="field-stack form-grid--single">
-					<label>Address Line 1</label>
-					<InputText class="form-control" @bind-Value="_model.AddressLine1" disabled="@(!_canEnterAddress)" />
-					<ValidationMessage For="@(() => _model.AddressLine1)" />
-				</div>
-				<div class="field-stack form-grid--single">
-					<label>Address Line 2</label>
-					<InputText class="form-control" @bind-Value="_model.AddressLine2" disabled="@(!_canEnterAddress)" />
-					<ValidationMessage For="@(() => _model.AddressLine2)" />
-				</div>
-				<div class="field-stack">
-					<label>City</label>
-					<InputText class="form-control" @bind-Value="_model.City" disabled="@(!_canEnterAddress)" />
-					<ValidationMessage For="@(() => _model.City)" />
-				</div>
-				<div class="field-stack">
-					<label>Postal Code</label>
-					<InputText class="form-control" @bind-Value="_model.PostalCode" disabled="@(!_canEnterAddress)" />
-					<ValidationMessage For="@(() => _model.PostalCode)" />
-				</div>
-			</div>
 
-			<div class="form-footer">
-				<button class="btn btn-primary" type="submit">Save Address</button>
-				<a class="btn btn-outline-primary" href="admin/addresses">Back to Addresses</a>
+				<section class="content-card">
+					<div class="page-header">
+						<div>
+							<h2 class="content-card__title-sm">Address</h2>
+						</div>
+					</div>
+					<div class="address-block">
+						@foreach (var line in FormatAddress())
+						{
+							<div>@line</div>
+						}
+					</div>
+				</section>
+
+				<div class="form-footer">
+					<a class="btn btn-primary" href="/admin/addresses/@Id/edit">Edit Address</a>
+					<a class="btn btn-outline-primary" href="admin/addresses">Back to Addresses</a>
+				</div>
 			</div>
-		</EditForm>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid">
+					<div class="field-stack">
+						<label>Country</label>
+						<SearchableSelect class="form-control"
+										  @bind-Value="_model.CountryId"
+										  AfterValueChanged="OnCountryChangedAsync"
+										  Options="_model.CountryOptions"
+										  IncludeEmptyOption="true"
+										  EmptyOptionLabel="Select a country"
+										  EmptyOptionValue="0" />
+						<ValidationMessage For="@(() => _model.CountryId)" />
+					</div>
+					<div class="field-stack">
+						<label>State / Territory</label>
+						<SearchableSelect class="form-control"
+										  @bind-Value="_model.StateProvinceId"
+										  AfterValueChanged="OnStateChangedAsync"
+										  Options="_model.StateProvinceOptions"
+										  IncludeEmptyOption="true"
+										  EmptyOptionLabel="Select a state or territory"
+										  EmptyOptionValue="0"
+										  Disabled="@(!_canSelectState)" />
+						<ValidationMessage For="@(() => _model.StateProvinceId)" />
+					</div>
+					<div class="field-stack">
+						<label>County</label>
+						<SearchableSelect class="form-control"
+										  @bind-Value="_selectedCountyId"
+										  AfterValueChanged="OnCountyChanged"
+										  Options="_model.CountyOptions"
+										  IncludeEmptyOption="true"
+										  EmptyOptionLabel="Select a county"
+										  Disabled="@(!_canSelectCounty)" />
+					</div>
+					<div class="field-stack form-grid--single">
+						<label>Address Line 1</label>
+						<InputText class="form-control" @bind-Value="_model.AddressLine1" disabled="@(!_canEnterAddress)" />
+						<ValidationMessage For="@(() => _model.AddressLine1)" />
+					</div>
+					<div class="field-stack form-grid--single">
+						<label>Address Line 2</label>
+						<InputText class="form-control" @bind-Value="_model.AddressLine2" disabled="@(!_canEnterAddress)" />
+						<ValidationMessage For="@(() => _model.AddressLine2)" />
+					</div>
+					<div class="field-stack">
+						<label>City</label>
+						<InputText class="form-control" @bind-Value="_model.City" disabled="@(!_canEnterAddress)" />
+						<ValidationMessage For="@(() => _model.City)" />
+					</div>
+					<div class="field-stack">
+						<label>Postal Code</label>
+						<InputText class="form-control" @bind-Value="_model.PostalCode" disabled="@(!_canEnterAddress)" />
+						<ValidationMessage For="@(() => _model.PostalCode)" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Address</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/admin/addresses/{Id.Value}" : "admin/addresses")">Cancel</a>
+				</div>
+			</EditForm>
+		}
 	</div>
 </div>
 
@@ -101,6 +146,12 @@
 	private bool _canSelectState;
 	private bool _canSelectCounty;
 	private bool _canEnterAddress;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -110,17 +161,25 @@
 		UpdateFormState();
 	}
 
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
 	private async Task SaveAsync()
 	{
 		try
 		{
 			_model.CountyId = int.TryParse(_selectedCountyId, out var countyId) ? countyId : null;
-			await AdministrationService.SavePostalAddressAsync(_model);
-			NavigationManager.NavigateTo("admin/addresses");
+			var savedId = await AdministrationService.SavePostalAddressAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Address saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"admin/addresses/{savedId}");
 		}
 		catch (Exception ex)
 		{
-			_errorMessage = ex.Message;
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
 		}
 	}
 
@@ -156,5 +215,109 @@
 	private void OnCountyChanged()
 	{
 		UpdateFormState();
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Address";
+		}
+
+		return Id.HasValue ? "Edit Address" : "Add Address";
+	}
+
+	private IReadOnlyList<string> FormatAddress()
+	{
+		var lines = new List<string>();
+
+		if (!string.IsNullOrWhiteSpace(_model.AddressLine1))
+		{
+			lines.Add(_model.AddressLine1);
+		}
+
+		if (!string.IsNullOrWhiteSpace(_model.AddressLine2))
+		{
+			lines.Add(_model.AddressLine2);
+		}
+
+		var localityParts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(_model.City))
+		{
+			localityParts.Add(_model.City);
+		}
+
+		var state = ExtractStateCode(GetSelectedOptionLabel(_model.StateProvinceOptions, _model.StateProvinceId));
+		var statePostal = string.Join(" ", new[] { state, _model.PostalCode }.Where(part => !string.IsNullOrWhiteSpace(part)));
+		if (!string.IsNullOrWhiteSpace(statePostal))
+		{
+			localityParts.Add(statePostal);
+		}
+
+		if (localityParts.Count > 0)
+		{
+			lines.Add(string.Join(", ", localityParts));
+		}
+
+		var country = ExtractCountryName(GetSelectedOptionLabel(_model.CountryOptions, _model.CountryId));
+		if (!string.IsNullOrWhiteSpace(country) && country != "-")
+		{
+			lines.Add(country);
+		}
+
+		if (lines.Count == 0)
+		{
+			lines.Add("-");
+		}
+
+		return lines;
+	}
+
+	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, int value)
+	{
+		return options.FirstOrDefault(option => option.Value == value.ToString())?.Label ?? "-";
+	}
+
+	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, string? value)
+	{
+		return options.FirstOrDefault(option => option.Value == value)?.Label ?? "-";
+	}
+
+	private static string? ExtractStateCode(string? stateLabel)
+	{
+		if (string.IsNullOrWhiteSpace(stateLabel) || stateLabel == "-")
+		{
+			return null;
+		}
+
+		var openParenIndex = stateLabel.LastIndexOf('(');
+		var closeParenIndex = stateLabel.LastIndexOf(')');
+		if (openParenIndex >= 0 && closeParenIndex > openParenIndex)
+		{
+			return stateLabel.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
+		}
+
+		return stateLabel;
+	}
+
+	private static string? ExtractCountryName(string? countryLabel)
+	{
+		if (string.IsNullOrWhiteSpace(countryLabel) || countryLabel == "-")
+		{
+			return null;
+		}
+
+		var suffixStart = countryLabel.LastIndexOf(" (", StringComparison.Ordinal);
+		if (suffixStart > 0 && countryLabel.EndsWith(")", StringComparison.Ordinal))
+		{
+			return countryLabel.Substring(0, suffixStart).Trim();
+		}
+
+		return countryLabel;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
 	}
 }
