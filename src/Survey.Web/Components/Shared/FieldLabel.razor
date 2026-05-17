@@ -1,0 +1,19 @@
+@if (Required)
+{
+	<label>
+		@Text
+		<span class="field-label__required" aria-hidden="true">*</span>
+	</label>
+}
+else
+{
+	<label>@Text</label>
+}
+
+@code {
+	[Parameter]
+	public string Text { get; set; } = string.Empty;
+
+	[Parameter]
+	public bool Required { get; set; }
+}

@@ -1085,6 +1085,7 @@ public sealed partial class SurveyApplicationService
 				})
 				.ToList()
 				?? BuildDefaultEmailModels(null),
+			IsArchived = entity?.IsArchived ?? false,
 			Locations = entity is null
 				? []
 				: await GetLocationsAsync(entity.Id, cancellationToken)

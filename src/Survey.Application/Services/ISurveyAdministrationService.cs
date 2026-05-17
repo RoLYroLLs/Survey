@@ -54,9 +54,10 @@ public interface ISurveyAdministrationService
 	Task<GoalEditModel> GetGoalAsync(int? id, CancellationToken cancellationToken = default);
 	Task<int> SaveGoalAsync(GoalEditModel model, CancellationToken cancellationToken = default);
 	Task<ReportingOverviewModel> GetReportingOverviewAsync(CancellationToken cancellationToken = default);
-	Task<IReadOnlyList<PersonListItem>> GetPeopleAsync(CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<PersonListItem>> GetPeopleAsync(bool archivedOnly = false, CancellationToken cancellationToken = default);
 	Task<PersonEditModel> GetPersonAsync(int? id, CancellationToken cancellationToken = default);
 	Task<int> SavePersonAsync(PersonEditModel model, CancellationToken cancellationToken = default);
+	Task SetPersonArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<SelectOption>> GetLocationSelectOptionsAsync(int? personId, int? includeLocationId = null, CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<SelectOption>> GetLocationPhoneSelectOptionsAsync(int? locationId, int? includePhoneId = null, CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<SelectOption>> GetLocationEmailSelectOptionsAsync(int? locationId, int? includeEmailId = null, CancellationToken cancellationToken = default);

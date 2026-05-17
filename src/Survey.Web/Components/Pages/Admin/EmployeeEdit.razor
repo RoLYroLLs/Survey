@@ -58,22 +58,22 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid">
 					<div class="field-stack">
-						<label>First Name</label>
+						<FieldLabel Text="First Name" Required />
 						<InputText class="form-control" @bind-Value="_model.FirstName" />
 						<ValidationMessage For="@(() => _model.FirstName)" />
 					</div>
 					<div class="field-stack">
-						<label>Last Name</label>
+						<FieldLabel Text="Last Name" Required />
 						<InputText class="form-control" @bind-Value="_model.LastName" />
 						<ValidationMessage For="@(() => _model.LastName)" />
 					</div>
 					<div class="field-stack">
-						<label>Email</label>
+						<FieldLabel Text="Email" Required />
 						<InputText class="form-control" @bind-Value="_model.Email" />
 						<ValidationMessage For="@(() => _model.Email)" />
 					</div>
 					<div class="field-stack">
-						<label>Role</label>
+						<FieldLabel Text="Role" Required />
 						<SearchableSelect class="form-select"
 										  @bind-Value="_model.RoleName"
 										  Options="_roleOptions" />

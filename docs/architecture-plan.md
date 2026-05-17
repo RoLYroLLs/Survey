@@ -27,6 +27,7 @@
 - A `Person` may own many `Location` records.
 - There is no primary location.
 - A person record does not require a first name or last name; records may be saved without either name when only contact/location data is available.
+- A `Person` supports archival in addition to active state; archived people should be hidden from normal list/select flows by default but remain available for reference and restoration.
 - A `Location` uses a nickname so staff can identify the correct household or destination during assignment.
 - A `Location` contains both a physical address and a mailing address.
 - A `Location` contains multiple phone numbers and multiple email addresses, each with a controlled type or label selected from standard dropdown values instead of free text.
@@ -35,7 +36,8 @@
 - Person and location contact collections designate one phone and one email as `Primary`; list editing should enforce a single primary selection per collection instead of exposing manual sort ordering.
 - A `Person` also keeps profile-level physical address, mailing address, phone numbers, and email addresses.
 - When adding or editing a person or location, the required contact shape is: a physical address plus at least one contact method (`Phone` or `Email`).
-- Mailing address is optional; when omitted it falls back to the main physical address for persistence and survey-prefill workflows.
+- Person mailing address is required and must be entered explicitly; it should not silently fall back to the main physical address during save.
+- Location and survey mailing addresses may still use explicit copy helpers for convenience, but those are user actions rather than implicit fallback rules.
 - A `Person` stores a preferred contact window and a preferred contact method.
 - Preferred contact window uses controlled values: `Morning`, `Afternoon`, and `Evening`.
 - Preferred contact method uses controlled values: `Call`, `Text`, `Email`, and `Mail`.
@@ -78,7 +80,10 @@
 - The preferred confirmation pattern is a toast-style notification that appears near the top edge of the screen, can be dismissed manually, and may also auto-dismiss after a short delay.
 - Toast notifications should be implemented through one shared app-wide host and service so action feedback uses a single system instead of per-page custom markup.
 - Toast visual treatment should communicate severity consistently: success uses green, warning uses yellow, and error uses red.
+- The shared toast host should support multiple simultaneous toasts, stack them oldest-first near the top edge of the screen, and animate remaining toasts upward when one is dismissed or expires.
 - Person-edit address section titles should use concise end-user labels such as `Address` and `Mailing Address` instead of internal profile-oriented wording.
+- Required fields on forms should show a consistent red asterisk next to the field label, with markers aligned to the actual validation rules rather than decorative-only hints.
+- Person mailing address is required in the admin editor and must be entered or explicitly copied by the user; it should not silently inherit the physical address during save.
 - Assignment list views should support query-string-driven filtering so archived scope, person scope, and status scope survive view/edit/back navigation.
 - Assignment status filtering should support `All`, `Active`, `Completed`, and `Expired` in both the global assignments list and the person-specific assignments list.
 - Reference-data and workflow dropdowns should use a shared searchable combobox pattern instead of plain browser selects when the option list is long.

@@ -24,6 +24,10 @@
 			<div class="page-stack">
 				<div class="assignment-detail-list">
 					<div class="assignment-detail-row">
+						<strong>Archived</strong>
+						<span>@(_model.IsArchived ? "Yes" : "No")</span>
+					</div>
+					<div class="assignment-detail-row">
 						<strong>Best Time to Contact</strong>
 						<span>@DisplayOrDash(GetContactOptionLabel(ContactOptionCatalog.BestTimeOptions, _model.BestTimeToContact))</span>
 					</div>
@@ -175,8 +179,11 @@
 				}
 
 				<div class="form-footer">
-					<a class="btn btn-primary" href="/admin/people/@Id/edit">Edit Person</a>
-					<a class="btn btn-outline-primary" href="/admin/people">Back to People</a>
+					<button class="btn btn-outline-primary" type="button" @onclick="ToggleArchivedAsync">
+						@(_model.IsArchived ? "Unarchive" : "Archive")
+					</button>
+					<a class="btn btn-primary" href="/admin/people/@Id/edit@BuildArchivedQuery()">Edit Person</a>
+					<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to People</a>
 				</div>
 			</div>
 		}
@@ -257,7 +264,7 @@
 								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="AddPhone">Add Phone</button>
 							</div>
 						</div>
-						<ValidationMessage For="@(() => _model.Phones)" />
+						<ValidationMessage For="@(() => _model.ContactMethodsValidationMessage)" />
 						@for (var index = 0; index < _model.Phones.Count; index++)
 						{
 							var currentIndex = index;
@@ -297,7 +304,6 @@
 								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="AddEmail">Add Email</button>
 							</div>
 						</div>
-						<ValidationMessage For="@(() => _model.Emails)" />
 						@for (var index = 0; index < _model.Emails.Count; index++)
 						{
 							var currentIndex = index;
@@ -330,7 +336,7 @@
 
 				<div class="form-footer">
 					<button class="btn btn-primary" type="submit">Save Person</button>
-					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/admin/people/{Id.Value}" : "/admin/people")">Cancel</a>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/admin/people/{Id.Value}{BuildArchivedQuery()}" : GetBackUrl())">Cancel</a>
 				</div>
 			</EditForm>
 		}
@@ -340,6 +346,9 @@
 @code {
 	[Parameter]
 	public int? Id { get; set; }
+
+	[SupplyParameterFromQuery(Name = "showArchived")]
+	public bool ShowArchived { get; set; }
 
 	private PersonEditModel _model = new();
 	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
@@ -361,7 +370,7 @@
 
 	private RenderFragment AddressFields(AddressInputModel address, bool physical, bool mailing) => @<div class="form-grid">
 		<div class="field-stack form-grid--single">
-			<label>Country</label>
+			<FieldLabel Text="Country" Required="@(physical || mailing)" />
 			<SearchableSelect class="form-control"
 							  @bind-Value="address.CountryId"
 							  AfterValueChanged="() => OnCountryChangedAsync(address)"
@@ -372,7 +381,7 @@
 			<ValidationMessage For="@(() => address.CountryId)" />
 		</div>
 		<div class="field-stack">
-			<label>State / Territory</label>
+			<FieldLabel Text="State / Territory" Required="@(physical || mailing)" />
 			<SearchableSelect class="form-control"
 							  @bind-Value="address.StateProvinceId"
 							  AfterValueChanged="() => OnStateChangedAsync(address)"
@@ -384,7 +393,7 @@
 			<ValidationMessage For="@(() => address.StateProvinceId)" />
 		</div>
 		<div class="field-stack">
-			<label>County</label>
+			<FieldLabel Text="County" Required="@(physical || mailing)" />
 			<SearchableSelect class="form-control"
 							  @bind-Value="address.CountyId"
 							  Options="address.CountyOptions"
@@ -394,7 +403,7 @@
 			<ValidationMessage For="@(() => address.CountyId)" />
 		</div>
 		<div class="field-stack form-grid--single">
-			<label>Address Line 1</label>
+			<FieldLabel Text="Address Line 1" Required="@(physical || mailing)" />
 			<InputText class="form-control" @bind-Value="address.AddressLine1" disabled="@(!address.CountyId.HasValue)" />
 			<ValidationMessage For="@(() => address.AddressLine1)" />
 		</div>
@@ -403,12 +412,12 @@
 			<InputText class="form-control" @bind-Value="address.AddressLine2" disabled="@(!address.CountyId.HasValue)" />
 		</div>
 		<div class="field-stack">
-			<label>City</label>
+			<FieldLabel Text="City" Required="@(physical || mailing)" />
 			<InputText class="form-control" @bind-Value="address.City" disabled="@(!address.CountyId.HasValue)" />
 			<ValidationMessage For="@(() => address.City)" />
 		</div>
 		<div class="field-stack">
-			<label>Postal Code</label>
+			<FieldLabel Text="Postal Code" Required="@(physical || mailing)" />
 			<InputText class="form-control" @bind-Value="address.PostalCode" disabled="@(!address.CountyId.HasValue)" />
 			<ValidationMessage For="@(() => address.PostalCode)" />
 		</div>
@@ -420,7 +429,7 @@
 		{
 			var personId = await AdministrationService.SavePersonAsync(_model);
 			ToastService.ShowSuccess("Person saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"/admin/people/{personId}");
+			NavigationManager.NavigateTo($"/admin/people/{personId}{BuildArchivedQuery()}");
 		}
 		catch (Exception ex)
 		{
@@ -447,6 +456,28 @@
 		}
 	}
 
+	private async Task ToggleArchivedAsync()
+	{
+		if (!Id.HasValue)
+		{
+			return;
+		}
+
+		try
+		{
+			var isArchived = !_model.IsArchived;
+			await AdministrationService.SetPersonArchivedAsync(Id.Value, isArchived);
+			_model.IsArchived = isArchived;
+			ToastService.ShowSuccess(
+				isArchived ? "Person archived successfully." : "Person restored successfully.",
+				isArchived ? "Archived" : "Restored");
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Update failed");
+		}
+	}
+
 	private string GetPageTitle()
 	{
 		if (IsViewMode)
@@ -466,6 +497,16 @@
 		}
 
 		return GetPageTitle();
+	}
+
+	private string GetBackUrl()
+	{
+		return ShowArchived ? "/admin/people?showArchived=true" : "/admin/people";
+	}
+
+	private string BuildArchivedQuery()
+	{
+		return ShowArchived ? "?showArchived=true" : string.Empty;
 	}
 
 	private async Task OnCountryChangedAsync(AddressInputModel address)

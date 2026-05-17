@@ -73,7 +73,7 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid">
 					<div class="field-stack">
-						<label>Country</label>
+						<FieldLabel Text="Country" Required />
 						<SearchableSelect class="form-control"
 										  @bind-Value="_model.CountryId"
 										  AfterValueChanged="OnCountryChangedAsync"
@@ -84,7 +84,7 @@
 						<ValidationMessage For="@(() => _model.CountryId)" />
 					</div>
 					<div class="field-stack">
-						<label>State / Territory</label>
+						<FieldLabel Text="State / Territory" Required />
 						<SearchableSelect class="form-control"
 										  @bind-Value="_model.StateProvinceId"
 										  AfterValueChanged="OnStateChangedAsync"
@@ -106,7 +106,7 @@
 										  Disabled="@(!_canSelectCounty)" />
 					</div>
 					<div class="field-stack form-grid--single">
-						<label>Address Line 1</label>
+						<FieldLabel Text="Address Line 1" Required />
 						<InputText class="form-control" @bind-Value="_model.AddressLine1" disabled="@(!_canEnterAddress)" />
 						<ValidationMessage For="@(() => _model.AddressLine1)" />
 					</div>
@@ -116,12 +116,12 @@
 						<ValidationMessage For="@(() => _model.AddressLine2)" />
 					</div>
 					<div class="field-stack">
-						<label>City</label>
+						<FieldLabel Text="City" Required />
 						<InputText class="form-control" @bind-Value="_model.City" disabled="@(!_canEnterAddress)" />
 						<ValidationMessage For="@(() => _model.City)" />
 					</div>
 					<div class="field-stack">
-						<label>Postal Code</label>
+						<FieldLabel Text="Postal Code" Required />
 						<InputText class="form-control" @bind-Value="_model.PostalCode" disabled="@(!_canEnterAddress)" />
 						<ValidationMessage For="@(() => _model.PostalCode)" />
 					</div>

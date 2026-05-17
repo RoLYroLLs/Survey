@@ -558,10 +558,11 @@ public sealed partial class SurveyApplicationService(
 		return entity.Id;
 	}
 
-	public async Task<IReadOnlyList<PersonListItem>> GetPeopleAsync(CancellationToken cancellationToken = default)
+	public async Task<IReadOnlyList<PersonListItem>> GetPeopleAsync(bool archivedOnly = false, CancellationToken cancellationToken = default)
 	{
 		return await _dbContext.People
 			.AsNoTracking()
+			.Where(person => person.IsArchived == archivedOnly)
 			.Include(person => person.Locations)
 			.OrderBy(person => person.LastName)
 			.ThenBy(person => person.FirstName)
@@ -574,7 +575,8 @@ public sealed partial class SurveyApplicationService(
 				PostalCode = person.PostalCode,
 				Email = person.Email,
 				PhoneNumber = person.PhoneNumber,
-				LocationCount = person.Locations.Count
+				LocationCount = person.Locations.Count,
+				IsArchived = person.IsArchived
 			})
 			.ToListAsync(cancellationToken);
 	}
@@ -599,6 +601,15 @@ public sealed partial class SurveyApplicationService(
 		return await BuildPersonEditModelAsync(entity, cancellationToken);
 	}
 
+	public async Task SetPersonArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default)
+	{
+		var entity = await _dbContext.People.FirstOrDefaultAsync(person => person.Id == id, cancellationToken)
+			?? throw new InvalidOperationException("The requested person was not found.");
+
+		entity.SetArchived(isArchived);
+		await _dbContext.SaveChangesAsync(cancellationToken);
+	}
+
 	public async Task<int> SavePersonAsync(PersonEditModel model, CancellationToken cancellationToken = default)
 	{
 		var normalizedPhones = NormalizePhoneContacts(model.Phones);
@@ -607,7 +618,7 @@ public sealed partial class SurveyApplicationService(
 		var primaryEmail = normalizedEmails.FirstOrDefault();
 		var normalizedBestTimeToContact = ContactOptionCatalog.NormalizeBestTime(model.BestTimeToContact);
 		var normalizedPreferredContactMethod = ContactOptionCatalog.NormalizePreferredContactMethod(model.PreferredContactMethod);
-		var mailingAddressInput = GetAddressOrFallback(model.MailingAddress, model.PhysicalAddress);
+		var mailingAddressInput = model.MailingAddress;
 
 		var resolvedPhysicalAddress = await ResolveOrCreatePostalAddressAsync(
 			model.PhysicalAddress.CountryId,
@@ -750,7 +761,7 @@ public sealed partial class SurveyApplicationService(
 	public async Task<SurveyAssignmentEditModel> GetAssignmentAsync(int? id, CancellationToken cancellationToken = default)
 	{
 		var now = DateTimeOffset.UtcNow;
-		var personOptions = await GetPersonSelectOptionsAsync(cancellationToken);
+		var personOptions = await GetPersonSelectOptionsAsync(cancellationToken, id.HasValue ? await GetAssignmentPersonIdAsync(id.Value, cancellationToken) : null);
 
 		if (!id.HasValue)
 		{
@@ -1592,10 +1603,11 @@ public sealed partial class SurveyApplicationService(
 			.ToListAsync(cancellationToken);
 	}
 
-	private async Task<IReadOnlyList<SelectOption>> GetPersonSelectOptionsAsync(CancellationToken cancellationToken)
+	private async Task<IReadOnlyList<SelectOption>> GetPersonSelectOptionsAsync(CancellationToken cancellationToken, int? includePersonId = null)
 	{
 		return await _dbContext.People
 			.AsNoTracking()
+			.Where(person => !person.IsArchived || (includePersonId.HasValue && person.Id == includePersonId.Value))
 			.OrderBy(person => person.LastName)
 			.ThenBy(person => person.FirstName)
 			.Select(person => new SelectOption
@@ -1604,6 +1616,15 @@ public sealed partial class SurveyApplicationService(
 				Label = $"{person.LastName}, {person.FirstName} ({person.Email})"
 			})
 			.ToListAsync(cancellationToken);
+	}
+
+	private async Task<int?> GetAssignmentPersonIdAsync(int assignmentId, CancellationToken cancellationToken)
+	{
+		return await _dbContext.SurveyAssignments
+			.AsNoTracking()
+			.Where(assignment => assignment.Id == assignmentId)
+			.Select(assignment => (int?)assignment.Location.PersonId)
+			.FirstOrDefaultAsync(cancellationToken);
 	}
 
 	private async Task<int> GetNextVersionNumberAsync(int surveyDefinitionId, CancellationToken cancellationToken)

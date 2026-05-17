@@ -31,14 +31,14 @@
 			<DataAnnotationsValidator />
 			<div class="form-grid form-grid--single">
 				<div class="field-stack">
-					<label>Section</label>
+					<FieldLabel Text="Section" Required />
 					<SearchableSelect class="form-select"
 									  @bind-Value="_model.SurveySectionId"
 									  Options="_model.SurveySectionOptions"
 									  Disabled="@_model.Id.HasValue" />
 				</div>
 				<div class="field-stack">
-					<label>Prompt</label>
+					<FieldLabel Text="Prompt" Required />
 					<InputTextArea class="form-control" rows="4" @bind-Value="_model.Prompt" disabled="@_model.IsLocked" />
 					<ValidationMessage For="@(() => _model.Prompt)" />
 				</div>
@@ -47,7 +47,7 @@
 					<InputTextArea class="form-control" rows="3" @bind-Value="_model.HelpText" disabled="@_model.IsLocked" />
 				</div>
 				<div class="field-stack">
-					<label>Type</label>
+					<FieldLabel Text="Type" Required />
 					<SearchableSelect class="form-select"
 									  @bind-Value="_model.Type"
 									  Options="_questionTypeOptions"

@@ -32,7 +32,7 @@
 			<DataAnnotationsValidator />
 			<div class="form-grid form-grid--single">
 				<div class="field-stack">
-					<label>Person</label>
+					<FieldLabel Text="Person" Required />
 					<SearchableSelect class="form-select"
 									  @bind-Value="_model.PersonId"
 									  AfterValueChanged="OnPersonChangedAsync"
@@ -43,7 +43,7 @@
 									  Disabled="@_model.Id.HasValue" />
 				</div>
 				<div class="field-stack">
-					<label>Location</label>
+					<FieldLabel Text="Location" Required />
 					<SearchableSelect class="form-select"
 									  @bind-Value="_model.LocationId"
 									  AfterValueChanged="OnLocationChangedAsync"
@@ -72,7 +72,7 @@
 									  Disabled="@_model.Id.HasValue" />
 				</div>
 				<div class="field-stack">
-					<label>Published Survey Version</label>
+					<FieldLabel Text="Published Survey Version" Required />
 					<SearchableSelect class="form-select"
 									  @bind-Value="_model.SurveyVersionId"
 									  Options="_model.SurveyVersionOptions"

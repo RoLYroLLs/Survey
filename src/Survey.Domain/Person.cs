@@ -24,6 +24,7 @@ public class Person
 	public string? BestTimeToContact { get; private set; }
 	public string? PreferredContactMethod { get; private set; }
 	public string Email { get; private set; } = string.Empty;
+	public bool IsArchived { get; private set; }
 	public DateTimeOffset CreatedUtc { get; private set; }
 	public DateTimeOffset UpdatedUtc { get; private set; }
 	public PostalAddress? PostalAddress { get; private set; }
@@ -115,6 +116,12 @@ public class Person
 	{
 		PhoneNumber = CleanOptional(phoneNumber, 50) ?? string.Empty;
 		Email = CleanOptional(email, 256) ?? string.Empty;
+		UpdatedUtc = DateTimeOffset.UtcNow;
+	}
+
+	public void SetArchived(bool isArchived)
+	{
+		IsArchived = isArchived;
 		UpdatedUtc = DateTimeOffset.UtcNow;
 	}
 

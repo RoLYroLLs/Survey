@@ -71,19 +71,19 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid">
 					<div class="field-stack">
-						<label>Survey</label>
+						<FieldLabel Text="Survey" Required />
 						<SearchableSelect class="form-select"
 										  @bind-Value="_model.SurveyDefinitionId"
 										  Options="_model.SurveyOptions"
 										  Disabled="@_model.Id.HasValue" />
 					</div>
 					<div class="field-stack">
-						<label>Display Name</label>
+						<FieldLabel Text="Display Name" Required />
 						<InputText class="form-control" @bind-Value="_model.DisplayName" disabled="@_model.IsLocked" />
 						<ValidationMessage For="@(() => _model.DisplayName)" />
 					</div>
 					<div class="field-stack">
-						<label>Version Number</label>
+						<FieldLabel Text="Version Number" Required />
 						<InputNumber class="form-control" @bind-Value="_model.VersionNumber" disabled="@_model.IsLocked" />
 						<ValidationMessage For="@(() => _model.VersionNumber)" />
 					</div>

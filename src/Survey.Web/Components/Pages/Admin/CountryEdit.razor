@@ -54,12 +54,12 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid form-grid--single">
 					<div class="field-stack">
-						<label>Name</label>
+						<FieldLabel Text="Name" Required />
 						<InputText class="form-control" @bind-Value="_model.Name" />
 						<ValidationMessage For="@(() => _model.Name)" />
 					</div>
 					<div class="field-stack">
-						<label>ISO2 Code</label>
+						<FieldLabel Text="ISO2 Code" Required />
 						<InputText class="form-control" @bind-Value="_model.Iso2Code" />
 						<ValidationMessage For="@(() => _model.Iso2Code)" />
 					</div>

@@ -185,6 +185,13 @@ public static class ServiceCollectionExtensions
 			"IsArchived",
 			"""ALTER TABLE "SurveyAssignments" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""",
 			cancellationToken);
+
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"People",
+			"IsArchived",
+			"""ALTER TABLE "People" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""",
+			cancellationToken);
 	}
 
 	private static async Task EnsureSqliteColumnExistsAsync(

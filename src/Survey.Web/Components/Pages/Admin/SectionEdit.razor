@@ -39,14 +39,14 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid form-grid--single">
 					<div class="field-stack">
-						<label>Survey Version</label>
+						<FieldLabel Text="Survey Version" Required />
 						<SearchableSelect class="form-select"
 										  @bind-Value="_model.SurveyVersionId"
 										  Options="_model.SurveyVersionOptions"
 										  Disabled="@_model.Id.HasValue" />
 					</div>
 					<div class="field-stack">
-						<label>Title</label>
+						<FieldLabel Text="Title" Required />
 						<InputText class="form-control" @bind-Value="_model.Title" disabled="@_model.IsLocked" />
 						<ValidationMessage For="@(() => _model.Title)" />
 					</div>

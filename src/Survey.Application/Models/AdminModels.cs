@@ -182,6 +182,7 @@ public class PersonListItem
 	public string Email { get; set; } = string.Empty;
 	public string PhoneNumber { get; set; } = string.Empty;
 	public int LocationCount { get; set; }
+	public bool IsArchived { get; set; }
 }
 
 public class PersonEditModel : IValidatableObject
@@ -208,20 +209,22 @@ public class PersonEditModel : IValidatableObject
 	public List<PhoneContactEditModel> Phones { get; set; } = [];
 	public List<EmailContactEditModel> Emails { get; set; } = [];
 	public IReadOnlyList<LocationListItem> Locations { get; set; } = Array.Empty<LocationListItem>();
+	public string ContactMethodsValidationMessage { get; set; } = string.Empty;
+	public bool IsArchived { get; set; }
 
 	public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
 	{
-		foreach (var result in ContactValidationRules.ValidateRequiredAddress(PhysicalAddress, nameof(PhysicalAddress)))
+		foreach (var result in ContactValidationRules.ValidateRequiredAddress(PhysicalAddress, nameof(PhysicalAddress), "Address"))
 		{
 			yield return result;
 		}
 
-		foreach (var result in ContactValidationRules.ValidateOptionalAddress(MailingAddress, nameof(MailingAddress)))
+		foreach (var result in ContactValidationRules.ValidateRequiredAddress(MailingAddress, nameof(MailingAddress), "Mailing Address"))
 		{
 			yield return result;
 		}
 
-		foreach (var result in ContactValidationRules.ValidateContactMethods(Phones, Emails, nameof(Phones), nameof(Emails)))
+		foreach (var result in ContactValidationRules.ValidateContactMethods(Phones, Emails, nameof(ContactMethodsValidationMessage)))
 		{
 			yield return result;
 		}
@@ -262,20 +265,21 @@ public class LocationEditModel : IValidatableObject
 	public IReadOnlyList<PhoneContactEditModel> ProfilePhones { get; set; } = Array.Empty<PhoneContactEditModel>();
 	public IReadOnlyList<EmailContactEditModel> ProfileEmails { get; set; } = Array.Empty<EmailContactEditModel>();
 	public IReadOnlyList<SelectOption> PersonOptions { get; set; } = Array.Empty<SelectOption>();
+	public string ContactMethodsValidationMessage { get; set; } = string.Empty;
 
 	public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
 	{
-		foreach (var result in ContactValidationRules.ValidateRequiredAddress(PhysicalAddress, nameof(PhysicalAddress)))
+		foreach (var result in ContactValidationRules.ValidateRequiredAddress(PhysicalAddress, nameof(PhysicalAddress), "Address"))
 		{
 			yield return result;
 		}
 
-		foreach (var result in ContactValidationRules.ValidateOptionalAddress(MailingAddress, nameof(MailingAddress)))
+		foreach (var result in ContactValidationRules.ValidateOptionalAddress(MailingAddress, nameof(MailingAddress), "Mailing Address"))
 		{
 			yield return result;
 		}
 
-		foreach (var result in ContactValidationRules.ValidateContactMethods(Phones, Emails, nameof(Phones), nameof(Emails)))
+		foreach (var result in ContactValidationRules.ValidateContactMethods(Phones, Emails, nameof(ContactMethodsValidationMessage)))
 		{
 			yield return result;
 		}
@@ -286,47 +290,47 @@ internal static class ContactValidationRules
 {
 	private static readonly EmailAddressAttribute EmailValidator = new();
 
-	public static IEnumerable<ValidationResult> ValidateRequiredAddress(AddressInputModel address, string prefix)
+	public static IEnumerable<ValidationResult> ValidateRequiredAddress(AddressInputModel address, string prefix, string addressLabel)
 	{
 		if (address.CountryId <= 0)
 		{
-			yield return new ValidationResult("Country is required.", [$"{prefix}.{nameof(AddressInputModel.CountryId)}"]);
+			yield return new ValidationResult($"{addressLabel}: Country is required.", [$"{prefix}.{nameof(AddressInputModel.CountryId)}"]);
 		}
 
 		if (address.StateProvinceId <= 0)
 		{
-			yield return new ValidationResult("State / Territory is required.", [$"{prefix}.{nameof(AddressInputModel.StateProvinceId)}"]);
+			yield return new ValidationResult($"{addressLabel}: State / Territory is required.", [$"{prefix}.{nameof(AddressInputModel.StateProvinceId)}"]);
 		}
 
 		if (!address.CountyId.HasValue || address.CountyId.Value <= 0)
 		{
-			yield return new ValidationResult("County is required.", [$"{prefix}.{nameof(AddressInputModel.CountyId)}"]);
+			yield return new ValidationResult($"{addressLabel}: County is required.", [$"{prefix}.{nameof(AddressInputModel.CountyId)}"]);
 		}
 
 		if (string.IsNullOrWhiteSpace(address.AddressLine1))
 		{
-			yield return new ValidationResult("Address Line 1 is required.", [$"{prefix}.{nameof(AddressInputModel.AddressLine1)}"]);
+			yield return new ValidationResult($"{addressLabel}: Address Line 1 is required.", [$"{prefix}.{nameof(AddressInputModel.AddressLine1)}"]);
 		}
 
 		if (string.IsNullOrWhiteSpace(address.City))
 		{
-			yield return new ValidationResult("City is required.", [$"{prefix}.{nameof(AddressInputModel.City)}"]);
+			yield return new ValidationResult($"{addressLabel}: City is required.", [$"{prefix}.{nameof(AddressInputModel.City)}"]);
 		}
 
 		if (string.IsNullOrWhiteSpace(address.PostalCode))
 		{
-			yield return new ValidationResult("Postal Code is required.", [$"{prefix}.{nameof(AddressInputModel.PostalCode)}"]);
+			yield return new ValidationResult($"{addressLabel}: Postal Code is required.", [$"{prefix}.{nameof(AddressInputModel.PostalCode)}"]);
 		}
 	}
 
-	public static IEnumerable<ValidationResult> ValidateOptionalAddress(AddressInputModel address, string prefix)
+	public static IEnumerable<ValidationResult> ValidateOptionalAddress(AddressInputModel address, string prefix, string addressLabel)
 	{
 		if (IsAddressBlank(address))
 		{
 			yield break;
 		}
 
-		foreach (var result in ValidateRequiredAddress(address, prefix))
+		foreach (var result in ValidateRequiredAddress(address, prefix, addressLabel))
 		{
 			yield return result;
 		}
@@ -335,22 +339,21 @@ internal static class ContactValidationRules
 	public static IEnumerable<ValidationResult> ValidateContactMethods(
 		IReadOnlyList<PhoneContactEditModel> phones,
 		IReadOnlyList<EmailContactEditModel> emails,
-		string phonePrefix,
-		string emailPrefix)
+		string validationMemberName)
 	{
 		var hasPhone = phones.Any(phone => !string.IsNullOrWhiteSpace(phone.PhoneNumber));
 		var hasEmail = emails.Any(email => !string.IsNullOrWhiteSpace(email.EmailAddress));
 
 		if (!hasPhone && !hasEmail)
 		{
-			yield return new ValidationResult("Enter at least one phone number or email address.", [phonePrefix, emailPrefix]);
+			yield return new ValidationResult("Enter at least one phone number or email address.", [validationMemberName]);
 		}
 
 		foreach (var email in emails.Where(item => !string.IsNullOrWhiteSpace(item.EmailAddress)))
 		{
 			if (!EmailValidator.IsValid(email.EmailAddress))
 			{
-				yield return new ValidationResult("Enter a valid email address.", [emailPrefix]);
+				yield return new ValidationResult("Enter a valid email address.", [validationMemberName]);
 				yield break;
 			}
 		}
@@ -358,8 +361,7 @@ internal static class ContactValidationRules
 
 	private static bool IsAddressBlank(AddressInputModel address)
 	{
-		return address.CountryId <= 0
-			&& address.StateProvinceId <= 0
+		return address.StateProvinceId <= 0
 			&& !address.CountyId.HasValue
 			&& string.IsNullOrWhiteSpace(address.AddressLine1)
 			&& string.IsNullOrWhiteSpace(address.AddressLine2)

@@ -126,7 +126,7 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid">
 					<div class="field-stack">
-						<label>Person</label>
+						<FieldLabel Text="Person" Required />
 						<SearchableSelect class="form-control"
 										  @bind-Value="_model.PersonId"
 										  AfterValueChanged="OnPersonChangedAsync"
@@ -137,7 +137,7 @@
 										  Disabled="@Id.HasValue" />
 					</div>
 					<div class="field-stack form-grid--single">
-						<label>Nickname</label>
+						<FieldLabel Text="Nickname" Required />
 						<InputText class="form-control" @bind-Value="_model.Nickname" />
 						<ValidationMessage For="@(() => _model.Nickname)" />
 					</div>
@@ -184,6 +184,7 @@
 								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="AddPhone">Add Phone</button>
 							</div>
 						</div>
+						<ValidationMessage For="@(() => _model.ContactMethodsValidationMessage)" />
 						@for (var index = 0; index < _model.Phones.Count; index++)
 						{
 							var currentIndex = index;
@@ -298,7 +299,7 @@
 
 	private RenderFragment AddressEditor(AddressInputModel address, AddressMode mode) => @<div class="form-grid">
 		<div class="field-stack form-grid--single">
-			<label>Country</label>
+			<FieldLabel Text="Country" Required="@(mode == AddressMode.Physical)" />
 			<SearchableSelect class="form-control"
 							  @bind-Value="address.CountryId"
 							  AfterValueChanged="() => UpdateCountryAsync(mode, address.CountryId)"
@@ -308,7 +309,7 @@
 							  EmptyOptionValue="0" />
 		</div>
 		<div class="field-stack">
-			<label>State / Territory</label>
+			<FieldLabel Text="State / Territory" Required="@(mode == AddressMode.Physical)" />
 			<SearchableSelect class="form-control"
 							  @bind-Value="address.StateProvinceId"
 							  AfterValueChanged="() => UpdateStateAsync(mode, address.StateProvinceId)"
@@ -319,7 +320,7 @@
 							  Disabled="@(address.CountryId <= 0)" />
 		</div>
 		<div class="field-stack">
-			<label>County</label>
+			<FieldLabel Text="County" Required="@(mode == AddressMode.Physical)" />
 			<SearchableSelect class="form-control"
 							  @bind-Value="address.CountyId"
 							  Options="address.CountyOptions"
@@ -328,7 +329,7 @@
 							  Disabled="@(address.StateProvinceId <= 0)" />
 		</div>
 		<div class="field-stack form-grid--single">
-			<label>Address Line 1</label>
+			<FieldLabel Text="Address Line 1" Required="@(mode == AddressMode.Physical)" />
 			<InputText class="form-control" @bind-Value="address.AddressLine1" disabled="@(!address.CountyId.HasValue)" />
 		</div>
 		<div class="field-stack form-grid--single">
@@ -336,11 +337,11 @@
 			<InputText class="form-control" @bind-Value="address.AddressLine2" disabled="@(!address.CountyId.HasValue)" />
 		</div>
 		<div class="field-stack">
-			<label>City</label>
+			<FieldLabel Text="City" Required="@(mode == AddressMode.Physical)" />
 			<InputText class="form-control" @bind-Value="address.City" disabled="@(!address.CountyId.HasValue)" />
 		</div>
 		<div class="field-stack">
-			<label>Postal Code</label>
+			<FieldLabel Text="Postal Code" Required="@(mode == AddressMode.Physical)" />
 			<InputText class="form-control" @bind-Value="address.PostalCode" disabled="@(!address.CountyId.HasValue)" />
 		</div>
 	</div>;

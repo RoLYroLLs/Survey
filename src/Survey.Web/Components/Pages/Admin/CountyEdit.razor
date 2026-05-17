@@ -54,7 +54,7 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid form-grid--single">
 					<div class="field-stack">
-						<label>State / Territory</label>
+						<FieldLabel Text="State / Territory" Required />
 						<SearchableSelect class="form-control"
 										  @bind-Value="_model.StateProvinceId"
 										  Options="_model.StateProvinceOptions"
@@ -64,12 +64,12 @@
 						<ValidationMessage For="@(() => _model.StateProvinceId)" />
 					</div>
 					<div class="field-stack">
-						<label>Name</label>
+						<FieldLabel Text="Name" Required />
 						<InputText class="form-control" @bind-Value="_model.Name" />
 						<ValidationMessage For="@(() => _model.Name)" />
 					</div>
 					<div class="field-stack">
-						<label>FIPS Code</label>
+						<FieldLabel Text="FIPS Code" Required />
 						<InputText class="form-control" @bind-Value="_model.FipsCode" />
 						<ValidationMessage For="@(() => _model.FipsCode)" />
 					</div>

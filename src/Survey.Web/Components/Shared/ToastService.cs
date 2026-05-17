@@ -9,6 +9,8 @@ public enum ToastSeverity
 
 public sealed class ToastMessage
 {
+	public Guid Id { get; init; } = Guid.NewGuid();
+
 	public required string Title { get; init; }
 
 	public required string Message { get; init; }
@@ -18,13 +20,17 @@ public sealed class ToastMessage
 	public bool AutoDismiss { get; init; } = true;
 
 	public TimeSpan Duration { get; init; } = TimeSpan.FromSeconds(5);
+
+	public bool IsClosing { get; internal set; }
 }
 
 public sealed class ToastService : IDisposable
 {
-	private CancellationTokenSource? _dismissal;
+	private readonly List<ToastMessage> _messages = [];
+	private readonly Dictionary<Guid, CancellationTokenSource> _dismissals = [];
+	private static readonly TimeSpan ClosingDelay = TimeSpan.FromMilliseconds(220);
 
-	public ToastMessage? Current { get; private set; }
+	public IReadOnlyList<ToastMessage> CurrentMessages => _messages;
 
 	public event Action? Changed;
 
@@ -66,8 +72,7 @@ public sealed class ToastService : IDisposable
 
 	public void Show(ToastMessage message)
 	{
-		CancelDismissal();
-		Current = message;
+		_messages.Add(message);
 		NotifyChanged();
 
 		if (!message.AutoDismiss)
@@ -75,30 +80,33 @@ public sealed class ToastService : IDisposable
 			return;
 		}
 
-		_dismissal = new CancellationTokenSource();
-		_ = DismissAfterDelayAsync(message.Duration, _dismissal.Token);
+		var dismissal = new CancellationTokenSource();
+		_dismissals[message.Id] = dismissal;
+		_ = DismissAfterDelayAsync(message.Id, message.Duration, dismissal.Token);
 	}
 
-	public void Dismiss()
+	public void Dismiss(Guid id)
 	{
-		CancelDismissal();
-		if (Current is null)
+		var message = _messages.FirstOrDefault(item => item.Id == id);
+		if (message is null || message.IsClosing)
 		{
 			return;
 		}
 
-		Current = null;
+		CancelDismissal(id);
+		message.IsClosing = true;
 		NotifyChanged();
+		_ = RemoveAfterClosingDelayAsync(id);
 	}
 
-	private async Task DismissAfterDelayAsync(TimeSpan duration, CancellationToken cancellationToken)
+	private async Task DismissAfterDelayAsync(Guid id, TimeSpan duration, CancellationToken cancellationToken)
 	{
 		try
 		{
 			await Task.Delay(duration, cancellationToken);
 			if (!cancellationToken.IsCancellationRequested)
 			{
-				Dismiss();
+				Dismiss(id);
 			}
 		}
 		catch (TaskCanceledException)
@@ -106,16 +114,27 @@ public sealed class ToastService : IDisposable
 		}
 	}
 
-	private void CancelDismissal()
+	private async Task RemoveAfterClosingDelayAsync(Guid id)
 	{
-		if (_dismissal is null)
+		await Task.Delay(ClosingDelay);
+		var removed = _messages.RemoveAll(message => message.Id == id) > 0;
+		CancelDismissal(id);
+		if (removed)
+		{
+			NotifyChanged();
+		}
+	}
+
+	private void CancelDismissal(Guid id)
+	{
+		if (!_dismissals.TryGetValue(id, out var dismissal))
 		{
 			return;
 		}
 
-		_dismissal.Cancel();
-		_dismissal.Dispose();
-		_dismissal = null;
+		dismissal.Cancel();
+		dismissal.Dispose();
+		_dismissals.Remove(id);
 	}
 
 	private void NotifyChanged()
@@ -125,6 +144,12 @@ public sealed class ToastService : IDisposable
 
 	public void Dispose()
 	{
-		CancelDismissal();
+		foreach (var dismissal in _dismissals.Values)
+		{
+			dismissal.Cancel();
+			dismissal.Dispose();
+		}
+
+		_dismissals.Clear();
 	}
 }

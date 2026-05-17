@@ -58,7 +58,7 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid form-grid--single">
 					<div class="field-stack">
-						<label>Country</label>
+						<FieldLabel Text="Country" Required />
 						<SearchableSelect class="form-control"
 										  @bind-Value="_model.CountryId"
 										  Options="_model.CountryOptions"
@@ -68,17 +68,17 @@
 						<ValidationMessage For="@(() => _model.CountryId)" />
 					</div>
 					<div class="field-stack">
-						<label>Name</label>
+						<FieldLabel Text="Name" Required />
 						<InputText class="form-control" @bind-Value="_model.Name" />
 						<ValidationMessage For="@(() => _model.Name)" />
 					</div>
 					<div class="field-stack">
-						<label>Code</label>
+						<FieldLabel Text="Code" Required />
 						<InputText class="form-control" @bind-Value="_model.Code" />
 						<ValidationMessage For="@(() => _model.Code)" />
 					</div>
 					<div class="field-stack">
-						<label>Type</label>
+						<FieldLabel Text="Type" Required />
 						<InputText class="form-control" @bind-Value="_model.SubdivisionType" />
 						<ValidationMessage For="@(() => _model.SubdivisionType)" />
 					</div>

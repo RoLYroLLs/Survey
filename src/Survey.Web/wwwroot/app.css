@@ -505,6 +505,12 @@ h4 {
   padding-left: 0.15rem;
 }
 
+.field-label__required {
+  color: var(--app-danger);
+  margin-left: 0.2rem;
+  font-weight: 700;
+}
+
 .feature-list {
   margin: 0;
   padding-left: 1.1rem;
@@ -606,22 +612,43 @@ h4 {
   color: var(--app-danger);
 }
 
-.toast-notification {
+.toast-host {
   position: fixed;
   top: 1.5rem;
   right: 1.5rem;
   z-index: 1095;
+  display: grid;
+  gap: 0.85rem;
+  width: min(28rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.toast-notification {
   display: flex;
   align-items: flex-start;
   gap: 0.9rem;
-  min-width: min(24rem, calc(100vw - 2rem));
-  max-width: 28rem;
+  width: 100%;
   padding: 0 1rem 0 0;
   border: 1px solid rgba(17, 33, 42, 0.06);
   border-radius: 0.3rem;
   background: #ffffff;
   box-shadow: 0 14px 32px rgba(9, 27, 35, 0.11);
   overflow: hidden;
+  max-height: 12rem;
+  opacity: 1;
+  transform: translateY(0);
+  transition: max-height 0.22s ease, opacity 0.22s ease, transform 0.22s ease, margin 0.22s ease, padding 0.22s ease, border-width 0.22s ease;
+  pointer-events: auto;
+}
+
+.toast-notification--closing {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-0.45rem);
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
 }
 
 .toast-notification--success {

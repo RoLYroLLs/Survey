@@ -37,7 +37,7 @@
 					<InputFile OnChange="HandleFileChange" accept=".csv,text/csv" />
 				</div>
 				<div class="field-stack">
-					<label>CSV Content</label>
+					<FieldLabel Text="CSV Content" Required />
 					<InputTextArea class="form-control" rows="12" @bind-Value="_model.CsvContent" />
 					<ValidationMessage For="@(() => _model.CsvContent)" />
 				</div>

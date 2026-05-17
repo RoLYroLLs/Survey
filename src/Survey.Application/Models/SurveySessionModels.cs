@@ -55,12 +55,12 @@ public class RespondentContactModel : IValidatableObject
 
 	public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
 	{
-		foreach (var result in ContactValidationRules.ValidateRequiredAddress(PhysicalAddress, nameof(PhysicalAddress)))
+		foreach (var result in ContactValidationRules.ValidateRequiredAddress(PhysicalAddress, nameof(PhysicalAddress), "Address"))
 		{
 			yield return result;
 		}
 
-		foreach (var result in ContactValidationRules.ValidateOptionalAddress(MailingAddress, nameof(MailingAddress)))
+		foreach (var result in ContactValidationRules.ValidateOptionalAddress(MailingAddress, nameof(MailingAddress), "Mailing Address"))
 		{
 			yield return result;
 		}
@@ -80,8 +80,7 @@ public class RespondentContactModel : IValidatableObject
 					EmailAddress = Email
 				}
 			],
-			nameof(PhoneNumber),
-			nameof(Email)))
+			nameof(PhoneNumber)))
 		{
 			yield return result;
 		}

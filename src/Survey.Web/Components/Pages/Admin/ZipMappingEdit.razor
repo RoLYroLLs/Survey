@@ -62,22 +62,22 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid">
 					<div class="field-stack">
-						<label>ZIP Code</label>
+						<FieldLabel Text="ZIP Code" Required />
 						<InputText class="form-control" @bind-Value="_model.ZipCode" />
 						<ValidationMessage For="@(() => _model.ZipCode)" />
 					</div>
 					<div class="field-stack">
-						<label>County FIPS</label>
+						<FieldLabel Text="County FIPS" Required />
 						<InputText class="form-control" @bind-Value="_model.CountyFips" />
 						<ValidationMessage For="@(() => _model.CountyFips)" />
 					</div>
 					<div class="field-stack">
-						<label>County Name</label>
+						<FieldLabel Text="County Name" Required />
 						<InputText class="form-control" @bind-Value="_model.CountyName" />
 						<ValidationMessage For="@(() => _model.CountyName)" />
 					</div>
 					<div class="field-stack">
-						<label>State Code</label>
+						<FieldLabel Text="State Code" Required />
 						<InputText class="form-control" @bind-Value="_model.StateCode" />
 						<ValidationMessage For="@(() => _model.StateCode)" />
 					</div>

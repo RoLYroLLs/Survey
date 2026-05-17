@@ -1,40 +1,45 @@
 @implements IDisposable
 @inject ToastService ToastService
 
-@if (ToastService.Current is { } toast)
+@if (ToastService.CurrentMessages.Count > 0)
 {
-	<div class="toast-notification toast-notification--@GetSeverityClass(toast.Severity)" role="status" aria-live="polite">
-		<div class="toast-notification__accent" aria-hidden="true"></div>
-		<div class="toast-notification__icon" aria-hidden="true">
-			@switch (toast.Severity)
-			{
-				case ToastSeverity.Success:
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-						<circle cx="12" cy="12" r="9"></circle>
-						<path d="M8.5 12.5 11 15l4.5-5"></path>
-					</svg>
-					break;
-				case ToastSeverity.Warning:
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-						<circle cx="12" cy="12" r="9"></circle>
-						<path d="M12 7.5v5.5"></path>
-						<path d="M12 16.5h.01"></path>
-					</svg>
-					break;
-				case ToastSeverity.Error:
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-						<circle cx="12" cy="12" r="9"></circle>
-						<path d="m9 9 6 6"></path>
-						<path d="m15 9-6 6"></path>
-					</svg>
-					break;
-			}
-		</div>
-		<div class="toast-notification__content">
-			<strong>@toast.Title</strong>
-			<span>@toast.Message</span>
-		</div>
-		<button class="toast-notification__close" type="button" aria-label="Close notification" @onclick="ToastService.Dismiss">&times;</button>
+	<div class="toast-host" aria-live="polite" aria-atomic="false">
+		@foreach (var toast in ToastService.CurrentMessages)
+		{
+			<div class="@BuildToastClass(toast)" role="status">
+				<div class="toast-notification__accent" aria-hidden="true"></div>
+				<div class="toast-notification__icon" aria-hidden="true">
+					@switch (toast.Severity)
+					{
+						case ToastSeverity.Success:
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+								<circle cx="12" cy="12" r="9"></circle>
+								<path d="M8.5 12.5 11 15l4.5-5"></path>
+							</svg>
+							break;
+						case ToastSeverity.Warning:
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+								<circle cx="12" cy="12" r="9"></circle>
+								<path d="M12 7.5v5.5"></path>
+								<path d="M12 16.5h.01"></path>
+							</svg>
+							break;
+						case ToastSeverity.Error:
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+								<circle cx="12" cy="12" r="9"></circle>
+								<path d="m9 9 6 6"></path>
+								<path d="m15 9-6 6"></path>
+							</svg>
+							break;
+					}
+				</div>
+				<div class="toast-notification__content">
+					<strong>@toast.Title</strong>
+					<span>@toast.Message</span>
+				</div>
+				<button class="toast-notification__close" type="button" aria-label="Close notification" @onclick="() => ToastService.Dismiss(toast.Id)">&times;</button>
+			</div>
+		}
 	</div>
 }
 
@@ -58,6 +63,22 @@
 			ToastSeverity.Error => "error",
 			_ => "success"
 		};
+	}
+
+	private static string BuildToastClass(ToastMessage toast)
+	{
+		var classes = new List<string>
+		{
+			"toast-notification",
+			$"toast-notification--{GetSeverityClass(toast.Severity)}"
+		};
+
+		if (toast.IsClosing)
+		{
+			classes.Add("toast-notification--closing");
+		}
+
+		return string.Join(" ", classes);
 	}
 
 	public void Dispose()

@@ -70,7 +70,7 @@
 				<DataAnnotationsValidator />
 				<div class="form-grid form-grid--single">
 					<div class="field-stack">
-						<label>Name</label>
+						<FieldLabel Text="Name" Required />
 						<InputText class="form-control" @bind-Value="_model.Name" />
 						<ValidationMessage For="@(() => _model.Name)" />
 					</div>
@@ -95,7 +95,7 @@
 										  EmptyOptionLabel="All Surveys" />
 					</div>
 					<div class="field-stack">
-						<label>Target Responses</label>
+						<FieldLabel Text="Target Responses" Required />
 						<InputNumber class="form-control" @bind-Value="_model.TargetResponseCount" />
 						<ValidationMessage For="@(() => _model.TargetResponseCount)" />
 					</div>

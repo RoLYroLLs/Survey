@@ -41,7 +41,7 @@ public sealed partial class SurveyApplicationService
 	{
 		if (!id.HasValue)
 		{
-			var personOptions = await GetPersonSelectOptionsAsync(cancellationToken);
+			var personOptions = await GetPersonSelectOptionsAsync(cancellationToken, personId);
 			var selectedPersonId = personId ?? personOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0);
 			return await BuildLocationEditModelAsync(null, selectedPersonId, personOptions, cancellationToken);
 		}
@@ -62,7 +62,7 @@ public sealed partial class SurveyApplicationService
 				.ThenInclude(person => person.Emails)
 			.FirstOrDefaultAsync(location => location.Id == id.Value, cancellationToken)
 			?? throw new InvalidOperationException("The requested location was not found.");
-		var personSelectOptions = await GetPersonSelectOptionsAsync(cancellationToken);
+		var personSelectOptions = await GetPersonSelectOptionsAsync(cancellationToken, entity.PersonId);
 
 		return await BuildLocationEditModelAsync(entity, entity.PersonId, personSelectOptions, cancellationToken);
 	}
@@ -576,8 +576,7 @@ public sealed partial class SurveyApplicationService
 
 	private static bool IsAddressBlank(AddressInputModel address)
 	{
-		return address.CountryId <= 0
-			&& address.StateProvinceId <= 0
+		return address.StateProvinceId <= 0
 			&& !address.CountyId.HasValue
 			&& string.IsNullOrWhiteSpace(address.AddressLine1)
 			&& string.IsNullOrWhiteSpace(address.AddressLine2)

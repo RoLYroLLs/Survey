@@ -124,6 +124,7 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : Identi
 			entity.Property(person => person.BestTimeToContact).HasMaxLength(100);
 			entity.Property(person => person.PreferredContactMethod).HasMaxLength(50);
 			entity.Property(person => person.Email).HasMaxLength(256).IsRequired();
+			entity.Property(person => person.IsArchived).HasDefaultValue(false);
 			entity.HasIndex(person => person.Email);
 			entity.HasOne(person => person.PostalAddress)
 				.WithMany(address => address.People)
