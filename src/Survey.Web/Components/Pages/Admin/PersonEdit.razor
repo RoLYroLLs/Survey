@@ -182,7 +182,7 @@
 					<button class="btn btn-outline-primary" type="button" @onclick="ToggleArchivedAsync">
 						@(_model.IsArchived ? "Unarchive" : "Archive")
 					</button>
-					<a class="btn btn-primary" href="/admin/people/@Id/edit@BuildArchivedQuery()">Edit Person</a>
+					<a class="btn btn-primary" href="@($"/admin/people/{Id}/edit{BuildArchivedQuery()}")">Edit Person</a>
 					<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to People</a>
 				</div>
 			</div>

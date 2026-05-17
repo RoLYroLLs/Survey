@@ -88,4 +88,6 @@
 - Assignment status filtering should support `All`, `Active`, `Completed`, and `Expired` in both the global assignments list and the person-specific assignments list.
 - Reference-data and workflow dropdowns should use a shared searchable combobox pattern instead of plain browser selects when the option list is long.
 - Searchable dropdown behavior should be case-insensitive, filter as the user types, support keyboard navigation, allow `Enter` to select without accidentally submitting the surrounding form, and treat `Tab` / `Shift+Tab` as "select highlighted option, then move focus onward" when the menu is open.
+- Forward `Tab` on a focused dropdown should preserve the current selection unless the user has actually started interacting with the option list by typing or using arrow navigation; simple tabbing through a form must not clear or replace existing dropdown values.
+- Shared searchable dropdowns should show a single chevron indicator only; component markup and Bootstrap/select styling must not combine to render duplicate chevrons.
 - Searchable dropdown menus should render as floating overlays, preserve the trigger width as a minimum, grow only as needed for visible content, track the trigger on scroll and resize, and flip above the field when there is not enough viewport space below.

@@ -17,7 +17,6 @@
 			   @onfocus="HandleFocus"
 			   @onclick="HandleClick"
 			   @oninput="HandleInput" />
-		<span class="searchable-select__chevron" aria-hidden="true">v</span>
 	</div>
 
 	@if (_isOpen)
@@ -75,6 +74,7 @@
 	private bool _filterActive;
 	private bool _resetSearchOnNextInput;
 	private bool _shouldSelectAllText;
+	private bool _tabSelectionArmed;
 	private DotNetObjectReference<SearchableSelect<TValue>>? _dotNetRef;
 	private bool _keyHandlerRegistered;
 
@@ -86,6 +86,7 @@
 			_inputText = GetSelectedLabel();
 			_filterActive = false;
 			_resetSearchOnNextInput = false;
+			_tabSelectionArmed = false;
 		}
 	}
 
@@ -118,6 +119,7 @@
 		_highlightedIndex = GetDefaultHighlightedIndex();
 		_shouldPositionMenu = true;
 		_shouldSelectAllText = true;
+		_tabSelectionArmed = false;
 	}
 
 	private void HandleClick()
@@ -135,6 +137,7 @@
 		_highlightedIndex = GetDefaultHighlightedIndex();
 		_shouldPositionMenu = true;
 		_shouldSelectAllText = true;
+		_tabSelectionArmed = false;
 	}
 
 	private void HandleInput(ChangeEventArgs args)
@@ -160,6 +163,7 @@
 		_highlightedIndex = GetDefaultHighlightedIndex();
 		_shouldPositionMenu = true;
 		_shouldSelectAllText = false;
+		_tabSelectionArmed = true;
 	}
 
 	private async Task SelectOptionAsync(string value)
@@ -172,6 +176,7 @@
 		_highlightedIndex = -1;
 		_shouldPositionMenu = false;
 		_resetSearchOnNextInput = false;
+		_tabSelectionArmed = false;
 		await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
 		await JSRuntime.InvokeVoidAsync("surveySearchableSelect.blurInput", _inputElement);
 		await AfterValueChanged.InvokeAsync();
@@ -186,6 +191,7 @@
 		_highlightedIndex = -1;
 		_shouldPositionMenu = false;
 		_resetSearchOnNextInput = false;
+		_tabSelectionArmed = false;
 		await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
 	}
 
@@ -204,6 +210,7 @@
 			_highlightedIndex = -1;
 			_shouldPositionMenu = false;
 			_resetSearchOnNextInput = false;
+			_tabSelectionArmed = false;
 			shouldRefresh = true;
 			await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
 			await InvokeAsync(StateHasChanged);
@@ -223,6 +230,7 @@
 				_highlightedIndex = _highlightedIndex < 0
 					? 0
 					: Math.Min(_highlightedIndex + 1, options.Count - 1);
+				_tabSelectionArmed = true;
 				shouldRefresh = true;
 
 				if (_jsAvailable)
@@ -245,6 +253,7 @@
 				_highlightedIndex = _highlightedIndex < 0
 					? options.Count - 1
 					: Math.Max(_highlightedIndex - 1, 0);
+				_tabSelectionArmed = true;
 				shouldRefresh = true;
 
 				if (_jsAvailable)
@@ -255,6 +264,20 @@
 		}
 		else if (key == "Enter" || key == "Tab")
 		{
+			if (key == "Tab" && !_tabSelectionArmed)
+			{
+				_isOpen = false;
+				_inputText = GetSelectedLabel();
+				_filteredOptions = FilterOptions();
+				_filterActive = false;
+				_highlightedIndex = -1;
+				_shouldPositionMenu = false;
+				_resetSearchOnNextInput = false;
+				await JSRuntime.InvokeVoidAsync("surveySearchableSelect.clearMenu");
+				await InvokeAsync(StateHasChanged);
+				return;
+			}
+
 			if (_highlightedIndex >= 0 && _highlightedIndex < options.Count)
 			{
 				await SelectOptionAsync(options[_highlightedIndex].Value);
@@ -323,9 +346,17 @@
 
 	private string BuildInputClass()
 	{
-		return string.IsNullOrWhiteSpace(CssClass)
-			? "form-select searchable-select__input"
-			: $"{CssClass} searchable-select__input";
+		var classNames = new List<string> { "form-control" };
+		if (!string.IsNullOrWhiteSpace(CssClass))
+		{
+			classNames.AddRange(
+				CssClass
+					.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+					.Where(className => !string.Equals(className, "form-select", StringComparison.Ordinal)));
+		}
+
+		classNames.Add("searchable-select__input");
+		return string.Join(" ", classNames.Distinct(StringComparer.Ordinal));
 	}
 
 	private string BuildWrapperClass()
