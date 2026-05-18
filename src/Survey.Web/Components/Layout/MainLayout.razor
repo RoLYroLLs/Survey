@@ -1,17 +1,16 @@
 @inherits LayoutComponentBase
 
 <div class="shell">
+	<header class="shell__topbar">
+		<TopBar />
+	</header>
+
 	<aside class="shell__sidebar">
 		<NavMenu />
 	</aside>
 
 	<div class="shell__content">
 		<ToastHost />
-
-		<header class="shell__header">
-			<div>
-			</div>
-		</header>
 
 		<main class="shell__main">
 			@Body

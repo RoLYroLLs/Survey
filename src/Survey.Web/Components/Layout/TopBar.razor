@@ -1,0 +1,237 @@
+@implements IDisposable
+@using Microsoft.AspNetCore.WebUtilities
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITenantContextAccessor TenantContextAccessor
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+
+<header class="topbar">
+	<a class="topbar__brand" href="@GetBrandUrl()">Survey</a>
+
+	<form class="topbar__search" @onsubmit="SubmitSearchAsync">
+		<OutlineIcon Name="search" CssClass="topbar__search-icon" />
+		<input class="topbar__search-input"
+			   type="search"
+			   placeholder="Search this tenant..."
+			   value="@_searchText"
+			   @oninput="OnSearchInputChanged"
+			   disabled="@(!_accessContext.HasTenantAccess)" />
+		<button class="topbar__search-submit" type="submit" disabled="@(!_accessContext.HasTenantAccess || string.IsNullOrWhiteSpace(_searchText))">
+			Search
+		</button>
+	</form>
+
+	<div class="topbar__actions">
+		<details class="topbar__tenant-switcher topbar__menu">
+			<summary class="topbar__tenant-trigger">
+				<span class="topbar__tenant-name">@GetActiveTenantName()</span>
+				<OutlineIcon Name="chevron-down" CssClass="topbar__tenant-chevron" />
+			</summary>
+			@if (_membershipOptions.Count > 0)
+			{
+				<div class="topbar__tenant-dropdown">
+					@foreach (var membership in _membershipOptions)
+					{
+						@if (!membership.IsEnabled || membership.MembershipId == _accessContext.ActiveTenantMembershipId)
+						{
+							<span class="topbar__tenant-option @(membership.MembershipId == _accessContext.ActiveTenantMembershipId ? "topbar__tenant-option--active" : string.Empty)">
+								@membership.TenantName
+							</span>
+						}
+						else
+						{
+							<a class="topbar__tenant-option" href="@BuildTenantSwitchUrl(membership.MembershipId)">
+								@membership.TenantName
+							</a>
+						}
+					}
+				</div>
+			}
+		</details>
+
+		<AuthorizeView>
+			<Authorized Context="userContext">
+				<details class="topbar__profile-menu topbar__menu">
+					<summary class="topbar__profile-trigger">
+						<span class="topbar__avatar" style="@GetAvatarStyle()">@GetAvatarLetter()</span>
+						<OutlineIcon Name="chevron-down" CssClass="topbar__chevron" />
+					</summary>
+					<div class="topbar__profile-dropdown">
+						<div class="topbar__profile-header">
+							<span class="topbar__avatar topbar__avatar--large" style="@GetAvatarStyle()">@GetAvatarLetter()</span>
+							<div>
+								<div class="topbar__profile-name">@GetDisplayName()</div>
+								<div class="topbar__profile-email">@GetAccountEmail(userContext.User)</div>
+							</div>
+						</div>
+						@if (_accessContext.IsPlatformUserEnabled && _accessContext.PlatformPermissions.Count > 0)
+						{
+							<a class="topbar__menu-item" href="/admin">
+								<OutlineIcon Name="platform" CssClass="topbar__menu-icon" />
+								<span>Platform Admin</span>
+							</a>
+						}
+						@if (_accessContext.HasTenantAccess)
+						{
+							<a class="topbar__menu-item" href="/app/account">
+								<OutlineIcon Name="settings" CssClass="topbar__menu-icon" />
+								<span>Account</span>
+							</a>
+						}
+						<form action="Account/Logout" method="post">
+							<AntiforgeryToken />
+							<input type="hidden" name="ReturnUrl" value="@_currentUrl" />
+							<button type="submit" class="topbar__menu-item topbar__menu-item--button">
+								<OutlineIcon Name="logout" CssClass="topbar__menu-icon" />
+								<span>Logout</span>
+							</button>
+						</form>
+					</div>
+				</details>
+			</Authorized>
+		</AuthorizeView>
+	</div>
+</header>
+
+@code {
+	private ApplicationUser? _currentUser;
+	private CurrentAccessContext _accessContext = new();
+	private IReadOnlyList<TenantMembershipOption> _membershipOptions = Array.Empty<TenantMembershipOption>();
+	private string _searchText = string.Empty;
+	private string _currentUrl = string.Empty;
+
+	protected override async Task OnInitializedAsync()
+	{
+		_currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+		NavigationManager.LocationChanged += OnLocationChanged;
+		await LoadAsync();
+	}
+
+	private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+		await InvokeAsync(async () =>
+		{
+			await LoadAsync();
+			StateHasChanged();
+		});
+	}
+
+	private async Task LoadAsync()
+	{
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		var principal = authenticationState.User;
+		_currentUser = principal.Identity?.IsAuthenticated == true
+			? await UserManager.GetUserAsync(principal)
+			: null;
+		_accessContext = await TenantContextAccessor.GetCurrentAsync();
+		_membershipOptions = await TenantContextAccessor.GetMembershipOptionsAsync();
+		_searchText = GetSearchQueryFromUri();
+	}
+
+	private string GetSearchQueryFromUri()
+	{
+		var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+		if (!uri.AbsolutePath.Equals("/app/search", StringComparison.OrdinalIgnoreCase))
+		{
+			return _searchText;
+		}
+
+		return QueryHelpers.ParseQuery(uri.Query).TryGetValue("q", out var values)
+			? values.ToString()
+			: string.Empty;
+	}
+
+	private Task OnSearchInputChanged(ChangeEventArgs args)
+	{
+		_searchText = args.Value?.ToString() ?? string.Empty;
+		return Task.CompletedTask;
+	}
+
+	private Task SubmitSearchAsync()
+	{
+		if (!_accessContext.HasTenantAccess)
+		{
+			return Task.CompletedTask;
+		}
+
+		var trimmedQuery = _searchText.Trim();
+		if (string.IsNullOrWhiteSpace(trimmedQuery))
+		{
+			NavigationManager.NavigateTo("/app/search");
+			return Task.CompletedTask;
+		}
+
+		NavigationManager.NavigateTo($"/app/search?q={Uri.EscapeDataString(trimmedQuery)}");
+		return Task.CompletedTask;
+	}
+
+	private string GetBrandUrl()
+	{
+		if (_accessContext.HasTenantAccess)
+		{
+			return "/app";
+		}
+
+		if (_accessContext.PlatformPermissions.Count > 0)
+		{
+			return "/admin";
+		}
+
+		return _currentUser?.HasCompletedSelfSignupProfile() == true
+			? "/Account/CreateTenant"
+			: "/Account/CompleteProfile";
+	}
+
+	private string GetDisplayName()
+	{
+		return _currentUser?.DisplayName ?? "Signed in";
+	}
+
+	private string GetActiveTenantName()
+	{
+		return _membershipOptions.FirstOrDefault(x => x.MembershipId == _accessContext.ActiveTenantMembershipId)?.TenantName
+			?? _membershipOptions.FirstOrDefault()?.TenantName
+			?? "No tenant";
+	}
+
+	private string GetAccountEmail(ClaimsPrincipal principal)
+	{
+		return _currentUser?.Email
+			?? principal.Identity?.Name
+			?? "Signed in";
+	}
+
+	private string GetAvatarLetter()
+	{
+		var source = _currentUser?.FirstName
+			?? _currentUser?.LastName
+			?? _currentUser?.Email
+			?? "S";
+		var trimmed = source.Trim();
+		return string.IsNullOrWhiteSpace(trimmed)
+			? "S"
+			: trimmed[0].ToString().ToUpperInvariant();
+	}
+
+	private string GetAvatarStyle()
+	{
+		return $"--avatar-color: {_currentUser?.AvatarColorHex ?? "#0d8f81"};";
+	}
+
+	private string BuildTenantSwitchUrl(int membershipId)
+	{
+		var returnUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+		if (string.IsNullOrWhiteSpace(returnUrl))
+		{
+			returnUrl = "app";
+		}
+
+		return QueryHelpers.AddQueryString($"/app/switch-tenant/{membershipId}", "returnUrl", "/" + returnUrl.TrimStart('/'));
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+	}
+}

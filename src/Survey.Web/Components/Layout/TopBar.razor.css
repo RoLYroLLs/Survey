@@ -1,0 +1,345 @@
+.topbar {
+	display: grid;
+	grid-template-columns: auto minmax(18rem, 42rem) auto;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.85rem 1.5rem;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	background: rgba(9, 27, 35, 0.98);
+	color: var(--app-sidebar-ink);
+}
+
+.topbar__brand {
+	color: #ffffff;
+	font-size: 1.55rem;
+	font-weight: 700;
+	letter-spacing: -0.03em;
+	text-decoration: none !important;
+}
+
+.topbar__search {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-self: center;
+	width: 100%;
+	max-width: 42rem;
+}
+
+.topbar ::deep(.topbar__search-icon) {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	left: 0.9rem;
+	width: 1.05rem;
+	height: 1.05rem;
+	color: rgba(231, 243, 240, 0.7);
+	pointer-events: none;
+	flex: 0 0 auto;
+	stroke: currentColor;
+}
+
+.topbar__search-input {
+	width: 100%;
+	height: 2.7rem;
+	padding: 0.65rem 5.6rem 0.65rem 2.7rem;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 0.75rem;
+	color: #ffffff;
+	background: rgba(255, 255, 255, 0.09);
+}
+
+.topbar__search-input::placeholder {
+	color: rgba(231, 243, 240, 0.62);
+}
+
+.topbar__search-input:focus {
+	outline: none;
+	border-color: rgba(255, 255, 255, 0.26);
+	box-shadow: 0 0 0 0.2rem rgba(13, 143, 129, 0.15);
+}
+
+.topbar__search-input:disabled {
+	cursor: not-allowed;
+	opacity: 0.7;
+}
+
+.topbar__search-submit {
+	position: absolute;
+	right: 0.4rem;
+	height: 2rem;
+	padding: 0 0.8rem;
+	border: 0;
+	border-radius: 0.55rem;
+	color: #ffffff;
+	background: rgba(255, 255, 255, 0.12);
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.topbar__search-submit:disabled {
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+.topbar__actions {
+	display: flex;
+	align-items: center;
+	justify-self: end;
+	gap: 0.8rem;
+	position: relative;
+	z-index: 2;
+}
+
+.topbar__tenant-switcher {
+	position: relative;
+	z-index: 2;
+}
+
+.topbar__tenant-switcher[open] .topbar__tenant-trigger {
+	background: rgba(255, 255, 255, 0.13);
+	border-color: rgba(255, 255, 255, 0.16);
+}
+
+.topbar__tenant-trigger {
+	min-width: 12rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.55rem;
+	padding: 0.55rem 0.9rem;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 0.55rem;
+	color: #ffffff;
+	background: rgba(255, 255, 255, 0.09);
+	font: inherit;
+	font-weight: 600;
+	text-align: left;
+}
+
+.topbar__tenant-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.topbar ::deep(.topbar__tenant-chevron) {
+	width: 0.8rem;
+	height: 0.8rem;
+	flex: 0 0 0.8rem;
+	color: rgba(231, 243, 240, 0.82);
+	stroke: currentColor;
+}
+
+.topbar__tenant-dropdown {
+	position: absolute;
+	top: calc(100% + 0.55rem);
+	right: 0;
+	min-width: 15rem;
+	display: grid;
+	gap: 0.2rem;
+	padding: 0.5rem;
+	border: 1px solid var(--app-border);
+	border-radius: 0.9rem;
+	background: var(--app-card);
+	box-shadow: var(--app-shadow);
+	z-index: 50;
+}
+
+.topbar__tenant-option {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	padding: 0.65rem 0.75rem;
+	border: 0;
+	border-radius: 0.7rem;
+	color: var(--app-primary-strong);
+	background: transparent;
+	font: inherit;
+	font-weight: 600;
+	text-align: left;
+}
+
+.topbar__tenant-option:hover,
+.topbar__tenant-option:focus-visible {
+	background: var(--app-primary-tint);
+	outline: none;
+}
+
+.topbar__tenant-option:disabled {
+	cursor: default;
+	opacity: 0.7;
+}
+
+.topbar__tenant-option--active {
+	background: rgba(13, 143, 129, 0.14);
+}
+
+.topbar__profile-menu {
+	position: relative;
+	z-index: 2;
+}
+
+.topbar__profile-menu[open] .topbar__profile-trigger {
+	background: rgba(255, 255, 255, 0.1);
+	border-color: rgba(255, 255, 255, 0.16);
+}
+
+.topbar__profile-trigger {
+	list-style: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	padding: 0.3rem;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.05);
+	cursor: pointer;
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.topbar__tenant-trigger::-webkit-details-marker,
+.topbar__profile-trigger::-webkit-details-marker {
+	display: none;
+}
+
+.topbar__tenant-trigger::marker,
+.topbar__profile-trigger::marker {
+	content: "";
+}
+
+.topbar__avatar {
+	--avatar-color: #0d8f81;
+	width: 2.2rem;
+	height: 2.2rem;
+	flex: 0 0 2.2rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	overflow: hidden;
+	color: #ffffff;
+	background: var(--avatar-color);
+	font-size: 0.95rem;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.topbar__avatar--large {
+	width: 2.8rem;
+	height: 2.8rem;
+	flex-basis: 2.8rem;
+	font-size: 1.1rem;
+}
+
+.topbar ::deep(.topbar__chevron) {
+	width: 0.8rem;
+	height: 0.8rem;
+	flex: 0 0 0.8rem;
+	margin-right: 0.25rem;
+	color: rgba(231, 243, 240, 0.82);
+	stroke: currentColor;
+}
+
+.topbar__profile-dropdown {
+	position: absolute;
+	top: calc(100% + 0.7rem);
+	right: 0;
+	min-width: 15rem;
+	display: grid;
+	gap: 0.35rem;
+	padding: 0.85rem;
+	border: 1px solid var(--app-border);
+	border-radius: 0.9rem;
+	background: var(--app-card);
+	box-shadow: var(--app-shadow);
+	z-index: 50;
+}
+
+.topbar__profile-header {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding-bottom: 0.65rem;
+	border-bottom: 1px solid var(--app-border);
+}
+
+.topbar__profile-name {
+	color: var(--app-ink);
+	font-weight: 700;
+}
+
+.topbar__profile-email {
+	color: var(--app-muted);
+	font-size: 0.92rem;
+	word-break: break-word;
+}
+
+.topbar__menu-item {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+	padding: 0.65rem 0.75rem;
+	border: 0;
+	border-radius: 0.7rem;
+	color: var(--app-primary-strong);
+	background: transparent;
+	font: inherit;
+	text-align: left;
+	text-decoration: none !important;
+}
+
+.topbar__menu-item:hover,
+.topbar__menu-item:focus-visible {
+	color: var(--app-primary-strong);
+	background: var(--app-primary-tint);
+	outline: none;
+}
+
+.topbar__menu-item--button {
+	appearance: none;
+}
+
+.topbar ::deep(.topbar__menu-icon) {
+	width: 1.1rem;
+	height: 1.1rem;
+	flex: 0 0 1.1rem;
+	stroke: currentColor;
+}
+
+@media (max-width: 1120px) {
+	.topbar {
+		grid-template-columns: 1fr;
+	}
+
+	.topbar__search,
+	.topbar__actions {
+		justify-self: stretch;
+	}
+
+	.topbar__actions {
+		justify-content: space-between;
+	}
+}
+
+@media (max-width: 720px) {
+	.topbar {
+		padding: 0.85rem 1rem;
+	}
+
+	.topbar__actions {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.topbar__tenant-select {
+		min-width: 0;
+		width: 100%;
+	}
+
+	.topbar__profile-menu {
+		align-self: end;
+	}
+}

@@ -1,0 +1,211 @@
+@page "/Account/CompleteProfile"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Complete Profile</PageTitle>
+
+<div class="status-card narrow-card">
+	<p class="eyebrow">Step 3 of 4</p>
+	<h1>Complete your profile</h1>
+	<p class="mb-4">Add your name, address, and phone number before creating your first tenant.</p>
+
+	@if (!string.IsNullOrWhiteSpace(_errorMessage))
+	{
+		<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+	}
+
+	@if (!_isReady)
+	{
+		<p>Loading profile...</p>
+	}
+	else
+	{
+		<EditForm Model="Input" OnValidSubmit="SaveAsync" FormName="complete-profile" method="post">
+			<DataAnnotationsValidator />
+			<ValidationSummary />
+
+			<div class="form-grid">
+				<div class="field-stack">
+					<FieldLabel Text="First Name" Required />
+					<InputText class="form-control" @bind-Value="Input.FirstName" autocomplete="given-name" />
+					<ValidationMessage For="@(() => Input.FirstName)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Last Name" Required />
+					<InputText class="form-control" @bind-Value="Input.LastName" autocomplete="family-name" />
+					<ValidationMessage For="@(() => Input.LastName)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Address 1" Required />
+					<InputText class="form-control" @bind-Value="Input.AddressLine1" autocomplete="address-line1" />
+					<ValidationMessage For="@(() => Input.AddressLine1)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Address 2" />
+					<InputText class="form-control" @bind-Value="Input.AddressLine2" autocomplete="address-line2" />
+					<ValidationMessage For="@(() => Input.AddressLine2)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="City" Required />
+					<InputText class="form-control" @bind-Value="Input.City" autocomplete="address-level2" />
+					<ValidationMessage For="@(() => Input.City)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="State" Required />
+					<InputText class="form-control" @bind-Value="Input.State" autocomplete="address-level1" />
+					<ValidationMessage For="@(() => Input.State)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Zip" Required />
+					<InputText class="form-control" @bind-Value="Input.PostalCode" autocomplete="postal-code" />
+					<ValidationMessage For="@(() => Input.PostalCode)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Phone Number" Required />
+					<InputText class="form-control" @bind-Value="Input.PhoneNumber" autocomplete="tel" />
+					<ValidationMessage For="@(() => Input.PhoneNumber)" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit" disabled="@_isSaving">Continue</button>
+			</div>
+		</EditForm>
+	}
+</div>
+
+@code {
+	private bool _isReady;
+	private bool _isSaving;
+	private string? _errorMessage;
+	private ApplicationUser? _user;
+
+	[SupplyParameterFromForm]
+	private CompleteProfileModel Input { get; set; } = default!;
+
+	[SupplyParameterFromQuery]
+	private string? ReturnUrl { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		Input ??= new();
+
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		_user = await UserManager.GetUserAsync(authenticationState.User);
+		if (_user is null)
+		{
+			_errorMessage = "The signed-in account could not be loaded.";
+			return;
+		}
+
+		if (_user.ActiveTenantMembershipId.HasValue)
+		{
+			RedirectManager.RedirectTo(string.IsNullOrWhiteSpace(ReturnUrl) ? "/app" : ReturnUrl);
+			return;
+		}
+
+		if (_user.HasCompletedSelfSignupProfile())
+		{
+			RedirectManager.RedirectTo(BuildNextUrl());
+			return;
+		}
+
+		Input.FirstName = string.IsNullOrWhiteSpace(Input.FirstName) ? (_user.FirstName ?? string.Empty) : Input.FirstName;
+		Input.LastName = string.IsNullOrWhiteSpace(Input.LastName) ? (_user.LastName ?? string.Empty) : Input.LastName;
+		Input.AddressLine1 = string.IsNullOrWhiteSpace(Input.AddressLine1) ? (_user.AddressLine1 ?? string.Empty) : Input.AddressLine1;
+		Input.AddressLine2 ??= _user.AddressLine2 ?? string.Empty;
+		Input.City = string.IsNullOrWhiteSpace(Input.City) ? (_user.City ?? string.Empty) : Input.City;
+		Input.State = string.IsNullOrWhiteSpace(Input.State) ? (_user.State ?? string.Empty) : Input.State;
+		Input.PostalCode = string.IsNullOrWhiteSpace(Input.PostalCode) ? (_user.PostalCode ?? string.Empty) : Input.PostalCode;
+		Input.PhoneNumber = string.IsNullOrWhiteSpace(Input.PhoneNumber) ? (_user.PhoneNumber ?? string.Empty) : Input.PhoneNumber;
+		_isReady = true;
+	}
+
+	private async Task SaveAsync()
+	{
+		if (_isSaving || _user is null)
+		{
+			return;
+		}
+
+		_isSaving = true;
+		_errorMessage = null;
+
+		try
+		{
+			_user.FirstName = Input.FirstName.Trim();
+			_user.LastName = Input.LastName.Trim();
+			_user.AddressLine1 = Input.AddressLine1.Trim();
+			_user.AddressLine2 = string.IsNullOrWhiteSpace(Input.AddressLine2) ? null : Input.AddressLine2.Trim();
+			_user.City = Input.City.Trim();
+			_user.State = Input.State.Trim();
+			_user.PostalCode = Input.PostalCode.Trim();
+			_user.PhoneNumber = Input.PhoneNumber.Trim();
+
+			var updateResult = await UserManager.UpdateAsync(_user);
+			if (!updateResult.Succeeded)
+			{
+				throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
+			}
+
+			await SignInManager.RefreshSignInAsync(_user);
+			RedirectManager.RedirectTo(BuildNextUrl());
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private string BuildNextUrl()
+	{
+		return string.IsNullOrWhiteSpace(ReturnUrl)
+			? "Account/CreateTenant"
+			: $"Account/CreateTenant?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+	}
+
+	private sealed class CompleteProfileModel
+	{
+		[Required]
+		[StringLength(100)]
+		public string FirstName { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(100)]
+		public string LastName { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(200)]
+		public string AddressLine1 { get; set; } = string.Empty;
+
+		[StringLength(200)]
+		public string AddressLine2 { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(100)]
+		public string City { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(100)]
+		public string State { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(20)]
+		public string PostalCode { get; set; } = string.Empty;
+
+		[Required]
+		[Phone]
+		[StringLength(50)]
+		public string PhoneNumber { get; set; } = string.Empty;
+	}
+}

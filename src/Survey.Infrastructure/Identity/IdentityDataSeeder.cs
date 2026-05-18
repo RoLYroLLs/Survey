@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Survey.Domain;
@@ -46,6 +47,7 @@ internal sealed class IdentityDataSeeder(
 				FirstName = configuration["SeedAdmin:FirstName"]?.Trim(),
 				LastName = configuration["SeedAdmin:LastName"]?.Trim()
 			};
+			UserAvatarPalette.EnsureAssigned(user);
 
 			var createUserResult = await userManager.CreateAsync(user, password);
 			if (!createUserResult.Succeeded)
@@ -74,6 +76,16 @@ internal sealed class IdentityDataSeeder(
 
 		user.IsPlatformSuperAdmin = true;
 		user.IsPlatformUserEnabled = true;
+		UserAvatarPalette.EnsureAssigned(user);
 		await userManager.UpdateAsync(user);
+
+		var usersMissingAvatarColor = await userManager.Users
+			.Where(existingUser => existingUser.AvatarColorHex == null || existingUser.AvatarColorHex == string.Empty)
+			.ToListAsync(cancellationToken);
+		foreach (var existingUser in usersMissingAvatarColor)
+		{
+			UserAvatarPalette.EnsureAssigned(existingUser);
+			await userManager.UpdateAsync(existingUser);
+		}
 	}
 }

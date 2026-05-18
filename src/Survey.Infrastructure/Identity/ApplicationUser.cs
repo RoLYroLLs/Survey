@@ -15,11 +15,29 @@ public class ApplicationUser : IdentityUser
 	[StringLength(2000)]
 	public string? FavoriteGoalIds { get; set; }
 
+	[StringLength(200)]
+	public string? AddressLine1 { get; set; }
+
+	[StringLength(200)]
+	public string? AddressLine2 { get; set; }
+
+	[StringLength(100)]
+	public string? City { get; set; }
+
+	[StringLength(100)]
+	public string? State { get; set; }
+
+	[StringLength(20)]
+	public string? PostalCode { get; set; }
+
 	public int? ActiveTenantMembershipId { get; set; }
 
 	public bool IsPlatformSuperAdmin { get; set; }
 
 	public bool IsPlatformUserEnabled { get; set; }
+
+	[StringLength(16)]
+	public string? AvatarColorHex { get; set; }
 
 	public ICollection<TenantMembership> TenantMemberships { get; } = new List<TenantMembership>();
 
@@ -63,5 +81,16 @@ public class ApplicationUser : IdentityUser
 			.Select(static value => int.TryParse(value, out var parsed) ? parsed : 0)
 			.Where(static value => value > 0)
 			.ToHashSet();
+	}
+
+	public bool HasCompletedSelfSignupProfile()
+	{
+		return !string.IsNullOrWhiteSpace(FirstName)
+			&& !string.IsNullOrWhiteSpace(LastName)
+			&& !string.IsNullOrWhiteSpace(AddressLine1)
+			&& !string.IsNullOrWhiteSpace(City)
+			&& !string.IsNullOrWhiteSpace(State)
+			&& !string.IsNullOrWhiteSpace(PostalCode)
+			&& !string.IsNullOrWhiteSpace(PhoneNumber);
 	}
 }

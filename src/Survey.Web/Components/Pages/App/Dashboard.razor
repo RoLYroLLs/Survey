@@ -118,22 +118,22 @@
 
 		if (HasTenantPermission(TenantPermissionKeys.SurveysView))
 		{
-			_metricCards.Add(new DashboardMetricCard("Surveys", (await AdministrationService.GetSurveyDefinitionsAsync()).Count));
+			_metricCards.Add(new DashboardMetricCard("Surveys", (await AdministrationService.GetSurveyDefinitionsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
 		}
 
 		if (HasTenantPermission(TenantPermissionKeys.PeopleView))
 		{
-			_metricCards.Add(new DashboardMetricCard("People", (await AdministrationService.GetPeopleAsync()).Count));
+			_metricCards.Add(new DashboardMetricCard("People", (await AdministrationService.GetPeopleAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
 		}
 
 		if (HasTenantPermission(TenantPermissionKeys.AreasView))
 		{
-			_metricCards.Add(new DashboardMetricCard("Areas", (await AdministrationService.GetAreasAsync()).Count));
+			_metricCards.Add(new DashboardMetricCard("Areas", (await AdministrationService.GetAreasAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
 		}
 
 		if (HasTenantPermission(TenantPermissionKeys.GoalsView))
 		{
-			_metricCards.Add(new DashboardMetricCard("Goals", (await AdministrationService.GetGoalsAsync()).Count));
+			_metricCards.Add(new DashboardMetricCard("Goals", (await AdministrationService.GetGoalsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
 			_favoriteGoals = string.IsNullOrWhiteSpace(userId)
 				? []
 				: await AdministrationService.GetDashboardFavoriteGoalsAsync(userId);
@@ -145,12 +145,12 @@
 
 		if (HasTenantPermission(TenantPermissionKeys.AssignmentsView))
 		{
-			_metricCards.Add(new DashboardMetricCard("Assignments", (await AdministrationService.GetAssignmentsAsync()).Count));
+			_metricCards.Add(new DashboardMetricCard("Assignments", (await AdministrationService.GetAssignmentsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
 		}
 
 		if (HasTenantPermission(TenantPermissionKeys.ResponsesView))
 		{
-			_metricCards.Add(new DashboardMetricCard("Responses", (await AdministrationService.GetResponsesAsync()).Count));
+			_metricCards.Add(new DashboardMetricCard("Responses", (await AdministrationService.GetResponsesAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
 		}
 	}
 

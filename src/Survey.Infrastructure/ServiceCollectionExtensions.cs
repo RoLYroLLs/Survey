@@ -40,7 +40,7 @@ public static class ServiceCollectionExtensions
 
 		services.AddIdentityCore<ApplicationUser>(options =>
 			{
-				options.SignIn.RequireConfirmedAccount = false;
+				options.SignIn.RequireConfirmedAccount = true;
 				options.User.RequireUniqueEmail = true;
 				options.Password.RequireDigit = true;
 				options.Password.RequireUppercase = true;
@@ -247,6 +247,36 @@ public static class ServiceCollectionExtensions
 		await EnsureSqliteColumnExistsAsync(
 			connection,
 			"AspNetUsers",
+			"AddressLine1",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "AddressLine1" TEXT NULL;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
+			"AddressLine2",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "AddressLine2" TEXT NULL;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
+			"City",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "City" TEXT NULL;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
+			"State",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "State" TEXT NULL;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
+			"PostalCode",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "PostalCode" TEXT NULL;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
 			"ActiveTenantMembershipId",
 			"""ALTER TABLE "AspNetUsers" ADD COLUMN "ActiveTenantMembershipId" INTEGER NULL;""",
 			cancellationToken);
@@ -261,6 +291,12 @@ public static class ServiceCollectionExtensions
 			"AspNetUsers",
 			"IsPlatformUserEnabled",
 			"""ALTER TABLE "AspNetUsers" ADD COLUMN "IsPlatformUserEnabled" INTEGER NOT NULL DEFAULT 0;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
+			"AvatarColorHex",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "AvatarColorHex" TEXT NULL;""",
 			cancellationToken);
 
 		foreach (var tableName in new[]

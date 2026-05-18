@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Survey.Application.Services;
 using Survey.Domain;
 using Survey.Infrastructure;
 using Survey.Infrastructure.Identity;
@@ -68,6 +69,18 @@ app.MapGet("/admin/import-samples/{entity}", (string entity) =>
 		return Results.File(bytes, ImportSampleWorkbookBuilder.ContentType, definition.FileName);
 	})
 	.RequireAuthorization(SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyView));
+app.MapGet("/app/switch-tenant/{membershipId:int}", async (int membershipId, string? returnUrl, ITenantContextAccessor tenantContextAccessor) =>
+	{
+		await tenantContextAccessor.SwitchActiveTenantAsync(membershipId);
+
+		if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative) && returnUrl.StartsWith('/'))
+		{
+			return Results.LocalRedirect(returnUrl);
+		}
+
+		return Results.LocalRedirect("/app");
+	})
+	.RequireAuthorization(SurveyAuthorizationPolicies.TenantAccess);
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();
 app.MapAdditionalIdentityEndpoints();

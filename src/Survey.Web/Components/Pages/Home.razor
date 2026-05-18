@@ -1,5 +1,7 @@
 @page "/"
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ITenantContextAccessor TenantContextAccessor
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 @inject NavigationManager NavigationManager
 
 <PageTitle>Survey</PageTitle>
@@ -21,11 +23,30 @@
 		var context = await TenantContextAccessor.GetCurrentAsync();
 		if (context.IsAuthenticated)
 		{
-			target = context.HasTenantAccess
-				? "app"
-				: context.PlatformPermissions.Count > 0
-					? "admin"
-					: "app/tenants/select";
+			if (context.HasTenantAccess)
+			{
+				target = "app";
+			}
+			else if (context.PlatformPermissions.Count > 0)
+			{
+				target = "admin";
+			}
+			else
+			{
+				var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+				var user = await UserManager.GetUserAsync(authenticationState.User);
+				if (user is not null && !user.HasCompletedSelfSignupProfile())
+				{
+					target = "Account/CompleteProfile";
+				}
+				else
+				{
+					var membershipOptions = await TenantContextAccessor.GetMembershipOptionsAsync();
+					target = membershipOptions.Count > 0
+						? "app/tenants/select"
+						: "Account/CreateTenant";
+				}
+			}
 		}
 
 		NavigationManager.NavigateTo(target, forceLoad: true);

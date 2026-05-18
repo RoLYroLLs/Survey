@@ -1,0 +1,182 @@
+@page "/Account/CreateTenant"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject SurveyDbContext DbContext
+@inject TenantExecutionContext TenantExecutionContext
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Create Tenant</PageTitle>
+
+<div class="status-card narrow-card">
+	<p class="eyebrow">Step 4 of 4</p>
+	<h1>Name your tenant</h1>
+	<p class="mb-4">Your first tenant is where you’ll manage people, assignments, responses, and reporting.</p>
+
+	@if (!string.IsNullOrWhiteSpace(_errorMessage))
+	{
+		<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+	}
+
+	@if (!_isReady)
+	{
+		<p>Loading tenant setup...</p>
+	}
+	else
+	{
+		<EditForm Model="Input" OnValidSubmit="CreateTenantAsync" FormName="create-tenant" method="post">
+			<DataAnnotationsValidator />
+			<ValidationSummary />
+
+			<div class="field-stack">
+				<FieldLabel Text="Tenant Name" Required />
+				<InputText class="form-control form-control-lg" @bind-Value="Input.TenantName" />
+				<ValidationMessage For="@(() => Input.TenantName)" />
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit" disabled="@_isSaving">Create Tenant</button>
+			</div>
+		</EditForm>
+	}
+</div>
+
+@code {
+	private bool _isReady;
+	private bool _isSaving;
+	private string? _errorMessage;
+	private ApplicationUser? _user;
+
+	[SupplyParameterFromForm]
+	private CreateTenantModel Input { get; set; } = default!;
+
+	[SupplyParameterFromQuery]
+	private string? ReturnUrl { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		Input ??= new();
+
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		_user = await UserManager.GetUserAsync(authenticationState.User);
+		if (_user is null)
+		{
+			_errorMessage = "The signed-in account could not be loaded.";
+			return;
+		}
+
+		if (_user.ActiveTenantMembershipId.HasValue)
+		{
+			RedirectManager.RedirectTo(GetPostCreateUrl());
+			return;
+		}
+
+		if (!_user.HasCompletedSelfSignupProfile())
+		{
+			RedirectManager.RedirectTo(BuildProfileUrl());
+			return;
+		}
+
+		if (string.IsNullOrWhiteSpace(Input.TenantName))
+		{
+			Input.TenantName = "My First Tenant";
+		}
+
+		_isReady = true;
+	}
+
+	private async Task CreateTenantAsync()
+	{
+		if (_isSaving || _user is null)
+		{
+			return;
+		}
+
+		_isSaving = true;
+		_errorMessage = null;
+		var transactionCommitted = false;
+
+		await using var transaction = await DbContext.Database.BeginTransactionAsync();
+
+		try
+		{
+			var membershipCount = await DbContext.TenantMemberships
+				.AsNoTracking()
+				.CountAsync(membership => membership.UserId == _user.Id);
+			if (membershipCount > 0)
+			{
+				throw new InvalidOperationException("This account already belongs to a tenant.");
+			}
+
+			var tenant = new Tenant(Input.TenantName);
+			DbContext.Tenants.Add(tenant);
+			await DbContext.SaveChangesAsync();
+
+			var membership = new TenantMembership(tenant.Id, _user.Id, TenantRole.Owner);
+			DbContext.TenantMemberships.Add(membership);
+			await DbContext.SaveChangesAsync();
+
+			_user.ActiveTenantMembershipId = membership.Id;
+			var updateResult = await UserManager.UpdateAsync(_user);
+			if (!updateResult.Succeeded)
+			{
+				throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
+			}
+
+			TenantExecutionContext.UseTenant(tenant.Id);
+			DbContext.TenantSettings.Add(new TenantSetting(tenant.Id, SiteThemePresetCatalog.DefaultPresetKey));
+			await DbContext.SaveChangesAsync();
+			await transaction.CommitAsync();
+			transactionCommitted = true;
+
+			await SignInManager.RefreshSignInAsync(_user);
+			NavigationManager.NavigateTo(GetPostCreateUrl(), forceLoad: true);
+		}
+		catch (Exception ex)
+		{
+			if (!transactionCommitted)
+			{
+				await transaction.RollbackAsync();
+			}
+
+			_errorMessage = ex.Message;
+		}
+		finally
+		{
+			TenantExecutionContext.Clear();
+			_isSaving = false;
+		}
+	}
+
+	private string BuildProfileUrl()
+	{
+		return string.IsNullOrWhiteSpace(ReturnUrl)
+			? "Account/CompleteProfile"
+			: $"Account/CompleteProfile?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+	}
+
+	private string GetPostCreateUrl()
+	{
+		if (!string.IsNullOrWhiteSpace(ReturnUrl)
+			&& Uri.IsWellFormedUriString(ReturnUrl, UriKind.Relative)
+			&& ReturnUrl.StartsWith('/'))
+		{
+			return ReturnUrl;
+		}
+
+		return "/app";
+	}
+
+	private sealed class CreateTenantModel
+	{
+		[Required]
+		[StringLength(200)]
+		public string TenantName { get; set; } = "My First Tenant";
+	}
+}

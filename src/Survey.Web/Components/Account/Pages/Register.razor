@@ -1,73 +1,74 @@
 @page "/Account/Register"
 @using System.ComponentModel.DataAnnotations
+@using System.Text
+@using System.Text.Encodings.Web
 @using Microsoft.AspNetCore.Identity
-@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.WebUtilities
 @inject UserManager<ApplicationUser> UserManager
-@inject SignInManager<ApplicationUser> SignInManager
-@inject SurveyDbContext DbContext
-@inject TenantExecutionContext TenantExecutionContext
+@inject IEmailSender<ApplicationUser> EmailSender
 @inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Create Tenant</PageTitle>
+<PageTitle>Create Account</PageTitle>
 
 <div class="status-card narrow-card">
-	<p class="eyebrow">Get Started</p>
-	<h1>Create your tenant</h1>
-	<p class="mb-4">Create your organization and the first owner account. This account becomes the initial tenant owner and administrator.</p>
+	<p class="eyebrow">Step 1 of 4</p>
+	<h1>Create your account</h1>
+	<p class="mb-4">Start with your email, username, and password. You’ll verify your email before continuing.</p>
 
 	@if (!string.IsNullOrWhiteSpace(_errorMessage))
 	{
 		<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
 	}
 
-	<EditForm Model="_model" OnValidSubmit="RegisterAsync">
+	<EditForm Model="Input" OnValidSubmit="RegisterAsync" FormName="register-account" method="post">
 		<DataAnnotationsValidator />
 		<ValidationSummary />
 
 		<div class="form-grid">
 			<div class="field-stack">
-				<FieldLabel Text="Tenant Name" Required />
-				<InputText class="form-control" @bind-Value="_model.TenantName" />
-				<ValidationMessage For="@(() => _model.TenantName)" />
-			</div>
-			<div class="field-stack">
-				<FieldLabel Text="First Name" Required />
-				<InputText class="form-control" @bind-Value="_model.FirstName" />
-				<ValidationMessage For="@(() => _model.FirstName)" />
-			</div>
-			<div class="field-stack">
-				<FieldLabel Text="Last Name" Required />
-				<InputText class="form-control" @bind-Value="_model.LastName" />
-				<ValidationMessage For="@(() => _model.LastName)" />
-			</div>
-			<div class="field-stack">
 				<FieldLabel Text="Email" Required />
-				<InputText class="form-control" @bind-Value="_model.Email" />
-				<ValidationMessage For="@(() => _model.Email)" />
+				<InputText class="form-control form-control-lg" @bind-Value="Input.Email" autocomplete="email username" />
+				<ValidationMessage For="@(() => Input.Email)" />
+			</div>
+			<div class="field-stack">
+				<FieldLabel Text="Username" Required />
+				<InputText class="form-control form-control-lg" @bind-Value="Input.UserName" autocomplete="username" />
+				<ValidationMessage For="@(() => Input.UserName)" />
 			</div>
 			<div class="field-stack">
 				<FieldLabel Text="Password" Required />
-				<SecretInput class="form-control" @bind-Value="_model.Password" />
-				<ValidationMessage For="@(() => _model.Password)" />
+				<SecretInput class="form-control form-control-lg" @bind-Value="Input.Password" autocomplete="new-password" />
+				<ValidationMessage For="@(() => Input.Password)" />
 			</div>
 			<div class="field-stack">
 				<FieldLabel Text="Confirm Password" Required />
-				<SecretInput class="form-control" @bind-Value="_model.ConfirmPassword" />
-				<ValidationMessage For="@(() => _model.ConfirmPassword)" />
+				<SecretInput class="form-control form-control-lg" @bind-Value="Input.ConfirmPassword" autocomplete="new-password" />
+				<ValidationMessage For="@(() => Input.ConfirmPassword)" />
 			</div>
 		</div>
 
 		<div class="form-footer">
-			<button class="btn btn-primary" type="submit" disabled="@_isSaving">Create Tenant</button>
+			<button class="btn btn-primary" type="submit" disabled="@_isSaving">Continue</button>
 			<a class="btn btn-outline-primary" href="Account/Login">Back to Login</a>
 		</div>
 	</EditForm>
 </div>
 
 @code {
-	private readonly RegisterTenantModel _model = new();
 	private bool _isSaving;
 	private string? _errorMessage;
+
+	[SupplyParameterFromForm]
+	private RegisterAccountModel Input { get; set; } = default!;
+
+	[SupplyParameterFromQuery]
+	private string? ReturnUrl { get; set; }
+
+	protected override void OnInitialized()
+	{
+		Input ??= new();
+	}
 
 	private async Task RegisterAsync()
 	{
@@ -79,86 +80,77 @@
 		_isSaving = true;
 		_errorMessage = null;
 
-		await using var transaction = await DbContext.Database.BeginTransactionAsync();
-
 		try
 		{
-			var trimmedEmail = _model.Email.Trim();
+			var trimmedEmail = Input.Email.Trim();
+			var trimmedUserName = Input.UserName.Trim();
 			var existingUser = await UserManager.FindByEmailAsync(trimmedEmail);
 			if (existingUser is not null)
 			{
 				throw new InvalidOperationException("An account with that email already exists.");
 			}
 
-			var tenant = new Tenant(_model.TenantName);
-			DbContext.Tenants.Add(tenant);
-			await DbContext.SaveChangesAsync();
+			var existingUserName = await UserManager.FindByNameAsync(trimmedUserName);
+			if (existingUserName is not null)
+			{
+				throw new InvalidOperationException("That username is already in use.");
+			}
 
 			var user = new ApplicationUser
 			{
-				UserName = trimmedEmail,
+				UserName = trimmedUserName,
 				Email = trimmedEmail,
-				EmailConfirmed = true,
-				FirstName = _model.FirstName.Trim(),
-				LastName = _model.LastName.Trim(),
+				EmailConfirmed = false,
 				IsPlatformSuperAdmin = false,
 				IsPlatformUserEnabled = false
 			};
+			UserAvatarPalette.EnsureAssigned(user);
 
-			var createResult = await UserManager.CreateAsync(user, _model.Password);
+			var createResult = await UserManager.CreateAsync(user, Input.Password);
 			if (!createResult.Succeeded)
 			{
 				throw new InvalidOperationException(string.Join("; ", createResult.Errors.Select(static error => error.Description)));
 			}
 
-			var membership = new TenantMembership(tenant.Id, user.Id, TenantRole.Owner);
-			DbContext.TenantMemberships.Add(membership);
-			await DbContext.SaveChangesAsync();
+			var userId = await UserManager.GetUserIdAsync(user);
+			var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+			code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+			var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+				NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+				new Dictionary<string, object?>
+				{
+					["userId"] = userId,
+					["code"] = code,
+					["returnUrl"] = ReturnUrl
+				});
 
-			user.ActiveTenantMembershipId = membership.Id;
-			var updateResult = await UserManager.UpdateAsync(user);
-			if (!updateResult.Succeeded)
+			await EmailSender.SendConfirmationLinkAsync(user, trimmedEmail, HtmlEncoder.Default.Encode(callbackUrl));
+			RedirectManager.RedirectTo("Account/RegisterConfirmation", new()
 			{
-				throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
-			}
-
-			TenantExecutionContext.UseTenant(tenant.Id);
-			DbContext.TenantSettings.Add(new TenantSetting(tenant.Id, SiteThemePresetCatalog.DefaultPresetKey));
-			await DbContext.SaveChangesAsync();
-			await transaction.CommitAsync();
-			await SignInManager.SignInAsync(user, isPersistent: false);
-			NavigationManager.NavigateTo("/app", forceLoad: true);
+				["email"] = trimmedEmail,
+				["returnUrl"] = ReturnUrl
+			});
 		}
 		catch (Exception ex)
 		{
-			await transaction.RollbackAsync();
 			_errorMessage = ex.Message;
 		}
 		finally
 		{
-			TenantExecutionContext.Clear();
 			_isSaving = false;
 		}
 	}
 
-	private sealed class RegisterTenantModel
+	private sealed class RegisterAccountModel
 	{
-		[Required]
-		[StringLength(200)]
-		public string TenantName { get; set; } = string.Empty;
-
-		[Required]
-		[StringLength(100)]
-		public string FirstName { get; set; } = string.Empty;
-
-		[Required]
-		[StringLength(100)]
-		public string LastName { get; set; } = string.Empty;
-
 		[Required]
 		[EmailAddress]
 		[StringLength(256)]
 		public string Email { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(256)]
+		public string UserName { get; set; } = string.Empty;
 
 		[Required]
 		[StringLength(100)]

@@ -11,7 +11,7 @@
 
 <PageTitle>Register confirmation</PageTitle>
 
-<h1>Register confirmation</h1>
+<h1>Verify your email</h1>
 
 <StatusMessage Message="@statusMessage" />
 
@@ -21,10 +21,11 @@
         This app does not currently have a real email sender registered, see <a href="https://aka.ms/aspaccountconf">these docs</a> for how to configure a real email sender.
         Normally this would be emailed: <a href="@emailConfirmationLink">Click here to confirm your account</a>
     </p>
+    <p>After confirmation, you’ll finish your profile and then name your tenant.</p>
 }
 else
 {
-    <p role="alert">Please check your email to confirm your account.</p>
+    <p role="alert">Please check your email to confirm your account. After confirmation, you’ll finish your profile and then name your tenant.</p>
 }
 
 @code {

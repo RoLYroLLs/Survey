@@ -60,7 +60,14 @@ public class SurveyDbContext(
 			entity.Property(user => user.FirstName).HasMaxLength(100);
 			entity.Property(user => user.LastName).HasMaxLength(100);
 			entity.Property(user => user.FavoriteGoalIds).HasMaxLength(2000);
+			entity.Property(user => user.AddressLine1).HasMaxLength(200);
+			entity.Property(user => user.AddressLine2).HasMaxLength(200);
+			entity.Property(user => user.City).HasMaxLength(100);
+			entity.Property(user => user.State).HasMaxLength(100);
+			entity.Property(user => user.PostalCode).HasMaxLength(20);
+			entity.Property(user => user.PhoneNumber).HasMaxLength(50);
 			entity.Property(user => user.ActiveTenantMembershipId);
+			entity.Property(user => user.AvatarColorHex).HasMaxLength(16);
 			entity.HasMany(user => user.TenantMemberships)
 				.WithOne()
 				.HasForeignKey(membership => membership.UserId)
