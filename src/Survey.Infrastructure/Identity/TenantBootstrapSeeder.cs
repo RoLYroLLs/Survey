@@ -25,6 +25,11 @@ internal sealed class TenantBootstrapSeeder(
 
 		try
 		{
+			if (!await _userManager.Users.AnyAsync(cancellationToken))
+			{
+				return;
+			}
+
 			var defaultTenant = await EnsureDefaultTenantAsync(cancellationToken);
 			await BackfillTenantIdsAsync(defaultTenant.Id, cancellationToken);
 			await EnsureTenantSettingAsync(defaultTenant.Id, cancellationToken);

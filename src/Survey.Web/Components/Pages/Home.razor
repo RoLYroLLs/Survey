@@ -1,4 +1,5 @@
 @page "/"
+@using Microsoft.EntityFrameworkCore
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ITenantContextAccessor TenantContextAccessor
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
@@ -15,6 +16,12 @@
 	{
 		if (!firstRender)
 		{
+			return;
+		}
+
+		if (!await UserManager.Users.AnyAsync())
+		{
+			NavigationManager.NavigateTo("Account/SetupPlatformAdmin", forceLoad: true);
 			return;
 		}
 

@@ -4,6 +4,7 @@
 @using System.Text.Encodings.Web
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.EntityFrameworkCore
 @inject UserManager<ApplicationUser> UserManager
 @inject IEmailSender<ApplicationUser> EmailSender
 @inject NavigationManager NavigationManager
@@ -65,8 +66,14 @@
 	[SupplyParameterFromQuery]
 	private string? ReturnUrl { get; set; }
 
-	protected override void OnInitialized()
+	protected override async Task OnInitializedAsync()
 	{
+		if (!await UserManager.Users.AnyAsync())
+		{
+			NavigationManager.NavigateTo("Account/SetupPlatformAdmin", forceLoad: true);
+			return;
+		}
+
 		Input ??= new();
 	}
 
