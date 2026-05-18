@@ -9,7 +9,7 @@
 		<div>
 			<p class="eyebrow">Submissions</p>
 			<h1>Responses</h1>
-			<p>Every response stores the submitted contact snapshot and the audit trail for self-service or employee-assisted completion.</p>
+			<p>View the survey responses that have been submitted.</p>
 		</div>
 	</div>
 
@@ -24,6 +24,7 @@
 				<thead>
 					<tr>
 						<th>Respondent</th>
+						<th>Person / Location</th>
 						<th>ZIP / County</th>
 						<th>Survey</th>
 						<th>Submitted By</th>
@@ -36,13 +37,14 @@
 					{
 						<tr>
 							<td>@item.RespondentName</td>
+							<td>@item.PersonName<br /><small>@item.LocationName</small></td>
 							<td>@item.PostalCode<br /><small>@item.CountyName</small></td>
 							<td>@item.SurveyName<br /><small>@item.VersionName</small></td>
 							<td>@item.SubmittedByLabel</td>
 							<td>@item.SubmittedUtc.LocalDateTime.ToString("g")</td>
 							<td>
 								<div class="table-actions">
-									<a class="btn btn-sm btn-outline-primary" href="admin/responses/@item.Id">View</a>
+									<a class="btn btn-sm btn-outline-primary" href="/admin/responses/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>

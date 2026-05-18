@@ -9,7 +9,7 @@
 		<div>
 			<p class="eyebrow">Geographic Areas</p>
 			<h1>Areas</h1>
-			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "Group counties into reusable areas such as South Florida or Central Florida, then use them for goals and reporting." : $"Showing areas that include {_filterLabel}.")</p>
+			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "View the named areas available for reporting and goals." : $"Showing areas that include {_filterLabel}.")</p>
 		</div>
 		<div class="toolbar">
 			@if (CountyId.HasValue)
@@ -49,7 +49,7 @@
 							<td>@item.UpdatedUtc.LocalDateTime.ToString("g")</td>
 							<td>
 								<div class="table-actions">
-									<a class="btn btn-sm btn-outline-primary" href="admin/areas/@item.Id/edit">Edit</a>
+								<a class="btn btn-sm btn-outline-primary" href="admin/areas/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>

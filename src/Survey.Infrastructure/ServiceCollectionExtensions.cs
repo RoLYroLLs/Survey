@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,13 +70,16 @@ public static class ServiceCollectionExtensions
 		if (databaseProvider == DatabaseOptions.Sqlite && !string.IsNullOrWhiteSpace(connectionString))
 		{
 			EnsureSqliteDirectoryExists(connectionString);
+			await ClearStaleSqliteMigrationLockAsync(connectionString, cancellationToken);
+			await RepairLegacySqliteSchemaAsync(connectionString, cancellationToken);
 		}
 
 		var dbContext = serviceProvider.GetRequiredService<SurveyDbContext>();
 		await dbContext.Database.MigrateAsync(cancellationToken);
 
 		var geographySeeder = serviceProvider.GetRequiredService<GeographyDataSeeder>();
-		await geographySeeder.SeedAsync(cancellationToken);
+		var forceGeographySeed = configuration.GetValue<bool>("Seeding:ForceGeography");
+		await geographySeeder.SeedAsync(forceGeographySeed, cancellationToken);
 
 		var siteSettingsSeeder = serviceProvider.GetRequiredService<SiteSettingsSeeder>();
 		await siteSettingsSeeder.SeedAsync(cancellationToken);
@@ -122,5 +126,115 @@ public static class ServiceCollectionExtensions
 		{
 			Directory.CreateDirectory(relativeDirectory);
 		}
+	}
+
+	private static async Task ClearStaleSqliteMigrationLockAsync(string connectionString, CancellationToken cancellationToken)
+	{
+		await using var connection = new SqliteConnection(connectionString);
+		await connection.OpenAsync(cancellationToken);
+
+		await using var existsCommand = connection.CreateCommand();
+		existsCommand.CommandText = """
+			SELECT COUNT(*)
+			FROM sqlite_master
+			WHERE type = 'table' AND name = '__EFMigrationsLock';
+			""";
+		var exists = Convert.ToInt32(await existsCommand.ExecuteScalarAsync(cancellationToken)) > 0;
+		if (!exists)
+		{
+			return;
+		}
+
+		await using var timestampCommand = connection.CreateCommand();
+		timestampCommand.CommandText = """SELECT "Timestamp" FROM "__EFMigrationsLock" WHERE "Id" = 1;""";
+		var timestampValue = await timestampCommand.ExecuteScalarAsync(cancellationToken) as string;
+		if (string.IsNullOrWhiteSpace(timestampValue)
+			|| !DateTimeOffset.TryParse(timestampValue, out var timestampUtc)
+			|| DateTimeOffset.UtcNow - timestampUtc < TimeSpan.FromMinutes(1))
+		{
+			return;
+		}
+
+		await using var deleteCommand = connection.CreateCommand();
+		deleteCommand.CommandText = """DELETE FROM "__EFMigrationsLock";""";
+		await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task RepairLegacySqliteSchemaAsync(string connectionString, CancellationToken cancellationToken)
+	{
+		await using var connection = new SqliteConnection(connectionString);
+		await connection.OpenAsync(cancellationToken);
+
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"SurveyDefinitions",
+			"IsArchived",
+			"""ALTER TABLE "SurveyDefinitions" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""",
+			cancellationToken);
+
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"SurveyVersions",
+			"IsArchived",
+			"""ALTER TABLE "SurveyVersions" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""",
+			cancellationToken);
+
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"SurveyAssignments",
+			"IsArchived",
+			"""ALTER TABLE "SurveyAssignments" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""",
+			cancellationToken);
+	}
+
+	private static async Task EnsureSqliteColumnExistsAsync(
+		SqliteConnection connection,
+		string tableName,
+		string columnName,
+		string alterSql,
+		CancellationToken cancellationToken)
+	{
+		if (!await SqliteTableExistsAsync(connection, tableName, cancellationToken))
+		{
+			return;
+		}
+
+		if (await SqliteColumnExistsAsync(connection, tableName, columnName, cancellationToken))
+		{
+			return;
+		}
+
+		await using var alterCommand = connection.CreateCommand();
+		alterCommand.CommandText = alterSql;
+		await alterCommand.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task<bool> SqliteTableExistsAsync(SqliteConnection connection, string tableName, CancellationToken cancellationToken)
+	{
+		await using var command = connection.CreateCommand();
+		command.CommandText = """
+			SELECT COUNT(*)
+			FROM sqlite_master
+			WHERE type = 'table' AND name = $tableName;
+			""";
+		command.Parameters.AddWithValue("$tableName", tableName);
+		return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+	}
+
+	private static async Task<bool> SqliteColumnExistsAsync(SqliteConnection connection, string tableName, string columnName, CancellationToken cancellationToken)
+	{
+		await using var command = connection.CreateCommand();
+		command.CommandText = $"""PRAGMA table_info("{tableName}");""";
+
+		await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

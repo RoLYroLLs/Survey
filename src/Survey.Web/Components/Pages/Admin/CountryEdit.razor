@@ -1,17 +1,20 @@
 @page "/admin/countries/new"
+@page "/admin/countries/{Id:int}"
 @page "/admin/countries/{Id:int}/edit"
+@implements IDisposable
 @attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Country" : "Add Country")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Geography</p>
-			<h1>@(Id.HasValue ? "Edit Country" : "Add Country")</h1>
-			<p>Use ISO codes so imports and address matching can stay reliable across environments.</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update a country record.</p>
 		</div>
 	</div>
 
@@ -21,31 +24,58 @@
 			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
 		}
 
-		<EditForm Model="_model" OnValidSubmit="SaveAsync">
-			<DataAnnotationsValidator />
-			<div class="form-grid form-grid--single">
-				<div class="field-stack">
-					<label>Name</label>
-					<InputText class="form-control" @bind-Value="_model.Name" />
-					<ValidationMessage For="@(() => _model.Name)" />
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Name</strong>
+						<span>@DisplayOrDash(_model.Name)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>ISO2 Code</strong>
+						<span>@DisplayOrDash(_model.Iso2Code)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>ISO3 Code</strong>
+						<span>@DisplayOrDash(_model.Iso3Code)</span>
+					</div>
 				</div>
-				<div class="field-stack">
-					<label>ISO2 Code</label>
-					<InputText class="form-control" @bind-Value="_model.Iso2Code" />
-					<ValidationMessage For="@(() => _model.Iso2Code)" />
-				</div>
-				<div class="field-stack">
-					<label>ISO3 Code</label>
-					<InputText class="form-control" @bind-Value="_model.Iso3Code" />
-					<ValidationMessage For="@(() => _model.Iso3Code)" />
-				</div>
-			</div>
 
-			<div class="form-footer">
-				<button class="btn btn-primary" type="submit">Save Country</button>
-				<a class="btn btn-outline-primary" href="admin/countries">Back to Countries</a>
+				<div class="form-footer">
+					<a class="btn btn-primary" href="/admin/countries/@Id/edit">Edit Country</a>
+					<a class="btn btn-outline-primary" href="admin/countries">Back to Countries</a>
+				</div>
 			</div>
-		</EditForm>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<label>Name</label>
+						<InputText class="form-control" @bind-Value="_model.Name" />
+						<ValidationMessage For="@(() => _model.Name)" />
+					</div>
+					<div class="field-stack">
+						<label>ISO2 Code</label>
+						<InputText class="form-control" @bind-Value="_model.Iso2Code" />
+						<ValidationMessage For="@(() => _model.Iso2Code)" />
+					</div>
+					<div class="field-stack">
+						<label>ISO3 Code</label>
+						<InputText class="form-control" @bind-Value="_model.Iso3Code" />
+						<ValidationMessage For="@(() => _model.Iso3Code)" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Country</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/admin/countries/{Id.Value}" : "admin/countries")">Cancel</a>
+				</div>
+			</EditForm>
+		}
 	</div>
 </div>
 
@@ -55,6 +85,12 @@
 
 	private CountryEditModel _model = new();
 	private string? _errorMessage;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -62,16 +98,44 @@
 		_errorMessage = null;
 	}
 
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
 	private async Task SaveAsync()
 	{
 		try
 		{
-			await AdministrationService.SaveCountryAsync(_model);
-			NavigationManager.NavigateTo("admin/countries");
+			var savedId = await AdministrationService.SaveCountryAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Country saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"admin/countries/{savedId}");
 		}
 		catch (Exception ex)
 		{
-			_errorMessage = ex.Message;
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
 		}
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Country";
+		}
+
+		return Id.HasValue ? "Edit Country" : "Add Country";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
 	}
 }

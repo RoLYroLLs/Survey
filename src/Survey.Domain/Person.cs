@@ -13,13 +13,24 @@ public class Person
 	public string? State { get; private set; }
 	public string HomeAddress { get; private set; } = string.Empty;
 	public string? PostalCode { get; private set; }
+	public int? MailingPostalAddressId { get; private set; }
+	public string? MailingAddressLine1 { get; private set; }
+	public string? MailingAddressLine2 { get; private set; }
+	public string? MailingCity { get; private set; }
+	public string? MailingState { get; private set; }
+	public string MailingAddress { get; private set; } = string.Empty;
+	public string? MailingPostalCode { get; private set; }
 	public string PhoneNumber { get; private set; } = string.Empty;
 	public string? BestTimeToContact { get; private set; }
+	public string? PreferredContactMethod { get; private set; }
 	public string Email { get; private set; } = string.Empty;
 	public DateTimeOffset CreatedUtc { get; private set; }
 	public DateTimeOffset UpdatedUtc { get; private set; }
 	public PostalAddress? PostalAddress { get; private set; }
-	public ICollection<SurveyAssignment> Assignments { get; } = new List<SurveyAssignment>();
+	public PostalAddress? MailingPostalAddress { get; private set; }
+	public ICollection<PersonPhone> Phones { get; } = new List<PersonPhone>();
+	public ICollection<PersonEmail> Emails { get; } = new List<PersonEmail>();
+	public ICollection<Location> Locations { get; } = new List<Location>();
 
 	private Person()
 	{
@@ -35,13 +46,21 @@ public class Person
 		string city,
 		string state,
 		string? postalCode,
-		string phoneNumber,
+		int? mailingPostalAddressId,
+		string mailingAddressLine1,
+		string? mailingAddressLine2,
+		string mailingCity,
+		string mailingState,
+		string? mailingPostalCode,
+		string? phoneNumber,
 		string? bestTimeToContact,
-		string email,
-		string? countryName = null)
+		string? preferredContactMethod,
+		string? email,
+		string? countryName = null,
+		string? mailingCountryName = null)
 	{
 		CreatedUtc = DateTimeOffset.UtcNow;
-		Update(firstName, middleName, lastName, postalAddressId, addressLine1, addressLine2, city, state, postalCode, phoneNumber, bestTimeToContact, email, countryName);
+		Update(firstName, middleName, lastName, postalAddressId, addressLine1, addressLine2, city, state, postalCode, mailingPostalAddressId, mailingAddressLine1, mailingAddressLine2, mailingCity, mailingState, mailingPostalCode, phoneNumber, bestTimeToContact, preferredContactMethod, email, countryName, mailingCountryName);
 	}
 
 	public void Update(
@@ -54,14 +73,22 @@ public class Person
 		string city,
 		string state,
 		string? postalCode,
-		string phoneNumber,
+		int? mailingPostalAddressId,
+		string mailingAddressLine1,
+		string? mailingAddressLine2,
+		string mailingCity,
+		string mailingState,
+		string? mailingPostalCode,
+		string? phoneNumber,
 		string? bestTimeToContact,
-		string email,
-		string? countryName = null)
+		string? preferredContactMethod,
+		string? email,
+		string? countryName = null,
+		string? mailingCountryName = null)
 	{
-		FirstName = RequireValue(firstName, nameof(firstName), 100);
+		FirstName = CleanOptional(firstName, 100) ?? string.Empty;
 		MiddleName = CleanOptional(middleName, 100);
-		LastName = RequireValue(lastName, nameof(lastName), 100);
+		LastName = CleanOptional(lastName, 100) ?? string.Empty;
 		PostalAddressId = postalAddressId > 0 ? postalAddressId : null;
 		AddressLine1 = RequireValue(addressLine1, nameof(addressLine1), 200);
 		AddressLine2 = CleanOptional(addressLine2, 200);
@@ -70,9 +97,24 @@ public class Person
 		PostalCode = PostalCodeNormalizer.Normalize(postalCode, nameof(postalCode))
 			?? throw new ArgumentException("A value is required.", nameof(postalCode));
 		HomeAddress = AddressFormatter.Format(AddressLine1, AddressLine2, City, State, PostalCode, countryName);
-		PhoneNumber = RequireValue(phoneNumber, nameof(phoneNumber), 50);
+		MailingPostalAddressId = mailingPostalAddressId > 0 ? mailingPostalAddressId : null;
+		MailingAddressLine1 = RequireValue(mailingAddressLine1, nameof(mailingAddressLine1), 200);
+		MailingAddressLine2 = CleanOptional(mailingAddressLine2, 200);
+		MailingCity = RequireValue(mailingCity, nameof(mailingCity), 100);
+		MailingState = RequireValue(mailingState, nameof(mailingState), 100);
+		MailingPostalCode = PostalCodeNormalizer.Normalize(mailingPostalCode, nameof(mailingPostalCode))
+			?? throw new ArgumentException("A value is required.", nameof(mailingPostalCode));
+		MailingAddress = AddressFormatter.Format(MailingAddressLine1, MailingAddressLine2, MailingCity, MailingState, MailingPostalCode, mailingCountryName);
+		UpdatePrimaryContactSnapshot(phoneNumber, email);
 		BestTimeToContact = CleanOptional(bestTimeToContact, 100);
-		Email = RequireValue(email, nameof(email), 256);
+		PreferredContactMethod = CleanOptional(preferredContactMethod, 50);
+		UpdatedUtc = DateTimeOffset.UtcNow;
+	}
+
+	public void UpdatePrimaryContactSnapshot(string? phoneNumber, string? email)
+	{
+		PhoneNumber = CleanOptional(phoneNumber, 50) ?? string.Empty;
+		Email = CleanOptional(email, 256) ?? string.Empty;
 		UpdatedUtc = DateTimeOffset.UtcNow;
 	}
 

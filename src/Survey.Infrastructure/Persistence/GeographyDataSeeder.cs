@@ -8,9 +8,19 @@ namespace Survey.Infrastructure.Persistence;
 internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 {
 	private readonly SurveyDbContext _dbContext = dbContext;
+	private const string GeographySeedKey = "geography.reference-data";
+	private const int GeographySeedVersion = 1;
 
-	public async Task SeedAsync(CancellationToken cancellationToken = default)
+	public async Task SeedAsync(bool forceRun = false, CancellationToken cancellationToken = default)
 	{
+		var seedState = await _dbContext.SeedStates
+			.FirstOrDefaultAsync(state => state.Key == GeographySeedKey, cancellationToken);
+
+		if (!forceRun && seedState?.Version >= GeographySeedVersion)
+		{
+			return;
+		}
+
 		var unitedStates = await UpsertCountryAsync("United States of America", "US", "USA", cancellationToken);
 		var stateLookup = await UpsertStateProvincesAsync(unitedStates.Id, cancellationToken);
 
@@ -19,6 +29,17 @@ internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 			await UpsertFloridaCountiesAsync(floridaId, cancellationToken);
 			await UpsertFloridaZipCountyMappingsAsync(floridaId, cancellationToken);
 		}
+
+		if (seedState is null)
+		{
+			_dbContext.SeedStates.Add(new SeedState(GeographySeedKey, GeographySeedVersion));
+		}
+		else
+		{
+			seedState.MarkApplied(GeographySeedVersion);
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
 	}
 
 	private async Task<Country> UpsertCountryAsync(string name, string iso2Code, string iso3Code, CancellationToken cancellationToken)

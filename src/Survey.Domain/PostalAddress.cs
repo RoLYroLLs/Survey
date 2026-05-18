@@ -18,7 +18,11 @@ public class PostalAddress
 	public StateProvince? StateProvince { get; private set; }
 	public County? County { get; private set; }
 	public ICollection<Person> People { get; } = new List<Person>();
+	public ICollection<Person> PersonMailingAddresses { get; } = new List<Person>();
+	public ICollection<Location> Locations { get; } = new List<Location>();
+	public ICollection<Location> LocationMailingAddresses { get; } = new List<Location>();
 	public ICollection<SurveyResponse> SurveyResponses { get; } = new List<SurveyResponse>();
+	public ICollection<SurveyResponse> SurveyResponseMailingAddresses { get; } = new List<SurveyResponse>();
 
 	private PostalAddress()
 	{

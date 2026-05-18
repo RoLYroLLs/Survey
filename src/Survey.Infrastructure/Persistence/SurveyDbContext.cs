@@ -13,10 +13,16 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : Identi
 	public DbSet<County> Counties => Set<County>();
 	public DbSet<PostalAddress> PostalAddresses => Set<PostalAddress>();
 	public DbSet<Person> People => Set<Person>();
+	public DbSet<PersonPhone> PersonPhones => Set<PersonPhone>();
+	public DbSet<PersonEmail> PersonEmails => Set<PersonEmail>();
+	public DbSet<Location> Locations => Set<Location>();
+	public DbSet<LocationPhone> LocationPhones => Set<LocationPhone>();
+	public DbSet<LocationEmail> LocationEmails => Set<LocationEmail>();
 	public DbSet<Area> Areas => Set<Area>();
 	public DbSet<AreaCounty> AreaCounties => Set<AreaCounty>();
 	public DbSet<Goal> Goals => Set<Goal>();
 	public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
+	public DbSet<SeedState> SeedStates => Set<SeedState>();
 	public DbSet<SurveyDefinition> SurveyDefinitions => Set<SurveyDefinition>();
 	public DbSet<SurveyVersion> SurveyVersions => Set<SurveyVersion>();
 	public DbSet<SurveySection> SurveySections => Set<SurveySection>();
@@ -107,14 +113,99 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : Identi
 			entity.Property(person => person.State).HasMaxLength(100);
 			entity.Property(person => person.HomeAddress).HasMaxLength(500).IsRequired();
 			entity.Property(person => person.PostalCode).HasMaxLength(20);
+			entity.Property(person => person.MailingPostalAddressId);
+			entity.Property(person => person.MailingAddressLine1).HasMaxLength(200);
+			entity.Property(person => person.MailingAddressLine2).HasMaxLength(200);
+			entity.Property(person => person.MailingCity).HasMaxLength(100);
+			entity.Property(person => person.MailingState).HasMaxLength(100);
+			entity.Property(person => person.MailingAddress).HasMaxLength(500).IsRequired();
+			entity.Property(person => person.MailingPostalCode).HasMaxLength(20);
 			entity.Property(person => person.PhoneNumber).HasMaxLength(50).IsRequired();
 			entity.Property(person => person.BestTimeToContact).HasMaxLength(100);
+			entity.Property(person => person.PreferredContactMethod).HasMaxLength(50);
 			entity.Property(person => person.Email).HasMaxLength(256).IsRequired();
 			entity.HasIndex(person => person.Email);
 			entity.HasOne(person => person.PostalAddress)
 				.WithMany(address => address.People)
 				.HasForeignKey(person => person.PostalAddressId)
 				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(person => person.MailingPostalAddress)
+				.WithMany(address => address.PersonMailingAddresses)
+				.HasForeignKey(person => person.MailingPostalAddressId)
+				.OnDelete(DeleteBehavior.Restrict);
+		});
+
+		builder.Entity<PersonPhone>(entity =>
+		{
+			entity.Property(phone => phone.Label).HasMaxLength(50).IsRequired();
+			entity.Property(phone => phone.PhoneNumber).HasMaxLength(50).IsRequired();
+			entity.HasOne(phone => phone.Person)
+				.WithMany(person => person.Phones)
+				.HasForeignKey(phone => phone.PersonId)
+				.OnDelete(DeleteBehavior.Cascade);
+		});
+
+		builder.Entity<PersonEmail>(entity =>
+		{
+			entity.Property(email => email.Label).HasMaxLength(50).IsRequired();
+			entity.Property(email => email.EmailAddress).HasMaxLength(256).IsRequired();
+			entity.HasOne(email => email.Person)
+				.WithMany(person => person.Emails)
+				.HasForeignKey(email => email.PersonId)
+				.OnDelete(DeleteBehavior.Cascade);
+		});
+
+		builder.Entity<Location>(entity =>
+		{
+			entity.Property(location => location.Nickname).HasMaxLength(200).IsRequired();
+			entity.Property(location => location.PostalAddressId);
+			entity.Property(location => location.AddressLine1).HasMaxLength(200);
+			entity.Property(location => location.AddressLine2).HasMaxLength(200);
+			entity.Property(location => location.City).HasMaxLength(100);
+			entity.Property(location => location.State).HasMaxLength(100);
+			entity.Property(location => location.HomeAddress).HasMaxLength(500).IsRequired();
+			entity.Property(location => location.PostalCode).HasMaxLength(20);
+			entity.Property(location => location.MailingPostalAddressId);
+			entity.Property(location => location.MailingAddressLine1).HasMaxLength(200);
+			entity.Property(location => location.MailingAddressLine2).HasMaxLength(200);
+			entity.Property(location => location.MailingCity).HasMaxLength(100);
+			entity.Property(location => location.MailingState).HasMaxLength(100);
+			entity.Property(location => location.MailingAddress).HasMaxLength(500).IsRequired();
+			entity.Property(location => location.MailingPostalCode).HasMaxLength(20);
+			entity.Property(location => location.PhoneNumber).HasMaxLength(50).IsRequired();
+			entity.Property(location => location.Email).HasMaxLength(256).IsRequired();
+			entity.HasOne(location => location.Person)
+				.WithMany(person => person.Locations)
+				.HasForeignKey(location => location.PersonId)
+				.OnDelete(DeleteBehavior.Cascade);
+			entity.HasOne(location => location.PostalAddress)
+				.WithMany(address => address.Locations)
+				.HasForeignKey(location => location.PostalAddressId)
+				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(location => location.MailingPostalAddress)
+				.WithMany(address => address.LocationMailingAddresses)
+				.HasForeignKey(location => location.MailingPostalAddressId)
+				.OnDelete(DeleteBehavior.Restrict);
+		});
+
+		builder.Entity<LocationPhone>(entity =>
+		{
+			entity.Property(phone => phone.Label).HasMaxLength(50).IsRequired();
+			entity.Property(phone => phone.PhoneNumber).HasMaxLength(50).IsRequired();
+			entity.HasOne(phone => phone.Location)
+				.WithMany(location => location.Phones)
+				.HasForeignKey(phone => phone.LocationId)
+				.OnDelete(DeleteBehavior.Cascade);
+		});
+
+		builder.Entity<LocationEmail>(entity =>
+		{
+			entity.Property(email => email.Label).HasMaxLength(50).IsRequired();
+			entity.Property(email => email.EmailAddress).HasMaxLength(256).IsRequired();
+			entity.HasOne(email => email.Location)
+				.WithMany(location => location.Emails)
+				.HasForeignKey(email => email.LocationId)
+				.OnDelete(DeleteBehavior.Cascade);
 		});
 
 		builder.Entity<Area>(entity =>
@@ -162,6 +253,12 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : Identi
 			entity.Property(setting => setting.ThemePresetKey).HasMaxLength(100).IsRequired();
 		});
 
+		builder.Entity<SeedState>(entity =>
+		{
+			entity.HasKey(state => state.Key);
+			entity.Property(state => state.Key).HasMaxLength(200).IsRequired();
+		});
+
 		builder.Entity<SurveyVersion>(entity =>
 		{
 			entity.Property(version => version.DisplayName).HasMaxLength(200).IsRequired();
@@ -206,10 +303,19 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : Identi
 		{
 			entity.Property(assignment => assignment.PublicToken).HasMaxLength(100).IsRequired();
 			entity.Property(assignment => assignment.CreatedByUserId).HasMaxLength(450);
+			entity.Property(assignment => assignment.IsArchived).HasDefaultValue(false);
 			entity.HasIndex(assignment => assignment.PublicToken).IsUnique();
-			entity.HasOne(assignment => assignment.Person)
-				.WithMany(person => person.Assignments)
-				.HasForeignKey(assignment => assignment.PersonId)
+			entity.HasOne(assignment => assignment.Location)
+				.WithMany(location => location.Assignments)
+				.HasForeignKey(assignment => assignment.LocationId)
+				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(assignment => assignment.LocationPhone)
+				.WithMany(phone => phone.Assignments)
+				.HasForeignKey(assignment => assignment.LocationPhoneId)
+				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(assignment => assignment.LocationEmail)
+				.WithMany(email => email.Assignments)
+				.HasForeignKey(assignment => assignment.LocationEmailId)
 				.OnDelete(DeleteBehavior.Restrict);
 			entity.HasOne(assignment => assignment.SurveyVersion)
 				.WithMany(version => version.Assignments)
@@ -230,12 +336,22 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : Identi
 			entity.Property(response => response.RespondentState).HasMaxLength(100);
 			entity.Property(response => response.RespondentHomeAddress).HasMaxLength(500).IsRequired();
 			entity.Property(response => response.RespondentPostalCode).HasMaxLength(20);
+			entity.Property(response => response.RespondentMailingPostalAddressId);
+			entity.Property(response => response.RespondentMailingAddressLine1).HasMaxLength(200);
+			entity.Property(response => response.RespondentMailingAddressLine2).HasMaxLength(200);
+			entity.Property(response => response.RespondentMailingCity).HasMaxLength(100);
+			entity.Property(response => response.RespondentMailingState).HasMaxLength(100);
+			entity.Property(response => response.RespondentMailingAddress).HasMaxLength(500).IsRequired();
+			entity.Property(response => response.RespondentMailingPostalCode).HasMaxLength(20);
 			entity.Property(response => response.RespondentCountyFipsSnapshot).HasMaxLength(5);
 			entity.Property(response => response.RespondentCountyNameSnapshot).HasMaxLength(200);
 			entity.Property(response => response.RespondentStateCodeSnapshot).HasMaxLength(2);
-			entity.Property(response => response.RespondentPhoneNumber).HasMaxLength(50).IsRequired();
+			entity.Property(response => response.RespondentPhoneNumber).HasMaxLength(50);
+			entity.Property(response => response.RespondentPhoneLabel).HasMaxLength(50);
 			entity.Property(response => response.RespondentBestTimeToContact).HasMaxLength(100);
-			entity.Property(response => response.RespondentEmail).HasMaxLength(256).IsRequired();
+			entity.Property(response => response.RespondentPreferredContactMethod).HasMaxLength(50);
+			entity.Property(response => response.RespondentEmail).HasMaxLength(256);
+			entity.Property(response => response.RespondentEmailLabel).HasMaxLength(50);
 			entity.Property(response => response.SurveyNameSnapshot).HasMaxLength(200).IsRequired();
 			entity.Property(response => response.SurveyVersionNameSnapshot).HasMaxLength(200).IsRequired();
 			entity.HasIndex(response => response.SurveyAssignmentId).IsUnique();
@@ -246,6 +362,10 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : Identi
 			entity.HasOne(response => response.RespondentPostalAddress)
 				.WithMany(address => address.SurveyResponses)
 				.HasForeignKey(response => response.RespondentPostalAddressId)
+				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(response => response.RespondentMailingPostalAddress)
+				.WithMany(address => address.SurveyResponseMailingAddresses)
+				.HasForeignKey(response => response.RespondentMailingPostalAddressId)
 				.OnDelete(DeleteBehavior.Restrict);
 		});
 

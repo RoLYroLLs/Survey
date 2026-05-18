@@ -473,7 +473,11 @@ public sealed partial class SurveyApplicationService
 			.Include(address => address.StateProvince)
 			.Include(address => address.County)
 			.Include(address => address.People)
+			.Include(address => address.PersonMailingAddresses)
+			.Include(address => address.Locations)
+			.Include(address => address.LocationMailingAddresses)
 			.Include(address => address.SurveyResponses)
+			.Include(address => address.SurveyResponseMailingAddresses)
 			.AsQueryable();
 
 		if (countyId.HasValue)
@@ -509,7 +513,12 @@ public sealed partial class SurveyApplicationService
 				CountryCode = address.Country.Iso2Code,
 				PostalCode = address.PostalCode,
 				FormattedAddress = address.FormattedAddress,
-				ReferenceCount = address.People.Count + address.SurveyResponses.Count
+				ReferenceCount = address.People.Count
+					+ address.PersonMailingAddresses.Count
+					+ address.Locations.Count
+					+ address.LocationMailingAddresses.Count
+					+ address.SurveyResponses.Count
+					+ address.SurveyResponseMailingAddresses.Count
 			})
 			.Take(250)
 			.ToListAsync(cancellationToken);
@@ -534,7 +543,11 @@ public sealed partial class SurveyApplicationService
 		var entity = await _dbContext.PostalAddresses
 			.AsNoTracking()
 			.Include(address => address.People)
+			.Include(address => address.PersonMailingAddresses)
+			.Include(address => address.Locations)
+			.Include(address => address.LocationMailingAddresses)
 			.Include(address => address.SurveyResponses)
+			.Include(address => address.SurveyResponseMailingAddresses)
 			.FirstOrDefaultAsync(address => address.Id == id.Value, cancellationToken)
 			?? throw new InvalidOperationException("The requested address was not found.");
 
@@ -552,7 +565,12 @@ public sealed partial class SurveyApplicationService
 			City = entity.City,
 			PostalCode = entity.PostalCode,
 			FormattedAddress = entity.FormattedAddress,
-			ReferenceCount = entity.People.Count + entity.SurveyResponses.Count,
+			ReferenceCount = entity.People.Count
+				+ entity.PersonMailingAddresses.Count
+				+ entity.Locations.Count
+				+ entity.LocationMailingAddresses.Count
+				+ entity.SurveyResponses.Count
+				+ entity.SurveyResponseMailingAddresses.Count,
 			CountryOptions = countryOptions,
 			StateProvinceOptions = stateProvinceOptions,
 			CountyOptions = countyOptions
@@ -570,7 +588,7 @@ public sealed partial class SurveyApplicationService
 
 		var peopleData = await _dbContext.People
 			.AsNoTracking()
-			.Where(person => person.PostalAddressId == id)
+			.Where(person => person.PostalAddressId == id || person.MailingPostalAddressId == id)
 			.OrderBy(person => person.LastName)
 			.ThenBy(person => person.FirstName)
 			.ThenBy(person => person.MiddleName)
@@ -594,9 +612,40 @@ public sealed partial class SurveyApplicationService
 			})
 			.ToList();
 
+		var locationData = await _dbContext.Locations
+			.AsNoTracking()
+			.Include(location => location.Person)
+			.Where(location => location.PostalAddressId == id || location.MailingPostalAddressId == id)
+			.OrderBy(location => location.Person.LastName)
+			.ThenBy(location => location.Person.FirstName)
+			.ThenBy(location => location.Nickname)
+			.Select(location => new
+			{
+				location.Id,
+				location.PersonId,
+				location.Nickname,
+				location.Email,
+				location.PhoneNumber,
+				location.Person.FirstName,
+				location.Person.MiddleName,
+				location.Person.LastName
+			})
+			.ToListAsync(cancellationToken);
+		var locations = locationData
+			.Select(location => new PostalAddressLocationReferenceItem
+			{
+				Id = location.Id,
+				PersonId = location.PersonId,
+				PersonName = string.Join(" ", new[] { location.FirstName, location.MiddleName, location.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))),
+				Nickname = location.Nickname,
+				Email = location.Email,
+				PhoneNumber = location.PhoneNumber
+			})
+			.ToList();
+
 		var responseData = await _dbContext.SurveyResponses
 			.AsNoTracking()
-			.Where(response => response.RespondentPostalAddressId == id)
+			.Where(response => response.RespondentPostalAddressId == id || response.RespondentMailingPostalAddressId == id)
 			.Select(response => new
 			{
 				Id = response.Id,
@@ -628,6 +677,7 @@ public sealed partial class SurveyApplicationService
 			CountryCode = address.Country.Iso2Code,
 			CountyName = address.County?.Name,
 			People = people,
+			Locations = locations,
 			Responses = responses
 		};
 	}
@@ -731,6 +781,7 @@ public sealed partial class SurveyApplicationService
 	{
 		return await _dbContext.Countries
 			.AsNoTracking()
+			.Where(country => country.StateProvinces.Any(stateProvince => stateProvince.Counties.Any()))
 			.OrderBy(country => country.Name)
 			.Select(country => new SelectOption
 			{
@@ -745,6 +796,7 @@ public sealed partial class SurveyApplicationService
 		var query = _dbContext.StateProvinces
 			.AsNoTracking()
 			.Include(stateProvince => stateProvince.Country)
+			.Where(stateProvince => stateProvince.Counties.Any())
 			.AsQueryable();
 
 		if (countryId.HasValue && countryId.Value > 0)
@@ -997,72 +1049,70 @@ public sealed partial class SurveyApplicationService
 
 	private async Task<PersonEditModel> BuildPersonEditModelAsync(Person? entity, CancellationToken cancellationToken)
 	{
-		var countryId = entity?.PostalAddress?.CountryId ?? 0;
-		var stateProvinceId = entity?.PostalAddress?.StateProvinceId
-			?? (countryId > 0 ? await TryResolveLegacyStateProvinceIdAsync(entity?.State, countryId, cancellationToken) : null)
-			?? 0;
-		var countryOptions = await GetCountrySelectOptionsAsync(cancellationToken);
-		var stateProvinceOptions = countryId > 0
-			? await GetStateProvinceSelectOptionsAsync(countryId, cancellationToken)
-			: Array.Empty<SelectOption>();
-		var countyOptions = stateProvinceId > 0
-			? await GetCountySelectOptionsAsync(stateProvinceId, cancellationToken)
-			: Array.Empty<SelectOption>();
-
 		return new PersonEditModel
 		{
 			Id = entity?.Id,
 			FirstName = entity?.FirstName ?? string.Empty,
 			MiddleName = entity?.MiddleName,
 			LastName = entity?.LastName ?? string.Empty,
-			AddressLine1 = entity?.AddressLine1 ?? entity?.PostalAddress?.AddressLine1 ?? entity?.HomeAddress ?? string.Empty,
-			AddressLine2 = entity?.AddressLine2 ?? entity?.PostalAddress?.AddressLine2,
-			City = entity?.City ?? entity?.PostalAddress?.City ?? string.Empty,
-			CountryId = countryId,
-			StateProvinceId = stateProvinceId,
-			CountyId = entity?.PostalAddress?.CountyId,
-			PostalCode = entity?.PostalCode ?? entity?.PostalAddress?.PostalCode ?? PostalCodeNormalizer.Extract(entity?.HomeAddress),
-			PhoneNumber = entity?.PhoneNumber ?? string.Empty,
-			BestTimeToContact = entity?.BestTimeToContact,
-			Email = entity?.Email ?? string.Empty,
-			CountryOptions = countryOptions,
-			StateProvinceOptions = stateProvinceOptions,
-			CountyOptions = countyOptions
+			BestTimeToContact = ContactOptionCatalog.NormalizeBestTime(entity?.BestTimeToContact),
+			PreferredContactMethod = ContactOptionCatalog.NormalizePreferredContactMethod(entity?.PreferredContactMethod),
+			PhysicalAddress = await BuildAddressInputModelAsync(entity?.PostalAddress, entity?.State, entity?.AddressLine1, entity?.AddressLine2, entity?.City, entity?.PostalCode, cancellationToken),
+			MailingAddress = await BuildAddressInputModelAsync(entity?.MailingPostalAddress, entity?.MailingState, entity?.MailingAddressLine1, entity?.MailingAddressLine2, entity?.MailingCity, entity?.MailingPostalCode, cancellationToken),
+			Phones = entity?.Phones
+				.OrderBy(phone => phone.SortOrder)
+				.ThenBy(phone => phone.Id)
+				.Select((phone, index) => new PhoneContactEditModel
+				{
+					Id = phone.Id,
+					Label = ContactOptionCatalog.NormalizePhoneType(phone.Label) ?? ContactOptionCatalog.PhoneTypes.Home,
+					PhoneNumber = phone.PhoneNumber,
+					IsPrimary = index == 0,
+					SortOrder = phone.SortOrder
+				})
+				.ToList()
+				?? BuildDefaultPhoneModels(null),
+			Emails = entity?.Emails
+				.OrderBy(email => email.SortOrder)
+				.ThenBy(email => email.Id)
+				.Select((email, index) => new EmailContactEditModel
+				{
+					Id = email.Id,
+					Label = ContactOptionCatalog.NormalizeEmailType(email.Label) ?? ContactOptionCatalog.EmailTypes.Home,
+					EmailAddress = email.EmailAddress,
+					IsPrimary = index == 0,
+					SortOrder = email.SortOrder
+				})
+				.ToList()
+				?? BuildDefaultEmailModels(null),
+			Locations = entity is null
+				? []
+				: await GetLocationsAsync(entity.Id, cancellationToken)
 		};
 	}
 
-	private async Task<RespondentContactModel> BuildRespondentContactModelAsync(Person person, CancellationToken cancellationToken)
+	private async Task<RespondentContactModel> BuildRespondentContactModelAsync(
+		Person person,
+		Location location,
+		LocationPhone? locationPhone,
+		LocationEmail? locationEmail,
+		CancellationToken cancellationToken)
 	{
-		var countryId = person.PostalAddress?.CountryId ?? 0;
-		var stateProvinceId = person.PostalAddress?.StateProvinceId
-			?? (countryId > 0 ? await TryResolveLegacyStateProvinceIdAsync(person.State, countryId, cancellationToken) : null)
-			?? 0;
-		var countryOptions = await GetCountrySelectOptionsAsync(cancellationToken);
-		var stateProvinceOptions = countryId > 0
-			? await GetStateProvinceSelectOptionsAsync(countryId, cancellationToken)
-			: Array.Empty<SelectOption>();
-		var countyOptions = stateProvinceId > 0
-			? await GetCountySelectOptionsAsync(stateProvinceId, cancellationToken)
-			: Array.Empty<SelectOption>();
-
 		return new RespondentContactModel
 		{
 			FirstName = person.FirstName,
 			MiddleName = person.MiddleName,
 			LastName = person.LastName,
-			AddressLine1 = person.AddressLine1 ?? person.PostalAddress?.AddressLine1 ?? person.HomeAddress,
-			AddressLine2 = person.AddressLine2 ?? person.PostalAddress?.AddressLine2,
-			City = person.City ?? person.PostalAddress?.City ?? string.Empty,
-			CountryId = countryId,
-			StateProvinceId = stateProvinceId,
-			CountyId = person.PostalAddress?.CountyId,
-			PostalCode = person.PostalCode ?? person.PostalAddress?.PostalCode ?? PostalCodeNormalizer.Extract(person.HomeAddress),
-			PhoneNumber = person.PhoneNumber,
-			BestTimeToContact = person.BestTimeToContact,
-			Email = person.Email,
-			CountryOptions = countryOptions,
-			StateProvinceOptions = stateProvinceOptions,
-			CountyOptions = countyOptions
+			PhoneNumber = locationPhone?.PhoneNumber ?? string.Empty,
+			PhoneLabel = locationPhone?.Label,
+			BestTimeToContact = ContactOptionCatalog.NormalizeBestTime(person.BestTimeToContact),
+			PreferredContactMethod = ContactOptionCatalog.NormalizePreferredContactMethod(person.PreferredContactMethod),
+			Email = locationEmail?.EmailAddress ?? string.Empty,
+			EmailLabel = locationEmail?.Label,
+			PhysicalAddress = await BuildAddressInputModelAsync(location.PostalAddress, location.State, location.AddressLine1, location.AddressLine2, location.City, location.PostalCode, cancellationToken),
+			MailingAddress = await BuildAddressInputModelAsync(location.MailingPostalAddress, location.MailingState, location.MailingAddressLine1, location.MailingAddressLine2, location.MailingCity, location.MailingPostalCode, cancellationToken),
+			ProfilePhysicalAddress = await BuildAddressInputModelAsync(person.PostalAddress, person.State, person.AddressLine1, person.AddressLine2, person.City, person.PostalCode, cancellationToken),
+			ProfileMailingAddress = await BuildAddressInputModelAsync(person.MailingPostalAddress, person.MailingState, person.MailingAddressLine1, person.MailingAddressLine2, person.MailingCity, person.MailingPostalCode, cancellationToken)
 		};
 	}
 

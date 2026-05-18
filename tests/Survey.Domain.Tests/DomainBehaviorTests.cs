@@ -16,7 +16,7 @@ public class DomainBehaviorTests
 	public void SurveyAssignment_IsExpired_Is_True_When_Expiry_Equals_Current_Time()
 	{
 		var now = DateTimeOffset.UtcNow;
-		var assignment = new SurveyAssignment(1, 2, "token-123", now, null);
+		var assignment = new SurveyAssignment(1, 2, 3, 4, "token-123", now, null);
 
 		Assert.True(assignment.IsExpired(now));
 		Assert.False(assignment.IsExpired(now.AddSeconds(-1)));

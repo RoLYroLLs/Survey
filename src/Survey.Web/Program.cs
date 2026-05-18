@@ -7,6 +7,7 @@ using Survey.Infrastructure.Identity;
 using Survey.ServiceDefaults;
 using Survey.Web.Components;
 using Survey.Web.Components.Account;
+using Survey.Web.Components.Shared;
 using Survey.Web.Importing;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +20,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
+builder.Services.AddScoped<ToastService>();
 
 builder.Services.AddAuthentication(options =>
 	{

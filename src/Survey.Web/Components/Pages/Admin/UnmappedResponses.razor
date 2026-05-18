@@ -14,9 +14,9 @@
 		<div class="toolbar">
 			@if (!IsMissingFilter)
 			{
-				<a class="btn btn-outline-primary" href="admin/zip-mappings">Review ZIP Mappings</a>
+				<a class="btn btn-outline-primary" href="/admin/zip-mappings">Review ZIP Mappings</a>
 			}
-			<a class="btn btn-outline-primary" href="admin/reports">Back to Reports</a>
+			<a class="btn btn-outline-primary" href="/admin/reports">Back to Reports</a>
 		</div>
 	</div>
 
@@ -31,6 +31,7 @@
 				<thead>
 					<tr>
 						<th>Respondent</th>
+						<th>Person / Location</th>
 						<th>ZIP / County</th>
 						<th>Survey</th>
 						<th>Submitted By</th>
@@ -43,14 +44,16 @@
 					{
 						<tr>
 							<td>@item.RespondentName</td>
+							<td>@item.PersonName<br /><small>@item.LocationName</small></td>
 							<td>@(string.IsNullOrWhiteSpace(item.PostalCode) ? "Missing" : item.PostalCode)<br /><small>@(string.IsNullOrWhiteSpace(item.CountyName) ? "Unmapped" : item.CountyName)</small></td>
 							<td>@item.SurveyName<br /><small>@item.VersionName</small></td>
 							<td>@item.SubmittedByLabel</td>
 							<td>@item.SubmittedUtc.LocalDateTime.ToString("g")</td>
 							<td>
 								<div class="table-actions">
-									<a class="btn btn-sm btn-outline-primary" href="admin/responses/@item.Id">View</a>
-									<a class="btn btn-sm btn-outline-primary" href="admin/people/@item.PersonId/edit">Edit Person</a>
+									<a class="btn btn-sm btn-outline-primary" href="/admin/responses/@item.Id">View</a>
+									<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.PersonId/edit">Edit Person</a>
+									<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.PersonId/locations/@item.LocationId/edit">Edit Location</a>
 								</div>
 							</td>
 						</tr>

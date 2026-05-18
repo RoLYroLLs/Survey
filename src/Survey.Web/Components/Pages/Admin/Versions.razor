@@ -62,7 +62,7 @@
 							<td>@item.AssignmentCount</td>
 							<td>
 								<div class="table-actions">
-									<a class="btn btn-sm btn-outline-primary" href="@GetEditUrl(item.Id, item.SurveyDefinitionId)">Edit</a>
+									<a class="btn btn-sm btn-outline-primary" href="@GetViewUrl(item.Id, item.SurveyDefinitionId)">View</a>
 									<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => CloneAsync(item.Id)">Clone</button>
 									<a class="btn btn-sm btn-outline-primary" href="@($"admin/sections?surveyVersionId={item.Id}&surveyDefinitionId={item.SurveyDefinitionId}")">Sections</a>
 								</div>
@@ -116,6 +116,12 @@
 	{
 		var archived = ShowArchived.ToString().ToLowerInvariant();
 		return $"admin/versions/{versionId}/edit?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}";
+	}
+
+	private string GetViewUrl(int versionId, int surveyDefinitionId)
+	{
+		var archived = ShowArchived.ToString().ToLowerInvariant();
+		return $"admin/versions/{versionId}?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}";
 	}
 
 	private async Task CloneAsync(int versionId)

@@ -2,65 +2,124 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.5rem;
+  gap: 0.95rem;
+  padding: 0.9rem 1.35rem 1.35rem;
   color: var(--app-sidebar-ink);
+}
+
+.nav-shell__brand {
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .nav-shell__brand-link {
   color: var(--app-sidebar-link-hover);
-  font-size: 1.7rem;
-  font-weight: 700;
-  text-decoration: none;
+  font-size: 1.95rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none !important;
 }
 
 .nav-shell__caption {
-  margin: 0.65rem 0 0;
-  color: var(--app-sidebar-muted);
+  margin: 0.7rem 0 0.35rem;
+  padding-left: 0.5rem;
+  color: rgba(231, 243, 240, 0.6);
   line-height: 1.5;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .nav-shell__links {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.25rem;
+  margin-inline: -1.35rem;
 }
 
-.nav-shell__link,
+.nav-shell ::deep(.nav-shell__link),
 .nav-shell__back-link {
-  display: block;
-  padding: 0.8rem 0.95rem;
-  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.7rem 1.35rem;
+  border-radius: 0;
   color: var(--app-sidebar-link);
-  text-decoration: none;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  text-decoration: none !important;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  border: 1px solid transparent;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
-.nav-shell__link:hover,
-.nav-shell__link.active,
+.nav-shell__brand-link:link,
+.nav-shell__brand-link:visited,
+.nav-shell__brand-link:hover,
+.nav-shell__brand-link:focus,
+.nav-shell ::deep(.nav-shell__link:link),
+.nav-shell ::deep(.nav-shell__link:visited),
+.nav-shell ::deep(.nav-shell__link:hover),
+.nav-shell ::deep(.nav-shell__link:focus),
+.nav-shell ::deep(.nav-shell__link:active),
+.nav-shell__back-link:link,
+.nav-shell__back-link:visited,
+.nav-shell__back-link:hover,
+.nav-shell__back-link:focus,
+.nav-shell__back-link:active {
+  text-decoration: none !important;
+}
+
+.nav-shell ::deep(.nav-shell__link:hover),
+.nav-shell ::deep(.nav-shell__link.active),
 .nav-shell__back-link:hover {
-  background: var(--app-sidebar-surface);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--app-sidebar-link-hover);
-  transform: translateX(3px);
+  text-decoration: none !important;
 }
 
-.nav-shell__back-link {
+.nav-shell ::deep(.nav-shell__link.active) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 3px 0 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+}
+
+.nav-shell ::deep(.nav-shell__link:hover) {
+  transform: translateX(2px);
+}
+
+.nav-shell ::deep(.nav-shell__link.active) .nav-shell__icon,
+.nav-shell ::deep(.nav-shell__link.active) span,
+.nav-shell__back-link span {
+  color: inherit;
+}
+
+.nav-shell__icon {
+  width: 1.5rem;
+  flex: 0 0 1.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.08rem;
+  line-height: 1;
+}
+
+
+.nav-shell__back-link {
   margin-bottom: 0.35rem;
-  padding: 0.7rem 0.95rem;
-  border: 1px solid var(--app-sidebar-surface);
-  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--app-sidebar-link-hover);
-  background: var(--app-sidebar-surface);
-  text-decoration: none;
+  background: rgba(255, 255, 255, 0.05);
+  text-decoration: none !important;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .nav-shell__back-link:hover {
   border-color: var(--app-primary);
-  transform: translateX(-2px);
+  transform: translateX(-1px);
 }
 
 .nav-shell__account {
@@ -219,7 +278,7 @@
   border: 0;
   padding: 0;
   font: inherit;
-  text-decoration: none;
+  text-decoration: none !important;
 }
 
 .nav-shell__meta-button:hover,
@@ -237,6 +296,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  gap: 0.75rem;
   padding: 0.7rem 0.8rem;
   border: 0;
   border-radius: 0.8rem;

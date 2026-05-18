@@ -7,7 +7,6 @@
 <div class="nav-shell">
 	<div class="nav-shell__brand">
 		<a href="" class="nav-shell__brand-link">Survey</a>
-		<p class="nav-shell__caption">Author surveys, issue one-time links, and collect structured responses.</p>
 	</div>
 
 	<nav class="nav-shell__links">
@@ -16,17 +15,44 @@
 				@if (IsSettingsSection)
 				{
 					<p class="nav-shell__caption">Settings</p>
-					<a class="nav-shell__back-link" href="admin">Back</a>
-					<NavLink class="nav-shell__link" href="admin/account">Account</NavLink>
+					<a class="nav-shell__back-link" href="admin">
+						<span class="nav-shell__icon" aria-hidden="true">&#x2B05;&#xFE0F;</span>
+						<span>Back</span>
+					</a>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/account">
+						<span class="nav-shell__icon" aria-hidden="true">&#x1F464;</span>
+						<span>Account</span>
+					</NavLink>
 					<AuthorizeView Roles="@RoleNames.Admin">
 						<Authorized Context="settingsAdminContext">
-							<NavLink class="nav-shell__link" href="admin/theme" Match="NavLinkMatch.All">Theme</NavLink>
-							<NavLink class="nav-shell__link" href="admin/employees">Employees</NavLink>
-							<NavLink class="nav-shell__link" href="admin/countries">Countries</NavLink>
-							<NavLink class="nav-shell__link" href="admin/state-provinces">States / Territories</NavLink>
-							<NavLink class="nav-shell__link" href="admin/counties">Counties</NavLink>
-							<NavLink class="nav-shell__link" href="admin/addresses">Addresses</NavLink>
-							<NavLink class="nav-shell__link" href="admin/zip-mappings">ZIP Mappings</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/theme" Match="NavLinkMatch.All">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F3A8;</span>
+								<span>Theme</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/employees">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F6E1;&#xFE0F;</span>
+								<span>Employees</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/countries">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F30D;</span>
+								<span>Countries</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/state-provinces">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F3DB;&#xFE0F;</span>
+								<span>States / Territories</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/counties">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F4CD;</span>
+								<span>Counties</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/addresses">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F3E0;</span>
+								<span>Addresses</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/zip-mappings">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F9ED;</span>
+								<span>ZIP Mappings</span>
+							</NavLink>
 						</Authorized>
 					</AuthorizeView>
 				}
@@ -35,24 +61,51 @@
 					<AuthorizeView Roles="@RoleNames.Admin">
 						<Authorized Context="mainAdminContext">
 							<p class="nav-shell__caption">Overview</p>
-							<NavLink class="nav-shell__link" href="admin">Dashboard</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin" Match="NavLinkMatch.All">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F4CA;</span>
+								<span>Dashboard</span>
+							</NavLink>
 						</Authorized>
 					</AuthorizeView>
 					<p class="nav-shell__caption">Survey Operations</p>
-					<NavLink class="nav-shell__link" href="admin/assignments">Assignments</NavLink>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/assignments">
+						<span class="nav-shell__icon" aria-hidden="true">&#x1F517;</span>
+						<span>Assignments</span>
+					</NavLink>
 					<AuthorizeView Roles="@RoleNames.Admin">
 						<Authorized Context="operationsAdminContext">
-							<NavLink class="nav-shell__link" href="admin/people">People</NavLink>
-							<NavLink class="nav-shell__link" href="admin/responses">Responses</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/people">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F465;</span>
+								<span>People</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/responses">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F4DD;</span>
+								<span>Responses</span>
+							</NavLink>
 
 							<p class="nav-shell__caption">Survey Builder</p>
-							<NavLink class="nav-shell__link" href="admin/surveys">Surveys</NavLink>
-							<NavLink class="nav-shell__link" href="admin/versions">Versions</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/surveys">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F9FE;</span>
+								<span>Surveys</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/versions">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F9EC;</span>
+								<span>Versions</span>
+							</NavLink>
 
 							<p class="nav-shell__caption">Reporting</p>
-							<NavLink class="nav-shell__link" href="admin/reports">Reports</NavLink>
-							<NavLink class="nav-shell__link" href="admin/goals">Goals</NavLink>
-							<NavLink class="nav-shell__link" href="admin/areas">Areas</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/reports">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F4C8;</span>
+								<span>Reports</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/goals">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F3AF;</span>
+								<span>Goals</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/areas">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F5FA;&#xFE0F;</span>
+								<span>Areas</span>
+							</NavLink>
 						</Authorized>
 					</AuthorizeView>
 				}
@@ -98,13 +151,19 @@
 							<p class="nav-shell__account-email">@GetAccountEmail(userContext.User)</p>
 							<AuthorizeView Roles="@StaffRoles">
 								<Authorized>
-									<a class="nav-shell__popover-item" href="admin/account">Settings</a>
+									<a class="nav-shell__popover-item" href="admin/account">
+										<span class="nav-shell__icon" aria-hidden="true">&#x2699;&#xFE0F;</span>
+										<span>Settings</span>
+									</a>
 								</Authorized>
 							</AuthorizeView>
 							<form action="Account/Logout" method="post" class="nav-shell__popover-form">
 								<AntiforgeryToken />
 								<input type="hidden" name="ReturnUrl" value="@currentUrl" />
-								<button type="submit" class="nav-shell__popover-item">Logout</button>
+								<button type="submit" class="nav-shell__popover-item">
+									<span class="nav-shell__icon" aria-hidden="true">&#x1F6AA;</span>
+									<span>Logout</span>
+								</button>
 							</form>
 						</div>
 					}

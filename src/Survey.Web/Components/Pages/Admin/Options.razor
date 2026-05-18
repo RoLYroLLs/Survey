@@ -114,10 +114,10 @@
 	{
 		if (string.IsNullOrWhiteSpace(_context.QuestionPrompt))
 		{
-			return "Choice-based questions can offer one or more selectable options.";
+			return "View the options for the selected question.";
 		}
 
-		return $"Manage the answer choices for '{_context.QuestionPrompt}'.";
+		return $"View the answer choices for '{_context.QuestionPrompt}'.";
 	}
 
 	private string GetAddUrl()

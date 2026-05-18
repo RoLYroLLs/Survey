@@ -180,7 +180,8 @@ public class SurveyApplicationServiceTests
 		Assert.NotNull(response.RespondentPostalAddressId);
 		Assert.Null(response.RespondentCountyFipsSnapshot);
 		Assert.Equal("555-0999", response.RespondentPhoneNumber);
-		Assert.Equal("Evenings", response.RespondentBestTimeToContact);
+		Assert.Equal(ContactOptionCatalog.BestTimes.Evening, response.RespondentBestTimeToContact);
+		Assert.Equal(ContactOptionCatalog.PreferredContactMethods.Call, response.RespondentPreferredContactMethod);
 		Assert.Equal("alicia.updated@example.com", response.RespondentEmail);
 		Assert.Equal("Community Intake", response.SurveyNameSnapshot);
 		Assert.Equal("Community Intake v1", response.SurveyVersionNameSnapshot);
@@ -321,7 +322,7 @@ public class SurveyApplicationServiceTests
 		await using var harness = await TestHarness.CreateAsync();
 		var seed = await harness.SeedSurveyAsync();
 
-		var laterAssignment = new SurveyAssignment(seed.PersonId, seed.VersionId, $"token-{Guid.NewGuid():N}", DateTimeOffset.UtcNow.AddDays(4), "admin-user");
+		var laterAssignment = new SurveyAssignment(seed.LocationId, seed.LocationPhoneId, seed.LocationEmailId, seed.VersionId, $"token-{Guid.NewGuid():N}", DateTimeOffset.UtcNow.AddDays(4), "admin-user");
 		harness.DbContext.SurveyAssignments.Add(laterAssignment);
 		await harness.DbContext.SaveChangesAsync();
 
@@ -525,7 +526,7 @@ public class SurveyApplicationServiceTests
 		var firstResult = await harness.ExperienceService.SubmitAsync(firstSubmission, null);
 		Assert.True(firstResult.Succeeded);
 
-		var secondAssignment = new SurveyAssignment(seed.PersonId, seed.VersionId, $"token-{Guid.NewGuid():N}", DateTimeOffset.UtcNow.AddDays(2), "admin-user");
+		var secondAssignment = new SurveyAssignment(seed.LocationId, seed.LocationPhoneId, seed.LocationEmailId, seed.VersionId, $"token-{Guid.NewGuid():N}", DateTimeOffset.UtcNow.AddDays(2), "admin-user");
 		harness.DbContext.SurveyAssignments.Add(secondAssignment);
 		await harness.DbContext.SaveChangesAsync();
 
@@ -597,17 +598,27 @@ public class SurveyApplicationServiceTests
 			"FL",
 			"33101",
 			null,
+			"123 Main Street",
+			null,
+			"Miami",
+			"FL",
+			"33101",
+			null,
 			null,
 			null,
 			"555-0100",
-			"Morning",
+			ContactOptionCatalog.PhoneTypes.Home,
+			ContactOptionCatalog.BestTimes.Morning,
+			ContactOptionCatalog.PreferredContactMethods.Call,
 			"taylor@example.com",
+			ContactOptionCatalog.EmailTypes.Home,
 			"Community Intake",
 			"Community Intake v1",
+			"United States of America",
 			"United States of America");
 		harness.DbContext.SurveyResponses.Add(earlierResponse);
 
-		var laterAssignment = new SurveyAssignment(seed.PersonId, seed.VersionId, $"token-{Guid.NewGuid():N}", DateTimeOffset.UtcNow.AddDays(5), "admin-user");
+		var laterAssignment = new SurveyAssignment(seed.LocationId, seed.LocationPhoneId, seed.LocationEmailId, seed.VersionId, $"token-{Guid.NewGuid():N}", DateTimeOffset.UtcNow.AddDays(5), "admin-user");
 		harness.DbContext.SurveyAssignments.Add(laterAssignment);
 		await harness.DbContext.SaveChangesAsync();
 
@@ -625,13 +636,23 @@ public class SurveyApplicationServiceTests
 			"FL",
 			"32801",
 			null,
+			"500 Oak Avenue",
+			null,
+			"Orlando",
+			"FL",
+			"32801",
+			null,
 			null,
 			null,
 			"555-0101",
-			"Afternoon",
+			ContactOptionCatalog.PhoneTypes.Home,
+			ContactOptionCatalog.BestTimes.Afternoon,
+			ContactOptionCatalog.PreferredContactMethods.Call,
 			"jordan@example.com",
+			ContactOptionCatalog.EmailTypes.Home,
 			"Community Intake",
 			"Community Intake v1",
+			"United States of America",
 			"United States of America");
 		harness.DbContext.SurveyResponses.Add(laterResponse);
 		await harness.DbContext.SaveChangesAsync();
@@ -723,16 +744,36 @@ public class SurveyApplicationServiceTests
 			FirstName = firstName,
 			MiddleName = middleName,
 			LastName = lastName,
+			PhoneNumber = phoneNumber,
+			PhoneLabel = ContactOptionCatalog.PhoneTypes.Home,
+			BestTimeToContact = bestTimeToContact,
+			PreferredContactMethod = ContactOptionCatalog.PreferredContactMethods.Call,
+			Email = email,
+			EmailLabel = ContactOptionCatalog.EmailTypes.Home,
+			PhysicalAddress = BuildAddress(seed, addressLine1, addressLine2, city, postalCode, countyId),
+			MailingAddress = BuildAddress(seed, addressLine1, addressLine2, city, postalCode, countyId),
+			ProfilePhysicalAddress = BuildAddress(seed, "123 Main Street", null, "Miami", "33101", seed.MiamiDadeCountyId),
+			ProfileMailingAddress = BuildAddress(seed, "123 Main Street", null, "Miami", "33101", seed.MiamiDadeCountyId)
+		};
+	}
+
+	private static AddressInputModel BuildAddress(
+		SeedData seed,
+		string addressLine1,
+		string? addressLine2,
+		string city,
+		string? postalCode,
+		int? countyId)
+	{
+		return new AddressInputModel
+		{
 			AddressLine1 = addressLine1,
 			AddressLine2 = addressLine2,
 			City = city,
 			CountryId = seed.CountryId,
 			StateProvinceId = seed.StateProvinceId,
 			CountyId = countyId,
-			PostalCode = postalCode,
-			PhoneNumber = phoneNumber,
-			BestTimeToContact = bestTimeToContact,
-			Email = email
+			PostalCode = postalCode
 		};
 	}
 
@@ -801,8 +842,64 @@ public class SurveyApplicationServiceTests
 			DbContext.PostalAddresses.Add(postalAddress);
 			await DbContext.SaveChangesAsync();
 
-			var person = new Person("Taylor", null, "Rivers", postalAddress.Id, "123 Main Street", null, "Miami", "FL", "33101", "555-0100", "Morning", "taylor@example.com", country.Name);
+			var person = new Person(
+				"Taylor",
+				null,
+				"Rivers",
+				postalAddress.Id,
+				"123 Main Street",
+				null,
+				"Miami",
+				"FL",
+				"33101",
+				postalAddress.Id,
+				"123 Main Street",
+				null,
+				"Miami",
+				"FL",
+				"33101",
+				"555-0100",
+				"Morning",
+				"Call",
+				"taylor@example.com",
+				country.Name,
+				country.Name);
 			DbContext.People.Add(person);
+			await DbContext.SaveChangesAsync();
+
+			var personPhone = new PersonPhone(person.Id, ContactOptionCatalog.PhoneTypes.Home, "555-0100", 10);
+			var personEmail = new PersonEmail(person.Id, ContactOptionCatalog.EmailTypes.Home, "taylor@example.com", 10);
+			DbContext.PersonPhones.Add(personPhone);
+			DbContext.PersonEmails.Add(personEmail);
+			await DbContext.SaveChangesAsync();
+
+			var location = new Location(
+				person.Id,
+				"Imported Location",
+				postalAddress.Id,
+				"123 Main Street",
+				null,
+				"Miami",
+				"FL",
+				"33101",
+				postalAddress.Id,
+				"123 Main Street",
+				null,
+				"Miami",
+				"FL",
+				"33101",
+				"555-0100",
+				"taylor@example.com",
+				country.Name,
+				country.Name);
+			DbContext.Locations.Add(location);
+			await DbContext.SaveChangesAsync();
+
+			var locationPhone = new LocationPhone(location.Id, "Home", "555-0100", 10);
+			var locationEmail = new LocationEmail(location.Id, "Primary", "taylor@example.com", 10);
+			DbContext.LocationPhones.Add(locationPhone);
+			DbContext.LocationEmails.Add(locationEmail);
+			await DbContext.SaveChangesAsync();
 
 			var definition = new SurveyDefinition("Community Intake", "Household intake and follow-up details.");
 			DbContext.SurveyDefinitions.Add(definition);
@@ -832,7 +929,7 @@ public class SurveyApplicationServiceTests
 			await DbContext.SaveChangesAsync();
 
 			var token = $"token-{Guid.NewGuid():N}";
-			var assignment = new SurveyAssignment(person.Id, version.Id, token, DateTimeOffset.UtcNow.AddDays(2), "admin-user");
+			var assignment = new SurveyAssignment(location.Id, locationPhone.Id, locationEmail.Id, version.Id, token, DateTimeOffset.UtcNow.AddDays(2), "admin-user");
 			DbContext.SurveyAssignments.Add(assignment);
 			await DbContext.SaveChangesAsync();
 
@@ -844,6 +941,9 @@ public class SurveyApplicationServiceTests
 				definition.Id,
 				version.Id,
 				person.Id,
+				location.Id,
+				locationPhone.Id,
+				locationEmail.Id,
 				assignment.Id,
 				token,
 				yesNoQuestion.Id,
@@ -885,6 +985,9 @@ public class SurveyApplicationServiceTests
 		int DefinitionId,
 		int VersionId,
 		int PersonId,
+		int LocationId,
+		int LocationPhoneId,
+		int LocationEmailId,
 		int AssignmentId,
 		string Token,
 		int YesNoQuestionId,

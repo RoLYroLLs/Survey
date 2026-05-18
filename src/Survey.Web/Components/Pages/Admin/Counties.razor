@@ -10,7 +10,7 @@
 		<div>
 			<p class="eyebrow">Geography</p>
 			<h1>Counties</h1>
-			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "Maintain the county list used for areas, goals, and postal-code rollups." : $"Showing counties for {_filterLabel}.")</p>
+			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "View the county records in the system." : $"Showing counties for {_filterLabel}.")</p>
 		</div>
 		<div class="toolbar">
 			@if (StateProvinceId.HasValue)
@@ -68,7 +68,7 @@
 								<div class="table-actions">
 									<a class="btn btn-sm btn-outline-primary" href="admin/addresses?countyId=@item.Id">Addresses</a>
 									<a class="btn btn-sm btn-outline-primary" href="admin/areas?countyId=@item.Id">Areas</a>
-									<a class="btn btn-sm btn-outline-primary" href="admin/counties/@item.Id/edit">Edit</a>
+								<a class="btn btn-sm btn-outline-primary" href="admin/counties/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>

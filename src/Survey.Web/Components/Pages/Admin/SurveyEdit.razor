@@ -1,17 +1,20 @@
 @page "/admin/surveys/new"
+@page "/admin/surveys/{Id:int}"
 @page "/admin/surveys/{Id:int}/edit"
+@implements IDisposable
 @attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Survey" : "Add Survey")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Survey Definition</p>
-			<h1>@(Id.HasValue ? "Edit Survey" : "Add Survey")</h1>
-			<p>Define the root survey record. Versions, sections, and questions are managed separately.</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update this survey record.</p>
 		</div>
 	</div>
 
@@ -21,30 +24,57 @@
 			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
 		}
 
-		<EditForm Model="_model" OnValidSubmit="SaveAsync">
-			<DataAnnotationsValidator />
-			<div class="form-grid form-grid--single">
-				<div class="field-stack">
-					<label>Name</label>
-					<InputText class="form-control" @bind-Value="_model.Name" />
-					<ValidationMessage For="@(() => _model.Name)" />
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Name</strong>
+						<span>@DisplayOrDash(_model.Name)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Description</strong>
+						<span>@DisplayOrDash(_model.Description)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Archived</strong>
+						<span>@(_model.IsArchived ? "Yes" : "No")</span>
+					</div>
 				</div>
-				<div class="field-stack">
-					<label>Description</label>
-					<InputTextArea class="form-control" rows="5" @bind-Value="_model.Description" />
-					<ValidationMessage For="@(() => _model.Description)" />
-				</div>
-				<div class="field-stack">
-					<label>Archived</label>
-					<InputCheckbox class="form-check-input" @bind-Value="_model.IsArchived" />
-				</div>
-			</div>
 
-			<div class="form-footer">
-				<button class="btn btn-primary" type="submit">Save Survey</button>
-				<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to Surveys</a>
+				<div class="form-footer">
+					<a class="btn btn-primary" href="/admin/surveys/@Id/edit?showArchived=@ShowArchived.ToString().ToLowerInvariant()">Edit Survey</a>
+					<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to Surveys</a>
+				</div>
 			</div>
-		</EditForm>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<label>Name</label>
+						<InputText class="form-control" @bind-Value="_model.Name" />
+						<ValidationMessage For="@(() => _model.Name)" />
+					</div>
+					<div class="field-stack">
+						<label>Description</label>
+						<InputTextArea class="form-control" rows="5" @bind-Value="_model.Description" />
+						<ValidationMessage For="@(() => _model.Description)" />
+					</div>
+					<div class="field-stack">
+						<label>Archived</label>
+						<InputCheckbox class="form-check-input" @bind-Value="_model.IsArchived" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Survey</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/admin/surveys/{Id.Value}?showArchived={ShowArchived.ToString().ToLowerInvariant()}" : GetBackUrl())">Cancel</a>
+				</div>
+			</EditForm>
+		}
 	</div>
 </div>
 
@@ -57,6 +87,12 @@
 
 	private SurveyDefinitionEditModel _model = new();
 	private string? _errorMessage;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -64,16 +100,24 @@
 		_errorMessage = null;
 	}
 
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
 	private async Task SaveAsync()
 	{
 		try
 		{
-			await AdministrationService.SaveSurveyDefinitionAsync(_model);
-			NavigationManager.NavigateTo(GetBackUrl(_model.IsArchived));
+			var savedId = await AdministrationService.SaveSurveyDefinitionAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Survey saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"admin/surveys/{savedId}?showArchived={ShowArchived.ToString().ToLowerInvariant()}");
 		}
 		catch (Exception ex)
 		{
-			_errorMessage = ex.Message;
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
 		}
 	}
 
@@ -81,5 +125,25 @@
 	{
 		var showArchived = isArchived ?? (ShowArchived || _model.IsArchived);
 		return showArchived ? "admin/surveys?showArchived=true" : "admin/surveys";
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Survey";
+		}
+
+		return Id.HasValue ? "Edit Survey" : "Add Survey";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
 	}
 }

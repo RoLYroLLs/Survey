@@ -9,10 +9,10 @@
 		<div>
 			<p class="eyebrow">Recipients</p>
 			<h1>People</h1>
-			<p>Recipient contact details prefill into survey assignments and remain editable during completion.</p>
+			<p>View the people in the system along with their main contact details and location counts.</p>
 		</div>
 		<div class="toolbar">
-			<a class="btn btn-primary" href="admin/people/new">Add Person</a>
+			<a class="btn btn-primary" href="/admin/people/new">Add Person</a>
 		</div>
 	</div>
 
@@ -27,6 +27,7 @@
 				<thead>
 					<tr>
 						<th>Name</th>
+						<th>Locations</th>
 						<th>ZIP</th>
 						<th>Email</th>
 						<th>Phone</th>
@@ -38,12 +39,15 @@
 					{
 						<tr>
 							<td>@string.Join(" ", new[] { item.FirstName, item.MiddleName, item.LastName }.Where(part => !string.IsNullOrWhiteSpace(part)))</td>
+							<td>@item.LocationCount</td>
 							<td>@item.PostalCode</td>
 							<td>@item.Email</td>
 							<td>@item.PhoneNumber</td>
 							<td>
 								<div class="table-actions">
-									<a class="btn btn-sm btn-outline-primary" href="admin/people/@item.Id/edit">Edit</a>
+									<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.Id">View</a>
+									<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.Id/assignments">Assignments</a>
+									<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.Id/locations">Locations</a>
 								</div>
 							</td>
 						</tr>

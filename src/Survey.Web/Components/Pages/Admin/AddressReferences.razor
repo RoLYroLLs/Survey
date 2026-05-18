@@ -19,10 +19,10 @@
 			}
 		</div>
 		<div class="toolbar">
-			<a class="btn btn-outline-primary" href="admin/addresses">Back to Addresses</a>
+			<a class="btn btn-outline-primary" href="/admin/addresses">Back to Addresses</a>
 			@if (_model is not null)
 			{
-				<a class="btn btn-primary" href="admin/addresses/@_model.Id/edit">Edit Address</a>
+				<a class="btn btn-primary" href="/admin/addresses/@_model.Id/edit">Edit Address</a>
 			}
 		</div>
 	</div>
@@ -43,6 +43,10 @@
 			<div class="metric-card">
 				<p class="metric-card__label">People</p>
 				<p class="metric-card__value">@_model.People.Count</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Locations</p>
+				<p class="metric-card__value">@_model.Locations.Count</p>
 			</div>
 			<div class="metric-card">
 				<p class="metric-card__label">Responses</p>
@@ -82,7 +86,51 @@
 								<td>@item.PhoneNumber</td>
 								<td>
 									<div class="table-actions">
-										<a class="btn btn-sm btn-outline-primary" href="admin/people/@item.Id/edit">View Person</a>
+										<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.Id/edit">View Person</a>
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Locations</h2>
+					<p>Location records that currently point to this shared address.</p>
+				</div>
+			</div>
+
+			@if (_model.Locations.Count == 0)
+			{
+				<p class="empty-state">No locations currently reference this address.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Person</th>
+							<th>Location</th>
+							<th>Email</th>
+							<th>Phone</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _model.Locations)
+						{
+							<tr>
+								<td>@item.PersonName</td>
+								<td>@item.Nickname</td>
+								<td>@item.Email</td>
+								<td>@item.PhoneNumber</td>
+								<td>
+									<div class="table-actions">
+										<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.PersonId/locations/@item.Id/edit">View Location</a>
 									</div>
 								</td>
 							</tr>
@@ -124,7 +172,7 @@
 								<td>@item.SubmittedUtc.LocalDateTime.ToString("g")</td>
 								<td>
 									<div class="table-actions">
-										<a class="btn btn-sm btn-outline-primary" href="admin/responses/@item.Id">View Response</a>
+										<a class="btn btn-sm btn-outline-primary" href="/admin/responses/@item.Id">View Response</a>
 									</div>
 								</td>
 							</tr>

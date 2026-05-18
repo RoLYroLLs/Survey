@@ -19,27 +19,30 @@ else
 			<div>
 				<p class="eyebrow">Response Detail</p>
 				<h1>@_item.RespondentName</h1>
-				<p>@_item.SurveyName | @_item.VersionName</p>
+				<p>@_item.SurveyName | @_item.VersionName | @_item.PersonName | @_item.LocationName</p>
 			</div>
 			<div class="toolbar">
-				<a class="btn btn-outline-primary" href="admin/people/@_item.PersonId/edit">Edit Person</a>
+				<a class="btn btn-outline-primary" href="/admin/people/@_item.PersonId/edit">Edit Person</a>
+				<a class="btn btn-outline-primary" href="/admin/people/@_item.PersonId/locations/@_item.LocationId/edit">Edit Location</a>
 				@if (_item.RespondentPostalAddressId.HasValue)
 				{
-					<a class="btn btn-outline-primary" href="admin/addresses/@_item.RespondentPostalAddressId.Value/edit">Edit Shared Address</a>
+					<a class="btn btn-outline-primary" href="/admin/addresses/@_item.RespondentPostalAddressId.Value/edit">Edit Shared Address</a>
 				}
-				<a class="btn btn-outline-primary" href="admin/responses">Back to Responses</a>
+				<a class="btn btn-outline-primary" href="/admin/responses">Back to Responses</a>
 			</div>
 		</div>
 
 		<div class="card-grid">
 			<section class="content-card">
 				<h2>Contact Snapshot</h2>
-				<p class="mb-1"><strong>Address:</strong> @_item.HomeAddress</p>
+				<p class="mb-1"><strong>Physical Address:</strong> @_item.HomeAddress</p>
+				<p class="mb-1"><strong>Mailing Address:</strong> @_item.MailingAddress</p>
 				<p class="mb-1"><strong>Postal Code:</strong> @_item.PostalCode</p>
 				<p class="mb-1"><strong>County:</strong> @_item.CountyName</p>
-				<p class="mb-1"><strong>Phone:</strong> @_item.PhoneNumber</p>
+				<p class="mb-1"><strong>Phone:</strong> @(string.IsNullOrWhiteSpace(_item.PhoneLabel) ? _item.PhoneNumber : $"{_item.PhoneLabel}: {_item.PhoneNumber}")</p>
 				<p class="mb-1"><strong>Best Time:</strong> @_item.BestTimeToContact</p>
-				<p class="mb-0"><strong>Email:</strong> @_item.Email</p>
+				<p class="mb-1"><strong>Preferred Method:</strong> @_item.PreferredContactMethod</p>
+				<p class="mb-0"><strong>Email:</strong> @(string.IsNullOrWhiteSpace(_item.EmailLabel) ? _item.Email : $"{_item.EmailLabel}: {_item.Email}")</p>
 			</section>
 			<section class="content-card">
 				<h2>Audit</h2>

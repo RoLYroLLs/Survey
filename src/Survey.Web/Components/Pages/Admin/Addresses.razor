@@ -10,7 +10,7 @@
 		<div>
 			<p class="eyebrow">Geography</p>
 			<h1>Addresses</h1>
-			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "Shared addresses are reused automatically when people or survey submissions enter the same location." : $"Showing addresses for {_filterLabel}.")</p>
+			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "View the shared address records available in the system." : $"Showing addresses for {_filterLabel}.")</p>
 		</div>
 		<div class="toolbar">
 			@if (CountyId.HasValue)
@@ -72,7 +72,7 @@
 							<td>
 								<div class="table-actions">
 									<a class="btn btn-sm btn-outline-primary" href="admin/addresses/@item.Id/references">References</a>
-									<a class="btn btn-sm btn-outline-primary" href="admin/addresses/@item.Id/edit">Edit</a>
+								<a class="btn btn-sm btn-outline-primary" href="admin/addresses/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>

@@ -17,15 +17,26 @@ public class SurveyResponse
 	public string? RespondentState { get; private set; }
 	public string RespondentHomeAddress { get; private set; } = string.Empty;
 	public string? RespondentPostalCode { get; private set; }
+	public int? RespondentMailingPostalAddressId { get; private set; }
+	public string? RespondentMailingAddressLine1 { get; private set; }
+	public string? RespondentMailingAddressLine2 { get; private set; }
+	public string? RespondentMailingCity { get; private set; }
+	public string? RespondentMailingState { get; private set; }
+	public string RespondentMailingAddress { get; private set; } = string.Empty;
+	public string? RespondentMailingPostalCode { get; private set; }
 	public string? RespondentCountyFipsSnapshot { get; private set; }
 	public string? RespondentCountyNameSnapshot { get; private set; }
 	public string? RespondentStateCodeSnapshot { get; private set; }
 	public string RespondentPhoneNumber { get; private set; } = string.Empty;
+	public string? RespondentPhoneLabel { get; private set; }
 	public string? RespondentBestTimeToContact { get; private set; }
+	public string? RespondentPreferredContactMethod { get; private set; }
 	public string RespondentEmail { get; private set; } = string.Empty;
+	public string? RespondentEmailLabel { get; private set; }
 	public string SurveyNameSnapshot { get; private set; } = string.Empty;
 	public string SurveyVersionNameSnapshot { get; private set; } = string.Empty;
 	public PostalAddress? RespondentPostalAddress { get; private set; }
+	public PostalAddress? RespondentMailingPostalAddress { get; private set; }
 	public SurveyAssignment SurveyAssignment { get; private set; } = default!;
 	public ICollection<SurveyAnswer> Answers { get; } = new List<SurveyAnswer>();
 
@@ -46,15 +57,25 @@ public class SurveyResponse
 		string respondentCity,
 		string respondentState,
 		string? respondentPostalCode,
+		int? respondentMailingPostalAddressId,
+		string respondentMailingAddressLine1,
+		string? respondentMailingAddressLine2,
+		string respondentMailingCity,
+		string respondentMailingState,
+		string? respondentMailingPostalCode,
 		string? respondentCountyFipsSnapshot,
 		string? respondentCountyNameSnapshot,
 		string? respondentStateCodeSnapshot,
-		string respondentPhoneNumber,
+		string? respondentPhoneNumber,
+		string? respondentPhoneLabel,
 		string? respondentBestTimeToContact,
-		string respondentEmail,
+		string? respondentPreferredContactMethod,
+		string? respondentEmail,
+		string? respondentEmailLabel,
 		string surveyNameSnapshot,
 		string surveyVersionNameSnapshot,
-		string? countryName = null)
+		string? countryName = null,
+		string? mailingCountryName = null)
 	{
 		SurveyAssignmentId = surveyAssignmentId;
 		SubmittedByUserId = CleanOptional(submittedByUserId, 450);
@@ -71,12 +92,23 @@ public class SurveyResponse
 		RespondentPostalCode = PostalCodeNormalizer.Normalize(respondentPostalCode, nameof(respondentPostalCode))
 			?? throw new ArgumentException("A value is required.", nameof(respondentPostalCode));
 		RespondentHomeAddress = AddressFormatter.Format(RespondentAddressLine1, RespondentAddressLine2, RespondentCity, RespondentState, RespondentPostalCode, countryName);
+		RespondentMailingPostalAddressId = respondentMailingPostalAddressId > 0 ? respondentMailingPostalAddressId : null;
+		RespondentMailingAddressLine1 = RequireValue(respondentMailingAddressLine1, nameof(respondentMailingAddressLine1), 200);
+		RespondentMailingAddressLine2 = CleanOptional(respondentMailingAddressLine2, 200);
+		RespondentMailingCity = RequireValue(respondentMailingCity, nameof(respondentMailingCity), 100);
+		RespondentMailingState = RequireValue(respondentMailingState, nameof(respondentMailingState), 100);
+		RespondentMailingPostalCode = PostalCodeNormalizer.Normalize(respondentMailingPostalCode, nameof(respondentMailingPostalCode))
+			?? throw new ArgumentException("A value is required.", nameof(respondentMailingPostalCode));
+		RespondentMailingAddress = AddressFormatter.Format(RespondentMailingAddressLine1, RespondentMailingAddressLine2, RespondentMailingCity, RespondentMailingState, RespondentMailingPostalCode, mailingCountryName);
 		RespondentCountyFipsSnapshot = CleanOptional(respondentCountyFipsSnapshot, 5);
 		RespondentCountyNameSnapshot = CleanOptional(respondentCountyNameSnapshot, 200);
 		RespondentStateCodeSnapshot = CleanOptional(respondentStateCodeSnapshot, 2)?.ToUpperInvariant();
-		RespondentPhoneNumber = RequireValue(respondentPhoneNumber, nameof(respondentPhoneNumber), 50);
+		RespondentPhoneNumber = CleanOptional(respondentPhoneNumber, 50) ?? string.Empty;
+		RespondentPhoneLabel = CleanOptional(respondentPhoneLabel, 50);
 		RespondentBestTimeToContact = CleanOptional(respondentBestTimeToContact, 100);
-		RespondentEmail = RequireValue(respondentEmail, nameof(respondentEmail), 256);
+		RespondentPreferredContactMethod = CleanOptional(respondentPreferredContactMethod, 50);
+		RespondentEmail = CleanOptional(respondentEmail, 256) ?? string.Empty;
+		RespondentEmailLabel = CleanOptional(respondentEmailLabel, 50);
 		SurveyNameSnapshot = RequireValue(surveyNameSnapshot, nameof(surveyNameSnapshot), 200);
 		SurveyVersionNameSnapshot = RequireValue(surveyVersionNameSnapshot, nameof(surveyVersionNameSnapshot), 200);
 	}

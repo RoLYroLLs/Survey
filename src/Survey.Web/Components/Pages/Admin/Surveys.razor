@@ -52,7 +52,7 @@
 							<td>@item.UpdatedUtc.LocalDateTime.ToString("g")</td>
 							<td>
 								<div class="table-actions">
-									<a class="btn btn-sm btn-outline-primary" href="@($"admin/surveys/{item.Id}/edit?showArchived={ShowArchived.ToString().ToLowerInvariant()}")">Edit</a>
+									<a class="btn btn-sm btn-outline-primary" href="@($"admin/surveys/{item.Id}?showArchived={ShowArchived.ToString().ToLowerInvariant()}")">View</a>
 									<a class="btn btn-sm btn-outline-primary" href="@($"admin/versions?surveyDefinitionId={item.Id}&showArchived={ShowArchived.ToString().ToLowerInvariant()}")">Versions</a>
 								</div>
 							</td>

@@ -16,7 +16,7 @@ public class SurveySessionModel
 	public IReadOnlyList<SurveySectionStepModel> Sections { get; set; } = Array.Empty<SurveySectionStepModel>();
 }
 
-public class RespondentContactModel
+public class RespondentContactModel : IValidatableObject
 {
 	[Required]
 	[StringLength(100)]
@@ -29,45 +29,63 @@ public class RespondentContactModel
 	[StringLength(100)]
 	public string LastName { get; set; } = string.Empty;
 
-	[Required]
-	[StringLength(200)]
-	public string AddressLine1 { get; set; } = string.Empty;
-
-	[StringLength(200)]
-	public string? AddressLine2 { get; set; }
-
-	[Required]
-	[StringLength(100)]
-	public string City { get; set; } = string.Empty;
-
-	[Range(1, int.MaxValue)]
-	public int CountryId { get; set; }
-
-	[Required]
-	[Range(1, int.MaxValue)]
-	public int StateProvinceId { get; set; }
-
-	public int? CountyId { get; set; }
-
-	[Required]
-	[StringLength(20)]
-	public string? PostalCode { get; set; }
-
-	[Required]
 	[StringLength(50)]
 	public string PhoneNumber { get; set; } = string.Empty;
+
+	[StringLength(50)]
+	public string? PhoneLabel { get; set; }
 
 	[StringLength(100)]
 	public string? BestTimeToContact { get; set; }
 
-	[Required]
+	[StringLength(50)]
+	public string? PreferredContactMethod { get; set; }
+
 	[EmailAddress]
 	[StringLength(256)]
 	public string Email { get; set; } = string.Empty;
 
-	public IReadOnlyList<SelectOption> CountryOptions { get; set; } = Array.Empty<SelectOption>();
-	public IReadOnlyList<SelectOption> StateProvinceOptions { get; set; } = Array.Empty<SelectOption>();
-	public IReadOnlyList<SelectOption> CountyOptions { get; set; } = Array.Empty<SelectOption>();
+	[StringLength(50)]
+	public string? EmailLabel { get; set; }
+
+	public AddressInputModel PhysicalAddress { get; set; } = new();
+	public AddressInputModel MailingAddress { get; set; } = new();
+	public AddressInputModel ProfilePhysicalAddress { get; set; } = new();
+	public AddressInputModel ProfileMailingAddress { get; set; } = new();
+
+	public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+	{
+		foreach (var result in ContactValidationRules.ValidateRequiredAddress(PhysicalAddress, nameof(PhysicalAddress)))
+		{
+			yield return result;
+		}
+
+		foreach (var result in ContactValidationRules.ValidateOptionalAddress(MailingAddress, nameof(MailingAddress)))
+		{
+			yield return result;
+		}
+
+		foreach (var result in ContactValidationRules.ValidateContactMethods(
+			[
+				new PhoneContactEditModel
+				{
+					Label = PhoneLabel ?? ContactOptionCatalog.PhoneTypes.Home,
+					PhoneNumber = PhoneNumber
+				}
+			],
+			[
+				new EmailContactEditModel
+				{
+					Label = EmailLabel ?? ContactOptionCatalog.EmailTypes.Home,
+					EmailAddress = Email
+				}
+			],
+			nameof(PhoneNumber),
+			nameof(Email)))
+		{
+			yield return result;
+		}
+	}
 }
 
 public class SurveySectionStepModel

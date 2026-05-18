@@ -57,9 +57,17 @@ public interface ISurveyAdministrationService
 	Task<IReadOnlyList<PersonListItem>> GetPeopleAsync(CancellationToken cancellationToken = default);
 	Task<PersonEditModel> GetPersonAsync(int? id, CancellationToken cancellationToken = default);
 	Task<int> SavePersonAsync(PersonEditModel model, CancellationToken cancellationToken = default);
-	Task<IReadOnlyList<SurveyAssignmentListItem>> GetAssignmentsAsync(CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<SelectOption>> GetLocationSelectOptionsAsync(int? personId, int? includeLocationId = null, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<SelectOption>> GetLocationPhoneSelectOptionsAsync(int? locationId, int? includePhoneId = null, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<SelectOption>> GetLocationEmailSelectOptionsAsync(int? locationId, int? includeEmailId = null, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<LocationListItem>> GetLocationsAsync(int? personId = null, CancellationToken cancellationToken = default);
+	Task<LocationEditModel> GetLocationAsync(int? id, int? personId, CancellationToken cancellationToken = default);
+	Task<int> SaveLocationAsync(LocationEditModel model, CancellationToken cancellationToken = default);
+	Task DeleteLocationAsync(int id, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<SurveyAssignmentListItem>> GetAssignmentsAsync(int? personId = null, bool archivedOnly = false, string? statusFilter = null, CancellationToken cancellationToken = default);
 	Task<SurveyAssignmentEditModel> GetAssignmentAsync(int? id, CancellationToken cancellationToken = default);
 	Task<int> SaveAssignmentAsync(SurveyAssignmentEditModel model, string? createdByUserId, CancellationToken cancellationToken = default);
+	Task SetAssignmentArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<SurveyResponseListItem>> GetResponsesAsync(CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<SurveyResponseListItem>> GetUnmappedResponsesAsync(string postalCode, CancellationToken cancellationToken = default);
 	Task<SurveyResponseDetailModel?> GetResponseAsync(int id, CancellationToken cancellationToken = default);

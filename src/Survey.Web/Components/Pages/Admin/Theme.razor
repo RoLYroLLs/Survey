@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = RoleNames.Admin)]
 @inject ISurveyAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
 <PageTitle>Theme</PageTitle>
 
@@ -10,20 +11,18 @@
 		<div>
 			<p class="eyebrow">Settings</p>
 			<h1>Theme</h1>
-			<p>Admins control the global color system here. Clicking a preset makes it the live theme for every visitor to the site.</p>
+			<p>View and choose the site's current theme.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="/admin/theme/radius-preview">View Radius Preview</a>
 		</div>
 	</div>
-
-	@if (_updated)
-	{
-		<div class="inline-banner">The site theme was updated and is now live for all users.</div>
-	}
 
 	<div class="form-card">
 		<div class="page-header">
 			<div>
 				<h2>Color System</h2>
-				<p>Choose one of the curated presets below. Changes apply immediately and are shared site-wide.</p>
+				<p>Select from the available theme presets below.</p>
 			</div>
 			@if (_model.UpdatedUtc.HasValue)
 			{
@@ -65,13 +64,18 @@
 	public int? Updated { get; set; }
 
 	private SiteSettingsEditModel _model = new();
-	private bool _updated;
 	private bool _isApplyingTheme;
+	private bool _toastShownForUpdate;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_model = await AdministrationService.GetSiteSettingsAsync();
-		_updated = Updated == 1;
+		if (Updated == 1 && !_toastShownForUpdate)
+		{
+			_toastShownForUpdate = true;
+			ToastService.ShowSuccess("The site theme was updated and is now live for all users.", "Theme updated");
+			NavigationManager.NavigateTo("admin/theme", replace: true);
+		}
 	}
 
 	private async Task ApplyThemeAsync(string themePresetKey)

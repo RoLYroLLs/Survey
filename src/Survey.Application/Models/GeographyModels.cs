@@ -149,8 +149,9 @@ public class PostalAddressReferenceViewModel
 	public string CountryCode { get; set; } = string.Empty;
 	public string? CountyName { get; set; }
 	public IReadOnlyList<PostalAddressPersonReferenceItem> People { get; set; } = Array.Empty<PostalAddressPersonReferenceItem>();
+	public IReadOnlyList<PostalAddressLocationReferenceItem> Locations { get; set; } = Array.Empty<PostalAddressLocationReferenceItem>();
 	public IReadOnlyList<PostalAddressResponseReferenceItem> Responses { get; set; } = Array.Empty<PostalAddressResponseReferenceItem>();
-	public int ReferenceCount => People.Count + Responses.Count;
+	public int ReferenceCount => People.Count + Locations.Count + Responses.Count;
 }
 
 public class PostalAddressPersonReferenceItem
@@ -168,6 +169,16 @@ public class PostalAddressResponseReferenceItem
 	public string SurveyName { get; set; } = string.Empty;
 	public string VersionName { get; set; } = string.Empty;
 	public DateTimeOffset SubmittedUtc { get; set; }
+}
+
+public class PostalAddressLocationReferenceItem
+{
+	public int Id { get; set; }
+	public int PersonId { get; set; }
+	public string PersonName { get; set; } = string.Empty;
+	public string Nickname { get; set; } = string.Empty;
+	public string? Email { get; set; }
+	public string? PhoneNumber { get; set; }
 }
 
 public class CountryImportModel

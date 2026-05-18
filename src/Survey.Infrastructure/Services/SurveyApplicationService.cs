@@ -562,6 +562,7 @@ public sealed partial class SurveyApplicationService(
 	{
 		return await _dbContext.People
 			.AsNoTracking()
+			.Include(person => person.Locations)
 			.OrderBy(person => person.LastName)
 			.ThenBy(person => person.FirstName)
 			.Select(person => new PersonListItem
@@ -572,7 +573,8 @@ public sealed partial class SurveyApplicationService(
 				LastName = person.LastName,
 				PostalCode = person.PostalCode,
 				Email = person.Email,
-				PhoneNumber = person.PhoneNumber
+				PhoneNumber = person.PhoneNumber,
+				LocationCount = person.Locations.Count
 			})
 			.ToListAsync(cancellationToken);
 	}
@@ -587,6 +589,10 @@ public sealed partial class SurveyApplicationService(
 		var entity = await _dbContext.People
 			.AsNoTracking()
 			.Include(person => person.PostalAddress)
+			.Include(person => person.MailingPostalAddress)
+			.Include(person => person.Phones)
+			.Include(person => person.Emails)
+			.Include(person => person.Locations)
 			.FirstOrDefaultAsync(person => person.Id == id.Value, cancellationToken)
 			?? throw new InvalidOperationException("The requested person was not found.");
 
@@ -595,35 +601,63 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<int> SavePersonAsync(PersonEditModel model, CancellationToken cancellationToken = default)
 	{
-		var resolvedAddress = await ResolveOrCreatePostalAddressAsync(
-			model.CountryId,
-			model.StateProvinceId,
-			model.CountyId,
-			model.AddressLine1,
-			model.AddressLine2,
-			model.City,
-			model.PostalCode,
+		var normalizedPhones = NormalizePhoneContacts(model.Phones);
+		var normalizedEmails = NormalizeEmailContacts(model.Emails);
+		var primaryPhone = normalizedPhones.FirstOrDefault();
+		var primaryEmail = normalizedEmails.FirstOrDefault();
+		var normalizedBestTimeToContact = ContactOptionCatalog.NormalizeBestTime(model.BestTimeToContact);
+		var normalizedPreferredContactMethod = ContactOptionCatalog.NormalizePreferredContactMethod(model.PreferredContactMethod);
+		var mailingAddressInput = GetAddressOrFallback(model.MailingAddress, model.PhysicalAddress);
+
+		var resolvedPhysicalAddress = await ResolveOrCreatePostalAddressAsync(
+			model.PhysicalAddress.CountryId,
+			model.PhysicalAddress.StateProvinceId,
+			model.PhysicalAddress.CountyId,
+			model.PhysicalAddress.AddressLine1,
+			model.PhysicalAddress.AddressLine2,
+			model.PhysicalAddress.City,
+			model.PhysicalAddress.PostalCode,
+			cancellationToken);
+		var resolvedMailingAddress = await ResolveOrCreatePostalAddressAsync(
+			mailingAddressInput.CountryId,
+			mailingAddressInput.StateProvinceId,
+			mailingAddressInput.CountyId,
+			mailingAddressInput.AddressLine1,
+			mailingAddressInput.AddressLine2,
+			mailingAddressInput.City,
+			mailingAddressInput.PostalCode,
 			cancellationToken);
 
 		Person entity;
 		if (model.Id.HasValue)
 		{
-			entity = await _dbContext.People.FirstOrDefaultAsync(person => person.Id == model.Id.Value, cancellationToken)
+			entity = await _dbContext.People
+				.Include(person => person.Phones)
+				.Include(person => person.Emails)
+				.FirstOrDefaultAsync(person => person.Id == model.Id.Value, cancellationToken)
 				?? throw new InvalidOperationException("The requested person was not found.");
 			entity.Update(
 				model.FirstName,
 				model.MiddleName,
 				model.LastName,
-				resolvedAddress.PostalAddress.Id,
-				model.AddressLine1,
-				model.AddressLine2,
-				model.City,
-				resolvedAddress.StateProvince.Code,
-				model.PostalCode,
-				model.PhoneNumber,
-				model.BestTimeToContact,
-				model.Email,
-				resolvedAddress.Country.Name);
+				resolvedPhysicalAddress.PostalAddress.Id,
+				model.PhysicalAddress.AddressLine1,
+				model.PhysicalAddress.AddressLine2,
+				model.PhysicalAddress.City,
+				resolvedPhysicalAddress.StateProvince.Code,
+				model.PhysicalAddress.PostalCode,
+				resolvedMailingAddress.PostalAddress.Id,
+				mailingAddressInput.AddressLine1,
+				mailingAddressInput.AddressLine2,
+				mailingAddressInput.City,
+				resolvedMailingAddress.StateProvince.Code,
+				mailingAddressInput.PostalCode,
+				primaryPhone?.PhoneNumber,
+				normalizedBestTimeToContact,
+				normalizedPreferredContactMethod,
+				primaryEmail?.EmailAddress,
+				resolvedPhysicalAddress.Country.Name,
+				resolvedMailingAddress.Country.Name);
 		}
 		else
 		{
@@ -631,64 +665,113 @@ public sealed partial class SurveyApplicationService(
 				model.FirstName,
 				model.MiddleName,
 				model.LastName,
-				resolvedAddress.PostalAddress.Id,
-				model.AddressLine1,
-				model.AddressLine2,
-				model.City,
-				resolvedAddress.StateProvince.Code,
-				model.PostalCode,
-				model.PhoneNumber,
-				model.BestTimeToContact,
-				model.Email,
-				resolvedAddress.Country.Name);
+				resolvedPhysicalAddress.PostalAddress.Id,
+				model.PhysicalAddress.AddressLine1,
+				model.PhysicalAddress.AddressLine2,
+				model.PhysicalAddress.City,
+				resolvedPhysicalAddress.StateProvince.Code,
+				model.PhysicalAddress.PostalCode,
+				resolvedMailingAddress.PostalAddress.Id,
+				mailingAddressInput.AddressLine1,
+				mailingAddressInput.AddressLine2,
+				mailingAddressInput.City,
+				resolvedMailingAddress.StateProvince.Code,
+				mailingAddressInput.PostalCode,
+				primaryPhone?.PhoneNumber,
+				normalizedBestTimeToContact,
+				normalizedPreferredContactMethod,
+				primaryEmail?.EmailAddress,
+				resolvedPhysicalAddress.Country.Name,
+				resolvedMailingAddress.Country.Name);
 			_dbContext.People.Add(entity);
+			await _dbContext.SaveChangesAsync(cancellationToken);
 		}
 
+		await SyncPersonPhonesAsync(entity, normalizedPhones, cancellationToken);
+		await SyncPersonEmailsAsync(entity, normalizedEmails, cancellationToken);
+		entity.UpdatePrimaryContactSnapshot(primaryPhone?.PhoneNumber, primaryEmail?.EmailAddress);
 		await _dbContext.SaveChangesAsync(cancellationToken);
 		return entity.Id;
 	}
 
-	public async Task<IReadOnlyList<SurveyAssignmentListItem>> GetAssignmentsAsync(CancellationToken cancellationToken = default)
+	public async Task<IReadOnlyList<SurveyAssignmentListItem>> GetAssignmentsAsync(int? personId = null, bool archivedOnly = false, string? statusFilter = null, CancellationToken cancellationToken = default)
 	{
 		var now = DateTimeOffset.UtcNow;
 
-		var assignments = await _dbContext.SurveyAssignments
+		IQueryable<SurveyAssignment> query = _dbContext.SurveyAssignments
 			.AsNoTracking()
-			.Include(assignment => assignment.Person)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.Person)
 			.Include(assignment => assignment.SurveyVersion)
 				.ThenInclude(version => version.SurveyDefinition)
-			.Include(assignment => assignment.Response)
+			.Include(assignment => assignment.Response);
+
+		if (personId.HasValue)
+		{
+			query = query.Where(assignment => assignment.Location.PersonId == personId.Value);
+		}
+
+		query = archivedOnly
+			? query.Where(assignment => assignment.IsArchived)
+			: query.Where(assignment => !assignment.IsArchived);
+
+		var normalizedStatusFilter = statusFilter?.Trim().ToLowerInvariant();
+
+		var assignments = await query
 			.Select(assignment => new SurveyAssignmentListItem
 			{
 				Id = assignment.Id,
-				PersonName = BuildFullName(assignment.Person.FirstName, assignment.Person.MiddleName, assignment.Person.LastName),
+				PersonName = BuildFullName(assignment.Location.Person.FirstName, assignment.Location.Person.MiddleName, assignment.Location.Person.LastName),
+				LocationName = assignment.Location.Nickname,
 				SurveyName = assignment.SurveyVersion.SurveyDefinition.Name,
 				VersionName = assignment.SurveyVersion.DisplayName,
 				PublicToken = assignment.PublicToken,
 				ExpiresAtUtc = assignment.ExpiresAtUtc,
 				CreatedUtc = assignment.CreatedUtc,
+				IsArchived = assignment.IsArchived,
 				IsCompleted = assignment.Response != null,
-				IsExpired = assignment.ExpiresAtUtc.HasValue && assignment.ExpiresAtUtc.Value <= now
+				IsExpired = assignment.ExpiresAtUtc.HasValue && assignment.ExpiresAtUtc <= now
 			})
 			.ToListAsync(cancellationToken);
 
-		return assignments
+		var filteredAssignments = normalizedStatusFilter switch
+		{
+			"active" => assignments.Where(assignment => !assignment.IsCompleted && !assignment.IsExpired),
+			"completed" => assignments.Where(assignment => assignment.IsCompleted),
+			"expired" => assignments.Where(assignment => !assignment.IsCompleted && assignment.IsExpired),
+			_ => assignments
+		};
+
+		return filteredAssignments
 			.OrderByDescending(assignment => assignment.CreatedUtc)
 			.ToList();
 	}
 
 	public async Task<SurveyAssignmentEditModel> GetAssignmentAsync(int? id, CancellationToken cancellationToken = default)
 	{
+		var now = DateTimeOffset.UtcNow;
 		var personOptions = await GetPersonSelectOptionsAsync(cancellationToken);
 
 		if (!id.HasValue)
 		{
 			var availableVersionOptions = await GetSurveyVersionOptionsAsync(includeUnpublished: false, includeVersionId: null, cancellationToken: cancellationToken);
+			var personId = personOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0);
+			var locationOptions = await GetLocationSelectOptionsAsync(personId, null, cancellationToken);
+			var locationId = locationOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0);
+			var locationPhoneOptions = await GetLocationPhoneSelectOptionsAsync(locationId, null, cancellationToken);
+			var locationEmailOptions = await GetLocationEmailSelectOptionsAsync(locationId, null, cancellationToken);
 			return new SurveyAssignmentEditModel
 			{
-				PersonId = personOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0),
+				PersonId = personId,
+				LocationId = locationId,
+				LocationPhoneId = GetFirstOptionId(locationPhoneOptions),
+				LocationEmailId = GetFirstOptionId(locationEmailOptions),
 				SurveyVersionId = availableVersionOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0),
 				PublicToken = GeneratePublicToken(),
+				IsArchived = false,
+				LocationOptions = locationOptions,
+				LocationPhoneOptions = locationPhoneOptions,
+				LocationEmailOptions = locationEmailOptions,
 				PersonOptions = personOptions,
 				SurveyVersionOptions = availableVersionOptions
 			};
@@ -696,6 +779,7 @@ public sealed partial class SurveyApplicationService(
 
 		var entity = await _dbContext.SurveyAssignments
 			.AsNoTracking()
+			.Include(assignment => assignment.Location)
 			.Include(assignment => assignment.Response)
 			.FirstOrDefaultAsync(assignment => assignment.Id == id.Value, cancellationToken)
 			?? throw new InvalidOperationException("The requested assignment was not found.");
@@ -704,11 +788,19 @@ public sealed partial class SurveyApplicationService(
 		return new SurveyAssignmentEditModel
 		{
 			Id = entity.Id,
-			PersonId = entity.PersonId,
+			PersonId = entity.Location.PersonId,
+			LocationId = entity.LocationId,
+			LocationPhoneId = entity.LocationPhoneId,
+			LocationEmailId = entity.LocationEmailId,
 			SurveyVersionId = entity.SurveyVersionId,
 			ExpiresAtUtc = entity.ExpiresAtUtc,
 			PublicToken = entity.PublicToken,
+			IsArchived = entity.IsArchived,
 			IsCompleted = entity.Response is not null,
+			IsExpired = entity.ExpiresAtUtc.HasValue && entity.ExpiresAtUtc.Value <= now,
+			LocationOptions = await GetLocationSelectOptionsAsync(entity.Location.PersonId, entity.LocationId, cancellationToken),
+			LocationPhoneOptions = await GetLocationPhoneSelectOptionsAsync(entity.LocationId, entity.LocationPhoneId, cancellationToken),
+			LocationEmailOptions = await GetLocationEmailSelectOptionsAsync(entity.LocationId, entity.LocationEmailId, cancellationToken),
 			PersonOptions = personOptions,
 			SurveyVersionOptions = versionOptions
 		};
@@ -717,6 +809,25 @@ public sealed partial class SurveyApplicationService(
 	public async Task<int> SaveAssignmentAsync(SurveyAssignmentEditModel model, string? createdByUserId, CancellationToken cancellationToken = default)
 	{
 		await EnsurePersonExistsAsync(model.PersonId, cancellationToken);
+		await EnsureLocationExistsAsync(model.LocationId, cancellationToken);
+
+		if (!model.LocationPhoneId.HasValue && !model.LocationEmailId.HasValue)
+		{
+			throw new InvalidOperationException("Select at least one location phone or location email.");
+		}
+
+		await EnsureLocationPhoneBelongsToLocationAsync(model.LocationId, model.LocationPhoneId, cancellationToken);
+		await EnsureLocationEmailBelongsToLocationAsync(model.LocationId, model.LocationEmailId, cancellationToken);
+
+		var locationPersonId = await _dbContext.Locations
+			.AsNoTracking()
+			.Where(location => location.Id == model.LocationId)
+			.Select(location => location.PersonId)
+			.FirstOrDefaultAsync(cancellationToken);
+		if (locationPersonId != model.PersonId)
+		{
+			throw new InvalidOperationException("The selected location does not belong to the selected person.");
+		}
 
 		var version = await _dbContext.SurveyVersions
 			.AsNoTracking()
@@ -746,20 +857,34 @@ public sealed partial class SurveyApplicationService(
 				throw new InvalidOperationException("Completed assignments can no longer be edited.");
 			}
 
-			assignment.Update(string.IsNullOrWhiteSpace(model.PublicToken) ? GeneratePublicToken() : model.PublicToken, model.ExpiresAtUtc);
+			assignment.Update(assignment.PublicToken, model.ExpiresAtUtc);
+			assignment.SetArchived(model.IsArchived);
 			await _dbContext.SaveChangesAsync(cancellationToken);
 			return assignment.Id;
 		}
 
 		var entity = new SurveyAssignment(
-			model.PersonId,
+			model.LocationId,
+			model.LocationPhoneId,
+			model.LocationEmailId,
 			model.SurveyVersionId,
 			string.IsNullOrWhiteSpace(model.PublicToken) ? GeneratePublicToken() : model.PublicToken,
 			model.ExpiresAtUtc,
 			createdByUserId);
+		entity.SetArchived(model.IsArchived);
 		_dbContext.SurveyAssignments.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
 		return entity.Id;
+	}
+
+	public async Task SetAssignmentArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default)
+	{
+		var assignment = await _dbContext.SurveyAssignments
+			.FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken)
+			?? throw new InvalidOperationException("The requested assignment was not found.");
+
+		assignment.SetArchived(isArchived);
+		await _dbContext.SaveChangesAsync(cancellationToken);
 	}
 
 	public async Task<IReadOnlyList<SurveyResponseListItem>> GetResponsesAsync(CancellationToken cancellationToken = default)
@@ -767,7 +892,8 @@ public sealed partial class SurveyApplicationService(
 		var responses = await _dbContext.SurveyResponses
 			.AsNoTracking()
 			.Include(response => response.SurveyAssignment)
-				.ThenInclude(assignment => assignment.Person)
+				.ThenInclude(assignment => assignment.Location)
+					.ThenInclude(location => location.Person)
 			.Include(response => response.SurveyAssignment)
 				.ThenInclude(assignment => assignment.SurveyVersion)
 					.ThenInclude(version => version.SurveyDefinition)
@@ -788,7 +914,8 @@ public sealed partial class SurveyApplicationService(
 		var responses = await _dbContext.SurveyResponses
 			.AsNoTracking()
 			.Include(response => response.SurveyAssignment)
-				.ThenInclude(assignment => assignment.Person)
+				.ThenInclude(assignment => assignment.Location)
+					.ThenInclude(location => location.Person)
 			.Include(response => response.SurveyAssignment)
 				.ThenInclude(assignment => assignment.SurveyVersion)
 					.ThenInclude(version => version.SurveyDefinition)
@@ -825,7 +952,8 @@ public sealed partial class SurveyApplicationService(
 		var response = await _dbContext.SurveyResponses
 			.AsNoTracking()
 			.Include(entity => entity.SurveyAssignment)
-				.ThenInclude(assignment => assignment.Person)
+				.ThenInclude(assignment => assignment.Location)
+					.ThenInclude(location => location.Person)
 			.Include(entity => entity.Answers)
 				.ThenInclude(answer => answer.SurveyQuestion)
 					.ThenInclude(question => question.Options)
@@ -844,8 +972,12 @@ public sealed partial class SurveyApplicationService(
 		{
 			Id = response.Id,
 			SurveyAssignmentId = response.SurveyAssignmentId,
-			PersonId = response.SurveyAssignment.PersonId,
+			PersonId = response.SurveyAssignment.Location.PersonId,
+			LocationId = response.SurveyAssignment.LocationId,
 			RespondentPostalAddressId = response.RespondentPostalAddressId,
+			RespondentMailingPostalAddressId = response.RespondentMailingPostalAddressId,
+			PersonName = BuildFullName(response.SurveyAssignment.Location.Person.FirstName, response.SurveyAssignment.Location.Person.MiddleName, response.SurveyAssignment.Location.Person.LastName),
+			LocationName = response.SurveyAssignment.Location.Nickname,
 			SurveyName = response.SurveyNameSnapshot,
 			VersionName = response.SurveyVersionNameSnapshot,
 			RespondentName = BuildFullName(response.RespondentFirstName, response.RespondentMiddleName, response.RespondentLastName),
@@ -856,11 +988,21 @@ public sealed partial class SurveyApplicationService(
 				response.RespondentState,
 				response.RespondentPostalCode,
 				response.RespondentHomeAddress),
+			MailingAddress = FormatAddressOrFallback(
+				response.RespondentMailingAddressLine1,
+				response.RespondentMailingAddressLine2,
+				response.RespondentMailingCity,
+				response.RespondentMailingState,
+				response.RespondentMailingPostalCode,
+				response.RespondentMailingAddress),
 			PostalCode = response.RespondentPostalCode ?? PostalCodeNormalizer.Extract(response.RespondentHomeAddress),
 			CountyName = response.RespondentCountyNameSnapshot,
 			PhoneNumber = response.RespondentPhoneNumber,
+			PhoneLabel = response.RespondentPhoneLabel,
 			BestTimeToContact = response.RespondentBestTimeToContact,
+			PreferredContactMethod = response.RespondentPreferredContactMethod,
 			Email = response.RespondentEmail,
+			EmailLabel = response.RespondentEmailLabel,
 			SubmittedByLabel = BuildSubmittedByLabel(response, userLookup),
 			SubmittedUtc = response.SubmittedUtc,
 			Answers = response.Answers
@@ -884,7 +1026,10 @@ public sealed partial class SurveyApplicationService(
 			{
 				Id = response.Id,
 				SurveyAssignmentId = response.SurveyAssignmentId,
-				PersonId = response.SurveyAssignment.PersonId,
+				PersonId = response.SurveyAssignment.Location.PersonId,
+				LocationId = response.SurveyAssignment.LocationId,
+				PersonName = BuildFullName(response.SurveyAssignment.Location.Person.FirstName, response.SurveyAssignment.Location.Person.MiddleName, response.SurveyAssignment.Location.Person.LastName),
+				LocationName = response.SurveyAssignment.Location.Nickname,
 				SurveyName = response.SurveyNameSnapshot,
 				VersionName = response.SurveyVersionNameSnapshot,
 				RespondentName = BuildFullName(response.RespondentFirstName, response.RespondentMiddleName, response.RespondentLastName),
@@ -1056,7 +1201,7 @@ public sealed partial class SurveyApplicationService(
 
 		var assignment = await QueryAssignmentsForSession()
 			.AsNoTracking()
-			.FirstOrDefaultAsync(entity => entity.PublicToken == token.Trim(), cancellationToken);
+			.FirstOrDefaultAsync(entity => entity.PublicToken == token.Trim() && !entity.IsArchived, cancellationToken);
 
 		return assignment is null ? null : await BuildSessionModelAsync(assignment, false, cancellationToken);
 	}
@@ -1065,7 +1210,7 @@ public sealed partial class SurveyApplicationService(
 	{
 		var assignment = await QueryAssignmentsForSession()
 			.AsNoTracking()
-			.FirstOrDefaultAsync(entity => entity.Id == assignmentId, cancellationToken);
+			.FirstOrDefaultAsync(entity => entity.Id == assignmentId && !entity.IsArchived, cancellationToken);
 
 		return assignment is null ? null : await BuildSessionModelAsync(assignment, true, cancellationToken);
 	}
@@ -1101,15 +1246,38 @@ public sealed partial class SurveyApplicationService(
 			};
 		}
 
-		var resolvedAddress = await ResolveOrCreatePostalAddressAsync(
-			model.Contact.CountryId,
-			model.Contact.StateProvinceId,
-			model.Contact.CountyId,
-			model.Contact.AddressLine1,
-			model.Contact.AddressLine2,
-			model.Contact.City,
-			model.Contact.PostalCode,
+		if (assignment.IsArchived)
+		{
+			return new SubmitSurveyResult
+			{
+				Succeeded = false,
+				Message = "This survey assignment is archived."
+			};
+		}
+
+		var resolvedPhysicalAddress = await ResolveOrCreatePostalAddressAsync(
+			model.Contact.PhysicalAddress.CountryId,
+			model.Contact.PhysicalAddress.StateProvinceId,
+			model.Contact.PhysicalAddress.CountyId,
+			model.Contact.PhysicalAddress.AddressLine1,
+			model.Contact.PhysicalAddress.AddressLine2,
+			model.Contact.PhysicalAddress.City,
+			model.Contact.PhysicalAddress.PostalCode,
 			cancellationToken);
+		var mailingAddressInput = GetAddressOrFallback(model.Contact.MailingAddress, model.Contact.PhysicalAddress);
+		var resolvedMailingAddress = await ResolveOrCreatePostalAddressAsync(
+			mailingAddressInput.CountryId,
+			mailingAddressInput.StateProvinceId,
+			mailingAddressInput.CountyId,
+			mailingAddressInput.AddressLine1,
+			mailingAddressInput.AddressLine2,
+			mailingAddressInput.City,
+			mailingAddressInput.PostalCode,
+			cancellationToken);
+		var normalizedPhoneLabel = ContactOptionCatalog.NormalizePhoneType(model.Contact.PhoneLabel);
+		var normalizedBestTimeToContact = ContactOptionCatalog.NormalizeBestTime(model.Contact.BestTimeToContact);
+		var normalizedPreferredContactMethod = ContactOptionCatalog.NormalizePreferredContactMethod(model.Contact.PreferredContactMethod);
+		var normalizedEmailLabel = ContactOptionCatalog.NormalizeEmailType(model.Contact.EmailLabel);
 
 		var response = new SurveyResponse(
 			assignment.Id,
@@ -1118,21 +1286,31 @@ public sealed partial class SurveyApplicationService(
 			model.Contact.FirstName,
 			model.Contact.MiddleName,
 			model.Contact.LastName,
-			resolvedAddress.PostalAddress.Id,
-			model.Contact.AddressLine1,
-			model.Contact.AddressLine2,
-			model.Contact.City,
-			resolvedAddress.StateProvince.Code,
-			model.Contact.PostalCode,
-			resolvedAddress.County?.FipsCode,
-			resolvedAddress.County?.Name,
-			resolvedAddress.StateProvince.Code,
+			resolvedPhysicalAddress.PostalAddress.Id,
+			model.Contact.PhysicalAddress.AddressLine1,
+			model.Contact.PhysicalAddress.AddressLine2,
+			model.Contact.PhysicalAddress.City,
+			resolvedPhysicalAddress.StateProvince.Code,
+			model.Contact.PhysicalAddress.PostalCode,
+			resolvedMailingAddress.PostalAddress.Id,
+			mailingAddressInput.AddressLine1,
+			mailingAddressInput.AddressLine2,
+			mailingAddressInput.City,
+			resolvedMailingAddress.StateProvince.Code,
+			mailingAddressInput.PostalCode,
+			resolvedPhysicalAddress.County?.FipsCode,
+			resolvedPhysicalAddress.County?.Name,
+			resolvedPhysicalAddress.StateProvince.Code,
 			model.Contact.PhoneNumber,
-			model.Contact.BestTimeToContact,
+			normalizedPhoneLabel,
+			normalizedBestTimeToContact,
+			normalizedPreferredContactMethod,
 			model.Contact.Email,
+			normalizedEmailLabel,
 			assignment.SurveyVersion.SurveyDefinition.Name,
 			assignment.SurveyVersion.DisplayName,
-			resolvedAddress.Country.Name);
+			resolvedPhysicalAddress.Country.Name,
+			resolvedMailingAddress.Country.Name);
 
 		var answersByQuestionId = model.Answers
 			.GroupBy(answer => answer.QuestionId)
@@ -1164,8 +1342,28 @@ public sealed partial class SurveyApplicationService(
 	private IQueryable<SurveyAssignment> QueryAssignmentsForSession()
 	{
 		return _dbContext.SurveyAssignments
-			.Include(assignment => assignment.Person)
-				.ThenInclude(person => person.PostalAddress)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.Person)
+					.ThenInclude(person => person.PostalAddress)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.Person)
+					.ThenInclude(person => person.MailingPostalAddress)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.Person)
+					.ThenInclude(person => person.Phones)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.Person)
+					.ThenInclude(person => person.Emails)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.PostalAddress)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.MailingPostalAddress)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.Phones)
+			.Include(assignment => assignment.Location)
+				.ThenInclude(location => location.Emails)
+			.Include(assignment => assignment.LocationPhone)
+			.Include(assignment => assignment.LocationEmail)
 			.Include(assignment => assignment.Response)
 			.Include(assignment => assignment.SurveyVersion)
 				.ThenInclude(version => version.SurveyDefinition)
@@ -1186,7 +1384,7 @@ public sealed partial class SurveyApplicationService(
 			IsStaffMode = isStaffMode,
 			IsExpired = assignment.IsExpired(DateTimeOffset.UtcNow),
 			IsCompleted = assignment.Response is not null,
-			Contact = await BuildRespondentContactModelAsync(assignment.Person, cancellationToken),
+			Contact = await BuildRespondentContactModelAsync(assignment.Location.Person, assignment.Location, assignment.LocationPhone, assignment.LocationEmail, cancellationToken),
 			Sections = assignment.SurveyVersion.Sections
 				.OrderBy(section => section.SortOrder)
 				.Select(section => new SurveySectionStepModel
@@ -1578,6 +1776,12 @@ public sealed partial class SurveyApplicationService(
 	private static int TryParseInt(string? value)
 	{
 		return int.TryParse(value, out var parsed) ? parsed : 0;
+	}
+
+	private static int? GetFirstOptionId(IReadOnlyList<SelectOption> options)
+	{
+		var value = options.Select(option => TryParseInt(option.Value)).FirstOrDefault(item => item > 0);
+		return value > 0 ? value : null;
 	}
 
 	private static string GeneratePublicToken()

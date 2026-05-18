@@ -10,7 +10,7 @@
 		<div>
 			<p class="eyebrow">Geography</p>
 			<h1>States / Territories</h1>
-			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "Manage subdivisions by country so addresses and county imports can stay normalized." : $"Showing states and territories for {_filterLabel}.")</p>
+			<p>@(string.IsNullOrWhiteSpace(_filterLabel) ? "View the states and territories in the reference list." : $"Showing states and territories for {_filterLabel}.")</p>
 		</div>
 		<div class="toolbar">
 			@if (CountryId.HasValue)
@@ -65,7 +65,7 @@
 							<td>
 								<div class="table-actions">
 									<a class="btn btn-sm btn-outline-primary" href="admin/counties?stateProvinceId=@item.Id">Counties</a>
-									<a class="btn btn-sm btn-outline-primary" href="admin/state-provinces/@item.Id/edit">Edit</a>
+								<a class="btn btn-sm btn-outline-primary" href="admin/state-provinces/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>
