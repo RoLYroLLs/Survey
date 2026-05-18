@@ -1,0 +1,30 @@
+<a class="table-sort@(IsActive ? " table-sort--active" : string.Empty)"
+   href="@Href">
+	<span>@Label</span>
+	@if (IsActive)
+	{
+		<span class="table-sort__meta">
+			<span class="table-sort__priority">@Priority</span>
+			<span class="table-sort__direction" aria-hidden="true">@(Direction == SortDirection.Descending ? "⌄" : "⌃")</span>
+		</span>
+	}
+</a>
+
+@code {
+	[Parameter, EditorRequired]
+	public string Label { get; set; } = string.Empty;
+
+	[Parameter, EditorRequired]
+	public string SortKey { get; set; } = string.Empty;
+
+	[Parameter, EditorRequired]
+	public string Href { get; set; } = string.Empty;
+
+	[Parameter]
+	public string? CurrentSort { get; set; }
+
+	private SortDescriptor? Descriptor => PagingSort.Get(CurrentSort, SortKey);
+	private bool IsActive => Descriptor is not null;
+	private SortDirection Direction => Descriptor?.Direction ?? SortDirection.Ascending;
+	private int Priority => PagingSort.GetPriority(CurrentSort, SortKey);
+}

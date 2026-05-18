@@ -1,0 +1,68 @@
+<div class="list-pager">
+	<div class="list-pager__summary">Showing @Math.Min(ShownCount, TotalCount) of @TotalCount</div>
+	<div class="list-pager__action">
+		<button class="btn btn-outline-primary" type="button" @onclick="LoadMoreAsync" disabled="@(!HasMore || IsLoadingMore)">
+			@(IsLoadingMore ? "Loading..." : LoadMoreLabel)
+		</button>
+	</div>
+	<div class="list-pager__controls">
+		<label class="list-pager__size-label" for="@_selectId">Show</label>
+		<select id="@_selectId" class="form-select list-pager__size-select" value="@PageSize" @onchange="OnPageSizeChangedAsync">
+			@foreach (var option in PageSizeOptions)
+			{
+				<option value="@option">@option</option>
+			}
+		</select>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int ShownCount { get; set; }
+
+	[Parameter]
+	public int TotalCount { get; set; }
+
+	[Parameter]
+	public int PageSize { get; set; }
+
+	[Parameter]
+	public bool HasMore { get; set; }
+
+	[Parameter]
+	public bool IsLoadingMore { get; set; }
+
+	[Parameter]
+	public string LoadMoreLabel { get; set; } = "Load More";
+
+	[Parameter]
+	public IReadOnlyList<int> PageSizeOptions { get; set; } = [10, 25, 50, 100];
+
+	[Parameter]
+	public EventCallback<int> PageSizeChanged { get; set; }
+
+	[Parameter]
+	public EventCallback OnLoadMore { get; set; }
+
+	private readonly string _selectId = $"list-pager-{Guid.NewGuid():N}";
+
+	private async Task OnPageSizeChangedAsync(ChangeEventArgs args)
+	{
+		if (args.Value is null || !int.TryParse(args.Value.ToString(), out var pageSize))
+		{
+			return;
+		}
+
+		await PageSizeChanged.InvokeAsync(pageSize);
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		if (!HasMore || IsLoadingMore)
+		{
+			return;
+		}
+
+		await OnLoadMore.InvokeAsync();
+	}
+}

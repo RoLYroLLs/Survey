@@ -8,32 +8,19 @@ namespace Survey.Infrastructure.Services;
 
 public sealed partial class SurveyApplicationService
 {
-	public async Task<IReadOnlyList<PlatformUserListItem>> GetPlatformUsersAsync(string? search = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<PlatformUserListItem>> GetPlatformUsersAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.UsersView, cancellationToken);
 
-		var query = _userManager.Users
+		var users = await _userManager.Users
 			.AsNoTracking()
 			.Include(user => user.PlatformPermissions)
-			.AsQueryable();
-
-		if (!string.IsNullOrWhiteSpace(search))
-		{
-			var term = search.Trim();
-			query = query.Where(user =>
-				(user.FirstName != null && user.FirstName.Contains(term)) ||
-				(user.LastName != null && user.LastName.Contains(term)) ||
-				(user.Email != null && user.Email.Contains(term)) ||
-				(user.UserName != null && user.UserName.Contains(term)));
-		}
-
-		var users = await query
 			.OrderBy(user => user.LastName)
 			.ThenBy(user => user.FirstName)
 			.ThenBy(user => user.Email)
 			.ToListAsync(cancellationToken);
 
-		return users
+		var items = users
 			.Where(user => string.IsNullOrWhiteSpace(search) || MatchesPlatformUserSearch(user, search!))
 			.Select(user => new PlatformUserListItem
 			{
@@ -48,6 +35,23 @@ public sealed partial class SurveyApplicationService
 					: user.PlatformPermissions.Count
 			})
 			.ToList();
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(PlatformUserListItem.LastName), nameof(PlatformUserListItem.FirstName)],
+			["email"] = [nameof(PlatformUserListItem.Email)],
+			["status"] = [nameof(PlatformUserListItem.IsPlatformUserEnabled)],
+			["scope"] = [nameof(PlatformUserListItem.IsPlatformSuperAdmin)],
+			["permissions"] = [nameof(PlatformUserListItem.PermissionCount)]
+		};
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(PlatformUserListItem.Id)).ToList();
+		var normalizedRequest = NormalizePagedQuery(request);
+		var totalCount = orderedItems.Count;
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, totalCount, normalizedRequest.Offset);
 	}
 
 	public async Task<PlatformUserEditModel> GetPlatformUserAsync(string? id, CancellationToken cancellationToken = default)
@@ -113,6 +117,7 @@ public sealed partial class SurveyApplicationService
 				IsPlatformUserEnabled = model.IsPlatformUserEnabled,
 				IsPlatformSuperAdmin = model.IsPlatformSuperAdmin
 			};
+			UserAvatarPalette.EnsureAssigned(user);
 
 			var createResult = await _userManager.CreateAsync(user, model.Password);
 			if (!createResult.Succeeded)
@@ -201,7 +206,7 @@ public sealed partial class SurveyApplicationService
 		return user.Id;
 	}
 
-	public async Task<IReadOnlyList<PlatformTenantListItem>> GetPlatformTenantsAsync(string? search = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<PlatformTenantListItem>> GetPlatformTenantsAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.TenantsView, cancellationToken);
 		await RequirePlatformAccessAsync(cancellationToken);
@@ -218,8 +223,9 @@ public sealed partial class SurveyApplicationService
 				tenant.Slug.Contains(term));
 		}
 
-		var items = await query
+		var tenants = await query
 			.OrderBy(tenant => tenant.Name)
+			.ThenBy(tenant => tenant.Id)
 			.Select(tenant => new PlatformTenantListItem
 			{
 				Id = tenant.Id,
@@ -233,13 +239,13 @@ public sealed partial class SurveyApplicationService
 				UpdatedUtc = tenant.UpdatedUtc
 			})
 			.ToListAsync(cancellationToken);
-
-		if (items.Count == 0)
+		var normalizedRequest = NormalizePagedQuery(request);
+		if (tenants.Count == 0)
 		{
-			return items;
+			return CreatePagedResult<PlatformTenantListItem>([], 0, normalizedRequest.Offset);
 		}
 
-		var tenantIds = items.Select(item => item.Id).ToHashSet();
+		var tenantIds = tenants.Select(item => item.Id).ToHashSet();
 		var nowUtc = DateTimeOffset.UtcNow;
 		var pendingInvitationCounts = (await _dbContext.TenantInvitations
 			.AsNoTracking()
@@ -256,12 +262,27 @@ public sealed partial class SurveyApplicationService
 			.GroupBy(invitation => invitation.TenantId)
 			.ToDictionary(group => group.Key, group => group.Count());
 
-		foreach (var item in items)
+		foreach (var item in tenants)
 		{
 			item.PendingInvitationCount = pendingInvitationCounts.GetValueOrDefault(item.Id);
 		}
 
-		return items;
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["tenant"] = [nameof(PlatformTenantListItem.Name), nameof(PlatformTenantListItem.Slug)],
+			["members"] = [nameof(PlatformTenantListItem.MembershipCount)],
+			["enabled"] = [nameof(PlatformTenantListItem.EnabledMembershipCount)],
+			["owners"] = [nameof(PlatformTenantListItem.OwnerCount)],
+			["pendinginvites"] = [nameof(PlatformTenantListItem.PendingInvitationCount)],
+			["updated"] = [nameof(PlatformTenantListItem.UpdatedUtc)]
+		};
+		var orderedItems = ApplyRequestedSorts(tenants.AsQueryable(), request, sortMap, nameof(PlatformTenantListItem.Id)).ToList();
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, orderedItems.Count, normalizedRequest.Offset);
 	}
 
 	public async Task<PlatformTenantDetailModel> GetPlatformTenantAsync(int tenantId, CancellationToken cancellationToken = default)
@@ -326,12 +347,12 @@ public sealed partial class SurveyApplicationService
 		};
 	}
 
-	public async Task<IReadOnlyList<AuditLogListItem>> GetAuditLogsAsync(
+	public async Task<PagedResult<AuditLogListItem>> GetAuditLogsAsync(
+		PagedQuery request,
 		string? plane = null,
 		int? tenantId = null,
 		bool? succeeded = null,
 		string? search = null,
-		int take = 200,
 		CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.AuditView, cancellationToken);
@@ -366,11 +387,8 @@ public sealed partial class SurveyApplicationService
 				(log.Details != null && log.Details.Contains(term)));
 		}
 
+		var normalizedRequest = NormalizePagedQuery(request);
 		var logs = await query.ToListAsync(cancellationToken);
-		logs = logs
-			.OrderByDescending(log => log.CreatedUtc)
-			.Take(Math.Clamp(take, 1, 500))
-			.ToList();
 		var tenantIds = logs
 			.Where(log => log.TenantId.HasValue)
 			.Select(log => log.TenantId!.Value)
@@ -391,7 +409,9 @@ public sealed partial class SurveyApplicationService
 			.Where(user => actorUserIds.Contains(user.Id))
 			.ToDictionaryAsync(user => user.Id, user => BuildDisplayName(user.FirstName, user.LastName, user.Email), cancellationToken);
 
-		return logs
+		var items = logs
+			.OrderByDescending(log => log.CreatedUtc)
+			.ThenByDescending(log => log.Id)
 			.Select(log => new AuditLogListItem
 			{
 				Id = log.Id,
@@ -410,6 +430,24 @@ public sealed partial class SurveyApplicationService
 				CreatedUtc = log.CreatedUtc
 			})
 			.ToList();
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["when"] = [nameof(AuditLogListItem.CreatedUtc)],
+			["plane"] = [nameof(AuditLogListItem.Plane)],
+			["tenant"] = [nameof(AuditLogListItem.TenantName)],
+			["actor"] = [nameof(AuditLogListItem.ActorDisplayName)],
+			["action"] = [nameof(AuditLogListItem.ActionType)],
+			["target"] = [nameof(AuditLogListItem.TargetType), nameof(AuditLogListItem.TargetId)],
+			["result"] = [nameof(AuditLogListItem.Succeeded)],
+			["details"] = [nameof(AuditLogListItem.Details)]
+		};
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(AuditLogListItem.Id), tieBreakerDescending: true).ToList();
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, orderedItems.Count, normalizedRequest.Offset);
 	}
 
 	private PlatformUserEditModel BuildPlatformUserEditModel(ApplicationUser? user, string currentUserId)

@@ -43,11 +43,11 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Name</th>
-						<th>Email</th>
-						<th>Status</th>
-						<th>Scope</th>
-						<th>Permissions</th>
+						<th><SortableHeader Label="Name" SortKey="name" CurrentSort="@Sort" Href="@GetSortUrl("name")" /></th>
+						<th><SortableHeader Label="Email" SortKey="email" CurrentSort="@Sort" Href="@GetSortUrl("email")" /></th>
+						<th><SortableHeader Label="Status" SortKey="status" CurrentSort="@Sort" Href="@GetSortUrl("status")" /></th>
+						<th><SortableHeader Label="Scope" SortKey="scope" CurrentSort="@Sort" Href="@GetSortUrl("scope")" /></th>
+						<th><SortableHeader Label="Permissions" SortKey="permissions" CurrentSort="@Sort" Href="@GetSortUrl("permissions")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -70,6 +70,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -77,26 +86,86 @@
 	[SupplyParameterFromQuery]
 	public string? Search { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<PlatformUserListItem> _items = Array.Empty<PlatformUserListItem>();
 	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_searchText = Search ?? string.Empty;
-		_items = await AdministrationService.GetPlatformUsersAsync(Search);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private void ApplySearch()
 	{
-		var url = string.IsNullOrWhiteSpace(_searchText)
-			? "admin/users"
-			: $"admin/users?search={Uri.EscapeDataString(_searchText)}";
-		NavigationManager.NavigateTo(url);
+		NavigationManager.NavigateTo(BuildUrl(_searchText, _pageSize, Sort));
 	}
 
 	private void ClearSearch()
 	{
 		_searchText = string.Empty;
-		NavigationManager.NavigateTo("admin/users");
+		NavigationManager.NavigateTo(BuildUrl(null, _pageSize, Sort));
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetPlatformUsersAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Search, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(Search, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private static string BuildUrl(string? search, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/admin/users?{string.Join("&", queryParts)}";
 	}
 }

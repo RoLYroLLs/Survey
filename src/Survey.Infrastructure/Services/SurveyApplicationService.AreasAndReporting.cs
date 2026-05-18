@@ -9,7 +9,7 @@ namespace Survey.Infrastructure.Services;
 
 public sealed partial class SurveyApplicationService
 {
-	public async Task<IReadOnlyList<AreaListItem>> GetAreasAsync(int? countyId = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<AreaListItem>> GetAreasAsync(PagedQuery request, int? countyId = null, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.AreasView, cancellationToken);
 
@@ -36,8 +36,9 @@ public sealed partial class SurveyApplicationService
 			query = query.Where(area => area.Counties.Any(areaCounty => areaCounty.CountyFips == county.FipsCode));
 		}
 
-		return await query
+		var itemsQuery = query
 			.OrderBy(area => area.Name)
+			.ThenBy(area => area.Id)
 			.Select(area => new AreaListItem
 			{
 				Id = area.Id,
@@ -47,8 +48,18 @@ public sealed partial class SurveyApplicationService
 				GoalCount = area.Goals.Count,
 				UpdatedUtc = area.UpdatedUtc,
 				CountyNameFilter = countyNameFilter
-			})
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(AreaListItem.Name)],
+			["description"] = [nameof(AreaListItem.Description)],
+			["counties"] = [nameof(AreaListItem.CountyCount)],
+			["goals"] = [nameof(AreaListItem.GoalCount)],
+			["updated"] = [nameof(AreaListItem.UpdatedUtc)]
+		};
+
+		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(AreaListItem.Id), cancellationToken);
 	}
 
 	public async Task<AreaEditModel> GetAreaAsync(int? id, CancellationToken cancellationToken = default)
@@ -154,7 +165,7 @@ public sealed partial class SurveyApplicationService
 		return area.Id;
 	}
 
-	public async Task<IReadOnlyList<ZipCountyMappingListItem>> GetZipCountyMappingsAsync(string? search = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<ZipCountyMappingListItem>> GetZipCountyMappingsAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.GeographyView, cancellationToken);
 
@@ -172,7 +183,11 @@ public sealed partial class SurveyApplicationService
 				mapping.StateCode.ToUpper().Contains(term));
 		}
 
-		var mappings = await query
+		var itemsQuery = query
+			.OrderBy(mapping => mapping.ZipCode)
+			.ThenByDescending(mapping => mapping.ResidentialRatio)
+			.ThenBy(mapping => mapping.CountyName)
+			.ThenBy(mapping => mapping.Id)
 			.Select(mapping => new ZipCountyMappingListItem
 			{
 				Id = mapping.Id,
@@ -181,15 +196,18 @@ public sealed partial class SurveyApplicationService
 				CountyName = mapping.CountyName,
 				StateCode = mapping.StateCode,
 				ResidentialRatio = mapping.ResidentialRatio
-			})
-			.ToListAsync(cancellationToken);
+			});
 
-		return mappings
-			.OrderBy(mapping => mapping.ZipCode)
-			.ThenByDescending(mapping => mapping.ResidentialRatio)
-			.ThenBy(mapping => mapping.CountyName)
-			.Take(250)
-			.ToList();
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["zip"] = [nameof(ZipCountyMappingListItem.ZipCode)],
+			["county"] = [nameof(ZipCountyMappingListItem.CountyName)],
+			["countyfips"] = [nameof(ZipCountyMappingListItem.CountyFips)],
+			["state"] = [nameof(ZipCountyMappingListItem.StateCode)],
+			["ratio"] = [nameof(ZipCountyMappingListItem.ResidentialRatio)]
+		};
+
+		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(ZipCountyMappingListItem.Id), cancellationToken);
 	}
 
 	public async Task<ZipCountyMappingEditModel> GetZipCountyMappingAsync(int? id, CancellationToken cancellationToken = default)
@@ -303,22 +321,27 @@ public sealed partial class SurveyApplicationService
 		};
 	}
 
-	public async Task<IReadOnlyList<GoalListItem>> GetGoalsAsync(string? userId = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<GoalListItem>> GetGoalsAsync(PagedQuery request, string? userId = null, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.GoalsView, cancellationToken);
 
-		var goals = await _dbContext.Goals
+		var query = _dbContext.Goals
 			.AsNoTracking()
 			.Include(goal => goal.Area)
 			.Include(goal => goal.SurveyDefinition)
 			.OrderBy(goal => goal.EndDate)
 			.ThenBy(goal => goal.Name)
-			.ToListAsync(cancellationToken);
+			.ThenBy(goal => goal.Id);
+		var normalizedRequest = NormalizePagedQuery(request);
+		var totalCount = await query.CountAsync(cancellationToken);
+		var goals = totalCount == 0
+			? []
+			: await query.ToListAsync(cancellationToken);
 
 		var progressLookup = await BuildGoalProgressLookupAsync(goals, cancellationToken);
 		var favoriteGoalIds = await GetFavoriteGoalIdSetAsync(await RequireCurrentUserIdAsync(cancellationToken), cancellationToken);
 
-		return goals
+		var items = goals
 			.Select(goal =>
 			{
 				var progress = progressLookup[goal.Id];
@@ -338,6 +361,22 @@ public sealed partial class SurveyApplicationService
 				};
 			})
 			.ToList();
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(GoalListItem.Name)],
+			["area"] = [nameof(GoalListItem.AreaName)],
+			["survey"] = [nameof(GoalListItem.SurveyName)],
+			["window"] = [nameof(GoalListItem.StartDate), nameof(GoalListItem.EndDate)],
+			["progress"] = [nameof(GoalListItem.ProgressPercent), nameof(GoalListItem.CompletedResponses), nameof(GoalListItem.TargetResponseCount)],
+			["dashboard"] = [nameof(GoalListItem.IsFavorite)]
+		};
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(GoalListItem.Id)).ToList();
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, totalCount, normalizedRequest.Offset);
 	}
 
 	public async Task<IReadOnlyList<DashboardFavoriteGoalItem>> GetDashboardFavoriteGoalsAsync(string userId, CancellationToken cancellationToken = default)

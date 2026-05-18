@@ -1,6 +1,7 @@
 @page "/app/people/{PersonId:int}/locations"
 @attribute [TenantAuthorize(TenantPermissionKeys.LocationsView)]
 @inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
 <PageTitle>Locations</PageTitle>
@@ -32,11 +33,11 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Nickname</th>
-						<th>ZIP</th>
-						<th>Email</th>
-						<th>Phone</th>
-						<th>Assignments</th>
+						<th><SortableHeader Label="Nickname" SortKey="nickname" CurrentSort="@Sort" Href="@GetSortUrl("nickname")" /></th>
+						<th><SortableHeader Label="ZIP" SortKey="zip" CurrentSort="@Sort" Href="@GetSortUrl("zip")" /></th>
+						<th><SortableHeader Label="Email" SortKey="email" CurrentSort="@Sort" Href="@GetSortUrl("email")" /></th>
+						<th><SortableHeader Label="Phone" SortKey="phone" CurrentSort="@Sort" Href="@GetSortUrl("phone")" /></th>
+						<th><SortableHeader Label="Assignments" SortKey="assignments" CurrentSort="@Sort" Href="@GetSortUrl("assignments")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -71,6 +72,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -78,11 +88,22 @@
 	[Parameter]
 	public int PersonId { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<LocationListItem> _items = Array.Empty<LocationListItem>();
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_items = await AdministrationService.GetLocationsAsync(PersonId);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private async Task RemoveLocationAsync(int locationId)
@@ -90,12 +111,60 @@
 		try
 		{
 			await AdministrationService.DeleteLocationAsync(locationId);
-			_items = await AdministrationService.GetLocationsAsync(PersonId);
+			await LoadAsync();
 			ToastService.ShowSuccess("Location removed successfully.", "Removed");
 		}
 		catch (Exception ex)
 		{
 			ToastService.ShowError(ex.Message, "Remove failed");
 		}
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetLocationsAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			PersonId);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(_pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private string BuildUrl(int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/app/people/{PersonId}/locations?{string.Join("&", queryParts)}";
 	}
 }

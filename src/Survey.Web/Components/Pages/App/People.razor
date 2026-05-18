@@ -1,6 +1,7 @@
 @page "/app/people"
 @attribute [TenantAuthorize(TenantPermissionKeys.PeopleView)]
 @inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
 <PageTitle>People</PageTitle>
@@ -37,12 +38,12 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Name</th>
-						<th>Locations</th>
-						<th>ZIP</th>
-						<th>Email</th>
-						<th>Phone</th>
-						<th>Archived</th>
+						<th><SortableHeader Label="Name" SortKey="name" CurrentSort="@Sort" Href="@GetSortUrl("name")" /></th>
+						<th><SortableHeader Label="Locations" SortKey="locations" CurrentSort="@Sort" Href="@GetSortUrl("locations")" /></th>
+						<th><SortableHeader Label="ZIP" SortKey="zip" CurrentSort="@Sort" Href="@GetSortUrl("zip")" /></th>
+						<th><SortableHeader Label="Email" SortKey="email" CurrentSort="@Sort" Href="@GetSortUrl("email")" /></th>
+						<th><SortableHeader Label="Phone" SortKey="phone" CurrentSort="@Sort" Href="@GetSortUrl("phone")" /></th>
+						<th><SortableHeader Label="Archived" SortKey="archived" CurrentSort="@Sort" Href="@GetSortUrl("archived")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -83,6 +84,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -90,16 +100,27 @@
 	[SupplyParameterFromQuery(Name = "showArchived")]
 	public bool ShowArchived { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<PersonListItem> _items = Array.Empty<PersonListItem>();
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_items = await AdministrationService.GetPeopleAsync(ShowArchived);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private string GetArchivedUrl()
 	{
-		return ShowArchived ? "/app/people" : "/app/people?showArchived=true";
+		return BuildUrl(!ShowArchived, _pageSize, Sort);
 	}
 
 	private string BuildArchivedQuery()
@@ -116,11 +137,63 @@
 			ToastService.ShowSuccess(
 				isArchived ? "Person archived successfully." : "Person restored successfully.",
 				isArchived ? "Archived" : "Restored");
-			_items = await AdministrationService.GetPeopleAsync(ShowArchived);
+			await LoadAsync();
 		}
 		catch (Exception ex)
 		{
 			ToastService.ShowError(ex.Message, "Update failed");
 		}
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetPeopleAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			ShowArchived);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(ShowArchived, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(ShowArchived, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private static string BuildUrl(bool showArchived, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (showArchived)
+		{
+			queryParts.Add("showArchived=true");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/app/people?{string.Join("&", queryParts)}";
 	}
 }

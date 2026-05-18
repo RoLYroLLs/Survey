@@ -54,6 +54,9 @@
 	public string EmptyOptionLabel { get; set; } = "Select an option";
 
 	[Parameter]
+	public string? ClosedEmptyLabel { get; set; }
+
+	[Parameter]
 	public string EmptyOptionValue { get; set; } = string.Empty;
 
 	[Parameter]
@@ -388,7 +391,14 @@
 
 	private string GetPlaceholder()
 	{
-		return _isOpen ? SearchPlaceholder : string.Empty;
+		if (_isOpen)
+		{
+			return SearchPlaceholder;
+		}
+
+		return string.IsNullOrEmpty(CurrentValueAsString)
+			? (string.IsNullOrWhiteSpace(ClosedEmptyLabel) ? EmptyOptionLabel : ClosedEmptyLabel)
+			: string.Empty;
 	}
 
 	private string GetSelectedLabel()

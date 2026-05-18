@@ -98,6 +98,7 @@ public sealed class TenantInvitationListItem
 	public DateTimeOffset? RevokedUtc { get; set; }
 	public bool IsPending { get; set; }
 	public bool IsExpired { get; set; }
+	public int StatusSortOrder { get; set; }
 }
 
 public sealed class TenantInvitationRegistrationModel

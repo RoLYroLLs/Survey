@@ -383,6 +383,7 @@ public class SurveyAssignmentListItem
 	public bool IsArchived { get; set; }
 	public bool IsCompleted { get; set; }
 	public bool IsExpired { get; set; }
+	public int StatusSortOrder { get; set; }
 	public bool IsFillable => !IsArchived && !IsCompleted && !IsExpired;
 	public bool IsEditable => !IsCompleted;
 }

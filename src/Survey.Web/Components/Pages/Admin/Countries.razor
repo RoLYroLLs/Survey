@@ -45,10 +45,10 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Name</th>
-						<th>ISO2</th>
-						<th>ISO3</th>
-						<th>States / Territories</th>
+						<th><SortableHeader Label="Name" SortKey="name" CurrentSort="@Sort" Href="@GetSortUrl("name")" /></th>
+						<th><SortableHeader Label="ISO2" SortKey="iso2" CurrentSort="@Sort" Href="@GetSortUrl("iso2")" /></th>
+						<th><SortableHeader Label="ISO3" SortKey="iso3" CurrentSort="@Sort" Href="@GetSortUrl("iso3")" /></th>
+						<th><SortableHeader Label="States / Territories" SortKey="states" CurrentSort="@Sort" Href="@GetSortUrl("states")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -71,6 +71,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -78,26 +87,86 @@
 	[SupplyParameterFromQuery]
 	public string? Search { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<CountryListItem> _items = Array.Empty<CountryListItem>();
 	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_searchText = Search ?? string.Empty;
-		_items = await AdministrationService.GetCountriesAsync(Search);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private void ApplySearch()
 	{
-		var url = string.IsNullOrWhiteSpace(_searchText)
-			? "admin/countries"
-			: $"admin/countries?search={Uri.EscapeDataString(_searchText)}";
-		NavigationManager.NavigateTo(url);
+		NavigationManager.NavigateTo(BuildUrl(_searchText, _pageSize, Sort));
 	}
 
 	private void ClearSearch()
 	{
 		_searchText = string.Empty;
-		NavigationManager.NavigateTo("admin/countries");
+		NavigationManager.NavigateTo(BuildUrl(null, _pageSize, Sort));
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetCountriesAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Search, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(Search, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private static string BuildUrl(string? search, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/admin/countries?{string.Join("&", queryParts)}";
 	}
 }

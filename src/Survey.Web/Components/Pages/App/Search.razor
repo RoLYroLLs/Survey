@@ -1,0 +1,80 @@
+@page "/app/search"
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+
+<PageTitle>Search</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Search</p>
+			<h1>Search Results</h1>
+			<p>Search across the records you can access in this tenant.</p>
+		</div>
+	</div>
+
+	@if (string.IsNullOrWhiteSpace(Query))
+	{
+		<div class="status-card narrow-card">
+			<p class="mb-0">Enter a search in the top bar to find people, locations, assignments, surveys, users, and more.</p>
+		</div>
+	}
+	else if (_result.Sections.Count == 0)
+	{
+		<div class="status-card narrow-card">
+			<p class="mb-0">No results were found for <strong>@Query</strong>.</p>
+		</div>
+	}
+	else
+	{
+		@foreach (var resultSection in _result.Sections)
+		{
+			<section class="list-card">
+				<div class="page-header">
+					<div>
+						<h2>@resultSection.Title</h2>
+						<p>@resultSection.TotalCount result@(resultSection.TotalCount == 1 ? string.Empty : "s")</p>
+					</div>
+					@if (!string.IsNullOrWhiteSpace(resultSection.ViewAllUrl))
+					{
+						<div class="toolbar">
+							<a class="btn btn-outline-primary" href="@resultSection.ViewAllUrl">View All</a>
+						</div>
+					}
+				</div>
+
+				<div class="search-results">
+					@foreach (var item in resultSection.Items)
+					{
+						<a class="search-result-card" href="@item.Url">
+							<span class="search-result-card__icon">
+								<OutlineIcon Name="@item.IconName" />
+							</span>
+							<span class="search-result-card__body">
+								<span class="search-result-card__title">@item.Title</span>
+								@if (!string.IsNullOrWhiteSpace(item.Subtitle))
+								{
+									<span class="search-result-card__subtitle">@item.Subtitle</span>
+								}
+							</span>
+						</a>
+					}
+				</div>
+			</section>
+		}
+	}
+</div>
+
+@code {
+	[SupplyParameterFromQuery(Name = "q")]
+	public string? Query { get; set; }
+
+	private TenantSearchResultModel _result = new();
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_result = string.IsNullOrWhiteSpace(Query)
+			? new TenantSearchResultModel()
+			: await AdministrationService.SearchTenantAsync(Query);
+	}
+}

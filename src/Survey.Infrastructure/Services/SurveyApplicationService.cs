@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Linq.Expressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Survey.Application.Models;
@@ -29,14 +30,127 @@ public sealed partial class SurveyApplicationService(
 	private readonly IAuditWriter _auditWriter = auditWriter;
 	private readonly TenantExecutionContext _tenantExecutionContext = tenantExecutionContext;
 
-	public async Task<IReadOnlyList<SurveyDefinitionListItem>> GetSurveyDefinitionsAsync(bool archivedOnly = false, CancellationToken cancellationToken = default)
+	private static PagedQuery NormalizePagedQuery(PagedQuery request)
+	{
+		return request.Normalize();
+	}
+
+	private static async Task<PagedResult<T>> BuildPagedResultAsync<T>(IQueryable<T> orderedQuery, PagedQuery request, CancellationToken cancellationToken)
+	{
+		var normalizedRequest = NormalizePagedQuery(request);
+		var totalCount = await orderedQuery.CountAsync(cancellationToken);
+		IReadOnlyList<T> items = totalCount == 0
+			? Array.Empty<T>()
+			: await orderedQuery
+				.Skip(normalizedRequest.Offset)
+				.Take(normalizedRequest.Limit)
+				.ToListAsync(cancellationToken);
+
+		return CreatePagedResult(items, totalCount, normalizedRequest.Offset);
+	}
+
+	private static async Task<PagedResult<T>> BuildPagedResultAsync<T>(
+		IQueryable<T> query,
+		PagedQuery request,
+		IReadOnlyDictionary<string, IReadOnlyList<string>> sortMap,
+		string tieBreakerProperty,
+		CancellationToken cancellationToken,
+		bool tieBreakerDescending = false)
+	{
+		var orderedQuery = ApplyRequestedSorts(query, request, sortMap, tieBreakerProperty, tieBreakerDescending);
+		return await BuildPagedResultAsync(orderedQuery, request, cancellationToken);
+	}
+
+	private static PagedResult<T> CreatePagedResult<T>(IReadOnlyList<T> items, int totalCount, int offset)
+	{
+		return new PagedResult<T>
+		{
+			Items = items,
+			TotalCount = totalCount,
+			HasMore = offset + items.Count < totalCount
+		};
+	}
+
+	private static IQueryable<T> ApplyRequestedSorts<T>(
+		IQueryable<T> query,
+		PagedQuery request,
+		IReadOnlyDictionary<string, IReadOnlyList<string>> sortMap,
+		string tieBreakerProperty,
+		bool tieBreakerDescending = false)
+	{
+		var normalizedRequest = NormalizePagedQuery(request);
+		var requestedSorts = PagingSort.Parse(normalizedRequest.Sort);
+		if (requestedSorts.Count == 0)
+		{
+			return query;
+		}
+
+		IOrderedQueryable<T>? orderedQuery = null;
+		var appliedProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (var requestedSort in requestedSorts)
+		{
+			if (!sortMap.TryGetValue(requestedSort.Key, out var mappedProperties) || mappedProperties.Count == 0)
+			{
+				continue;
+			}
+
+			foreach (var propertyPath in mappedProperties.Where(static propertyPath => !string.IsNullOrWhiteSpace(propertyPath)))
+			{
+				orderedQuery = ApplyOrdering(
+					orderedQuery is null ? query : orderedQuery,
+					propertyPath,
+					requestedSort.Direction == SortDirection.Descending,
+					thenBy: orderedQuery is not null);
+				appliedProperties.Add(propertyPath);
+			}
+		}
+
+		if (orderedQuery is null)
+		{
+			return query;
+		}
+
+		if (!string.IsNullOrWhiteSpace(tieBreakerProperty) && !appliedProperties.Contains(tieBreakerProperty))
+		{
+			orderedQuery = ApplyOrdering(orderedQuery, tieBreakerProperty, tieBreakerDescending, thenBy: true);
+		}
+
+		return orderedQuery;
+	}
+
+	private static IOrderedQueryable<T> ApplyOrdering<T>(IQueryable<T> query, string propertyPath, bool descending, bool thenBy)
+	{
+		var parameter = Expression.Parameter(typeof(T), "item");
+		Expression body = parameter;
+		foreach (var propertyName in propertyPath.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+		{
+			body = Expression.PropertyOrField(body, propertyName);
+		}
+
+		var lambda = Expression.Lambda(body, parameter);
+		var methodName = thenBy
+			? descending ? nameof(Queryable.ThenByDescending) : nameof(Queryable.ThenBy)
+			: descending ? nameof(Queryable.OrderByDescending) : nameof(Queryable.OrderBy);
+		var orderedExpression = Expression.Call(
+			typeof(Queryable),
+			methodName,
+			[typeof(T), body.Type],
+			query.Expression,
+			Expression.Quote(lambda));
+
+		return (IOrderedQueryable<T>)query.Provider.CreateQuery<T>(orderedExpression);
+	}
+
+	public async Task<PagedResult<SurveyDefinitionListItem>> GetSurveyDefinitionsAsync(PagedQuery request, bool archivedOnly = false, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
 
-		return await _dbContext.SurveyDefinitions
+		var query = _dbContext.SurveyDefinitions
 			.AsNoTracking()
 			.Where(definition => definition.IsArchived == archivedOnly)
 			.OrderBy(definition => definition.Name)
+			.ThenBy(definition => definition.Id)
 			.Select(definition => new SurveyDefinitionListItem
 			{
 				Id = definition.Id,
@@ -45,8 +159,17 @@ public sealed partial class SurveyApplicationService(
 				VersionCount = definition.Versions.Count,
 				IsArchived = definition.IsArchived,
 				UpdatedUtc = definition.UpdatedUtc
-			})
-			.ToListAsync(cancellationToken);
+			});
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(SurveyDefinitionListItem.Name)],
+			["description"] = [nameof(SurveyDefinitionListItem.Description)],
+			["versions"] = [nameof(SurveyDefinitionListItem.VersionCount)],
+			["archived"] = [nameof(SurveyDefinitionListItem.IsArchived)],
+			["updated"] = [nameof(SurveyDefinitionListItem.UpdatedUtc)]
+		};
+
+		return await BuildPagedResultAsync(query, request, sortMap, nameof(SurveyDefinitionListItem.Id), cancellationToken);
 	}
 
 	public async Task<SurveyDefinitionEditModel> GetSurveyDefinitionAsync(int? id, CancellationToken cancellationToken = default)
@@ -103,7 +226,7 @@ public sealed partial class SurveyApplicationService(
 		return entity.Id;
 	}
 
-	public async Task<IReadOnlyList<SurveyVersionListItem>> GetSurveyVersionsAsync(int? surveyDefinitionId, bool archivedOnly = false, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<SurveyVersionListItem>> GetSurveyVersionsAsync(PagedQuery request, int? surveyDefinitionId, bool archivedOnly = false, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
 
@@ -123,9 +246,10 @@ public sealed partial class SurveyApplicationService(
 			query = query.Where(version => version.SurveyDefinitionId == surveyDefinitionId.Value);
 		}
 
-		return await query
+		var itemsQuery = query
 			.OrderBy(version => version.SurveyDefinition.Name)
 			.ThenBy(version => version.VersionNumber)
+			.ThenBy(version => version.Id)
 			.Select(version => new SurveyVersionListItem
 			{
 				Id = version.Id,
@@ -138,8 +262,20 @@ public sealed partial class SurveyApplicationService(
 				IsLocked = version.Assignments.Any(),
 				SectionCount = version.Sections.Count,
 				AssignmentCount = version.Assignments.Count
-			})
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["survey"] = [nameof(SurveyVersionListItem.SurveyName)],
+			["version"] = [nameof(SurveyVersionListItem.VersionNumber), nameof(SurveyVersionListItem.DisplayName)],
+			["published"] = [nameof(SurveyVersionListItem.IsPublished)],
+			["archived"] = [nameof(SurveyVersionListItem.IsArchived)],
+			["locked"] = [nameof(SurveyVersionListItem.IsLocked)],
+			["sections"] = [nameof(SurveyVersionListItem.SectionCount)],
+			["assignments"] = [nameof(SurveyVersionListItem.AssignmentCount)]
+		};
+
+		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(SurveyVersionListItem.Id), cancellationToken);
 	}
 
 	public async Task<SurveyVersionEditModel> GetSurveyVersionAsync(int? id, int? surveyDefinitionId, CancellationToken cancellationToken = default)
@@ -292,11 +428,11 @@ public sealed partial class SurveyApplicationService(
 		return clone.Id;
 	}
 
-	public async Task<IReadOnlyList<SurveySectionListItem>> GetSurveySectionsAsync(int surveyVersionId, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<SurveySectionListItem>> GetSurveySectionsAsync(PagedQuery request, int surveyVersionId, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
 
-		return await _dbContext.SurveySections
+		var query = _dbContext.SurveySections
 			.AsNoTracking()
 			.Where(section => section.SurveyVersionId == surveyVersionId)
 			.Include(section => section.SurveyVersion)
@@ -304,6 +440,7 @@ public sealed partial class SurveyApplicationService(
 			.Include(section => section.Questions)
 			.OrderBy(section => section.SortOrder)
 			.ThenBy(section => section.Title)
+			.ThenBy(section => section.Id)
 			.Select(section => new SurveySectionListItem
 			{
 				Id = section.Id,
@@ -314,8 +451,17 @@ public sealed partial class SurveyApplicationService(
 				SortOrder = section.SortOrder,
 				QuestionCount = section.Questions.Count,
 				IsLocked = section.SurveyVersion.Assignments.Any()
-			})
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["title"] = [nameof(SurveySectionListItem.Title)],
+			["order"] = [nameof(SurveySectionListItem.SortOrder)],
+			["questions"] = [nameof(SurveySectionListItem.QuestionCount)],
+			["locked"] = [nameof(SurveySectionListItem.IsLocked)]
+		};
+
+		return await BuildPagedResultAsync(query, request, sortMap, nameof(SurveySectionListItem.Id), cancellationToken);
 	}
 
 	public async Task<SurveySectionEditModel> GetSurveySectionAsync(int? id, int? surveyVersionId, CancellationToken cancellationToken = default)
@@ -392,11 +538,11 @@ public sealed partial class SurveyApplicationService(
 		return entity.Id;
 	}
 
-	public async Task<IReadOnlyList<SurveyQuestionListItem>> GetSurveyQuestionsAsync(int surveySectionId, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<SurveyQuestionListItem>> GetSurveyQuestionsAsync(PagedQuery request, int surveySectionId, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
 
-		return await _dbContext.SurveyQuestions
+		var query = _dbContext.SurveyQuestions
 			.AsNoTracking()
 			.Where(question => question.SurveySectionId == surveySectionId)
 			.Include(question => question.SurveySection)
@@ -405,6 +551,7 @@ public sealed partial class SurveyApplicationService(
 			.Include(question => question.Options)
 			.OrderBy(question => question.SortOrder)
 			.ThenBy(question => question.Prompt)
+			.ThenBy(question => question.Id)
 			.Select(question => new SurveyQuestionListItem
 			{
 				Id = question.Id,
@@ -416,8 +563,18 @@ public sealed partial class SurveyApplicationService(
 				SortOrder = question.SortOrder,
 				OptionCount = question.Options.Count,
 				IsLocked = question.SurveySection.SurveyVersion.Assignments.Any()
-			})
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["prompt"] = [nameof(SurveyQuestionListItem.Prompt)],
+			["type"] = [nameof(SurveyQuestionListItem.Type)],
+			["required"] = [nameof(SurveyQuestionListItem.IsRequired)],
+			["order"] = [nameof(SurveyQuestionListItem.SortOrder)],
+			["options"] = [nameof(SurveyQuestionListItem.OptionCount)]
+		};
+
+		return await BuildPagedResultAsync(query, request, sortMap, nameof(SurveyQuestionListItem.Id), cancellationToken);
 	}
 
 	public async Task<SurveyQuestionEditModel> GetSurveyQuestionAsync(int? id, int? surveySectionId, CancellationToken cancellationToken = default)
@@ -500,11 +657,11 @@ public sealed partial class SurveyApplicationService(
 		return entity.Id;
 	}
 
-	public async Task<IReadOnlyList<QuestionOptionListItem>> GetQuestionOptionsAsync(int surveyQuestionId, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<QuestionOptionListItem>> GetQuestionOptionsAsync(PagedQuery request, int surveyQuestionId, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
 
-		return await _dbContext.QuestionOptions
+		var query = _dbContext.QuestionOptions
 			.AsNoTracking()
 			.Where(option => option.SurveyQuestionId == surveyQuestionId)
 			.Include(option => option.SurveyQuestion)
@@ -513,6 +670,7 @@ public sealed partial class SurveyApplicationService(
 						.ThenInclude(version => version.Assignments)
 			.OrderBy(option => option.SortOrder)
 			.ThenBy(option => option.Label)
+			.ThenBy(option => option.Id)
 			.Select(option => new QuestionOptionListItem
 			{
 				Id = option.Id,
@@ -521,8 +679,16 @@ public sealed partial class SurveyApplicationService(
 				Label = option.Label,
 				SortOrder = option.SortOrder,
 				IsLocked = option.SurveyQuestion.SurveySection.SurveyVersion.Assignments.Any()
-			})
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["label"] = [nameof(QuestionOptionListItem.Label)],
+			["order"] = [nameof(QuestionOptionListItem.SortOrder)],
+			["locked"] = [nameof(QuestionOptionListItem.IsLocked)]
+		};
+
+		return await BuildPagedResultAsync(query, request, sortMap, nameof(QuestionOptionListItem.Id), cancellationToken);
 	}
 
 	public async Task<QuestionOptionEditModel> GetQuestionOptionAsync(int? id, int? surveyQuestionId, CancellationToken cancellationToken = default)
@@ -634,16 +800,18 @@ public sealed partial class SurveyApplicationService(
 		return entity.Id;
 	}
 
-	public async Task<IReadOnlyList<PersonListItem>> GetPeopleAsync(bool archivedOnly = false, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<PersonListItem>> GetPeopleAsync(PagedQuery request, bool archivedOnly = false, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.PeopleView, cancellationToken);
 
-		return await _dbContext.People
+		var query = _dbContext.People
 			.AsNoTracking()
 			.Where(person => person.IsArchived == archivedOnly)
 			.Include(person => person.Locations)
 			.OrderBy(person => person.LastName)
 			.ThenBy(person => person.FirstName)
+			.ThenBy(person => person.MiddleName)
+			.ThenBy(person => person.Id)
 			.Select(person => new PersonListItem
 			{
 				Id = person.Id,
@@ -655,8 +823,19 @@ public sealed partial class SurveyApplicationService(
 				PhoneNumber = person.PhoneNumber,
 				LocationCount = person.Locations.Count,
 				IsArchived = person.IsArchived
-			})
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(PersonListItem.LastName), nameof(PersonListItem.FirstName), nameof(PersonListItem.MiddleName)],
+			["locations"] = [nameof(PersonListItem.LocationCount)],
+			["zip"] = [nameof(PersonListItem.PostalCode)],
+			["email"] = [nameof(PersonListItem.Email)],
+			["phone"] = [nameof(PersonListItem.PhoneNumber)],
+			["archived"] = [nameof(PersonListItem.IsArchived)]
+		};
+
+		return await BuildPagedResultAsync(query, request, sortMap, nameof(PersonListItem.Id), cancellationToken);
 	}
 
 	public async Task<PersonEditModel> GetPersonAsync(int? id, CancellationToken cancellationToken = default)
@@ -802,7 +981,7 @@ public sealed partial class SurveyApplicationService(
 		return entity.Id;
 	}
 
-	public async Task<IReadOnlyList<SurveyAssignmentListItem>> GetAssignmentsAsync(int? personId = null, bool archivedOnly = false, string? statusFilter = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<SurveyAssignmentListItem>> GetAssignmentsAsync(PagedQuery request, int? personId = null, bool archivedOnly = false, string? statusFilter = null, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.AssignmentsView, cancellationToken);
 
@@ -827,7 +1006,7 @@ public sealed partial class SurveyApplicationService(
 
 		var normalizedStatusFilter = statusFilter?.Trim().ToLowerInvariant();
 
-		var assignments = await query
+		var items = await query
 			.Select(assignment => new SurveyAssignmentListItem
 			{
 				Id = assignment.Id,
@@ -840,21 +1019,51 @@ public sealed partial class SurveyApplicationService(
 				CreatedUtc = assignment.CreatedUtc,
 				IsArchived = assignment.IsArchived,
 				IsCompleted = assignment.Response != null,
-				IsExpired = assignment.ExpiresAtUtc.HasValue && assignment.ExpiresAtUtc <= now
+				IsExpired = assignment.ExpiresAtUtc.HasValue && assignment.ExpiresAtUtc <= now,
+				StatusSortOrder = assignment.IsArchived
+					? 3
+					: assignment.Response != null
+						? 1
+						: assignment.ExpiresAtUtc.HasValue && assignment.ExpiresAtUtc <= now
+							? 2
+							: 0
 			})
 			.ToListAsync(cancellationToken);
 
-		var filteredAssignments = normalizedStatusFilter switch
+		items = normalizedStatusFilter switch
 		{
-			"active" => assignments.Where(assignment => !assignment.IsCompleted && !assignment.IsExpired),
-			"completed" => assignments.Where(assignment => assignment.IsCompleted),
-			"expired" => assignments.Where(assignment => !assignment.IsCompleted && assignment.IsExpired),
-			_ => assignments
+			"active" => items
+				.Where(item => !item.IsCompleted && !item.IsExpired)
+				.ToList(),
+			"completed" => items
+				.Where(item => item.IsCompleted)
+				.ToList(),
+			"expired" => items
+				.Where(item => !item.IsCompleted && item.IsExpired)
+				.ToList(),
+			_ => items
 		};
-
-		return filteredAssignments
-			.OrderByDescending(assignment => assignment.CreatedUtc)
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["person"] = [nameof(SurveyAssignmentListItem.PersonName)],
+			["location"] = [nameof(SurveyAssignmentListItem.LocationName)],
+			["survey"] = [nameof(SurveyAssignmentListItem.SurveyName), nameof(SurveyAssignmentListItem.VersionName)],
+			["expires"] = [nameof(SurveyAssignmentListItem.ExpiresAtUtc)],
+			["archived"] = [nameof(SurveyAssignmentListItem.IsArchived)],
+			["status"] = [nameof(SurveyAssignmentListItem.StatusSortOrder)]
+		};
+		var normalizedRequest = NormalizePagedQuery(request);
+		items = items
+			.OrderByDescending(item => item.CreatedUtc)
+			.ThenByDescending(item => item.Id)
 			.ToList();
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(SurveyAssignmentListItem.Id), tieBreakerDescending: true).ToList();
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, orderedItems.Count, normalizedRequest.Offset);
 	}
 
 	public async Task<SurveyAssignmentEditModel> GetAssignmentAsync(int? id, CancellationToken cancellationToken = default)
@@ -1013,19 +1222,20 @@ public sealed partial class SurveyApplicationService(
 			cancellationToken);
 	}
 
-	public async Task<IReadOnlyList<SurveyResponseListItem>> GetResponsesAsync(CancellationToken cancellationToken = default)
+	public async Task<PagedResult<SurveyResponseListItem>> GetResponsesAsync(PagedQuery request, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.ResponsesView, cancellationToken);
 
-		var responses = await _dbContext.SurveyResponses
+		var query = _dbContext.SurveyResponses
 			.AsNoTracking()
 			.Include(response => response.SurveyAssignment)
 				.ThenInclude(assignment => assignment.Location)
 					.ThenInclude(location => location.Person)
 			.Include(response => response.SurveyAssignment)
 				.ThenInclude(assignment => assignment.SurveyVersion)
-					.ThenInclude(version => version.SurveyDefinition)
-			.ToListAsync(cancellationToken);
+					.ThenInclude(version => version.SurveyDefinition);
+
+		var responses = await query.ToListAsync(cancellationToken);
 
 		var userLookup = await GetUserDisplayLookupAsync(responses
 			.Where(response => !string.IsNullOrWhiteSpace(response.SubmittedByUserId))
@@ -1033,10 +1243,27 @@ public sealed partial class SurveyApplicationService(
 			.Distinct()
 			.ToList(), cancellationToken);
 
-		return BuildSurveyResponseListItems(responses, userLookup);
+		var items = BuildSurveyResponseListItems(responses, userLookup);
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["respondent"] = [nameof(SurveyResponseListItem.RespondentName)],
+			["personlocation"] = [nameof(SurveyResponseListItem.PersonName), nameof(SurveyResponseListItem.LocationName)],
+			["zipcounty"] = [nameof(SurveyResponseListItem.PostalCode), nameof(SurveyResponseListItem.CountyName)],
+			["survey"] = [nameof(SurveyResponseListItem.SurveyName), nameof(SurveyResponseListItem.VersionName)],
+			["submittedby"] = [nameof(SurveyResponseListItem.SubmittedByLabel)],
+			["submitted"] = [nameof(SurveyResponseListItem.SubmittedUtc)]
+		};
+		var normalizedRequest = NormalizePagedQuery(request);
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(SurveyResponseListItem.Id), tieBreakerDescending: true).ToList();
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, orderedItems.Count, normalizedRequest.Offset);
 	}
 
-	public async Task<IReadOnlyList<SurveyResponseListItem>> GetUnmappedResponsesAsync(string postalCode, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<SurveyResponseListItem>> GetUnmappedResponsesAsync(PagedQuery request, string postalCode, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.ResponsesView, cancellationToken);
 
@@ -1057,7 +1284,7 @@ public sealed partial class SurveyApplicationService(
 			.ToList(), cancellationToken);
 		var primaryCountyLookup = await GetPrimaryCountyLookupByZipAsync(cancellationToken);
 
-		return BuildSurveyResponseListItems(responses, userLookup)
+		var filteredItems = BuildSurveyResponseListItems(responses, userLookup)
 			.Where(item =>
 			{
 				var itemPostalCode = item.PostalCode?.Trim();
@@ -1075,6 +1302,24 @@ public sealed partial class SurveyApplicationService(
 					: string.Equals(itemPostalCode, normalizedFilter, StringComparison.OrdinalIgnoreCase);
 			})
 			.ToList();
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["respondent"] = [nameof(SurveyResponseListItem.RespondentName)],
+			["personlocation"] = [nameof(SurveyResponseListItem.PersonName), nameof(SurveyResponseListItem.LocationName)],
+			["zipcounty"] = [nameof(SurveyResponseListItem.PostalCode), nameof(SurveyResponseListItem.CountyName)],
+			["survey"] = [nameof(SurveyResponseListItem.SurveyName), nameof(SurveyResponseListItem.VersionName)],
+			["submittedby"] = [nameof(SurveyResponseListItem.SubmittedByLabel)],
+			["submitted"] = [nameof(SurveyResponseListItem.SubmittedUtc)]
+		};
+		var normalizedRequest = NormalizePagedQuery(request);
+		var orderedItems = ApplyRequestedSorts(filteredItems.AsQueryable(), request, sortMap, nameof(SurveyResponseListItem.Id), tieBreakerDescending: true).ToList();
+		var totalCount = orderedItems.Count;
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, totalCount, normalizedRequest.Offset);
 	}
 
 	public async Task<SurveyResponseDetailModel?> GetResponseAsync(int id, CancellationToken cancellationToken = default)
@@ -1154,6 +1399,7 @@ public sealed partial class SurveyApplicationService(
 	{
 		return responses
 			.OrderByDescending(response => response.SubmittedUtc)
+			.ThenByDescending(response => response.Id)
 			.Select(response => new SurveyResponseListItem
 			{
 				Id = response.Id,

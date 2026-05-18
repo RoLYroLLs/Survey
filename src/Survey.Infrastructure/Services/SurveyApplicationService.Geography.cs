@@ -8,7 +8,7 @@ namespace Survey.Infrastructure.Services;
 
 public sealed partial class SurveyApplicationService
 {
-	public async Task<IReadOnlyList<CountryListItem>> GetCountriesAsync(string? search = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<CountryListItem>> GetCountriesAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)
 	{
 		var query = _dbContext.Countries
 			.AsNoTracking()
@@ -24,8 +24,9 @@ public sealed partial class SurveyApplicationService
 				(country.Iso3Code != null && country.Iso3Code.ToUpper().Contains(term)));
 		}
 
-		return await query
+		var itemsQuery = query
 			.OrderBy(country => country.Name)
+			.ThenBy(country => country.Id)
 			.Select(country => new CountryListItem
 			{
 				Id = country.Id,
@@ -33,8 +34,17 @@ public sealed partial class SurveyApplicationService
 				Iso2Code = country.Iso2Code,
 				Iso3Code = country.Iso3Code,
 				StateProvinceCount = country.StateProvinces.Count
-			})
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(CountryListItem.Name)],
+			["iso2"] = [nameof(CountryListItem.Iso2Code)],
+			["iso3"] = [nameof(CountryListItem.Iso3Code)],
+			["states"] = [nameof(CountryListItem.StateProvinceCount)]
+		};
+
+		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(CountryListItem.Id), cancellationToken);
 	}
 
 	public async Task<CountryEditModel> GetCountryAsync(int? id, CancellationToken cancellationToken = default)
@@ -123,13 +133,8 @@ public sealed partial class SurveyApplicationService
 		};
 	}
 
-	public async Task<IReadOnlyList<StateProvinceListItem>> GetStateProvincesAsync(int? countryId = null, string? search = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<StateProvinceListItem>> GetStateProvincesAsync(PagedQuery request, int? countryId = null, string? search = null, CancellationToken cancellationToken = default)
 	{
-		var countyCounts = await _dbContext.Counties
-			.AsNoTracking()
-			.GroupBy(county => county.StateProvinceId)
-			.ToDictionaryAsync(group => group.Key, group => group.Count(), cancellationToken);
-
 		var query = _dbContext.StateProvinces
 			.AsNoTracking()
 			.Include(stateProvince => stateProvince.Country)
@@ -152,9 +157,10 @@ public sealed partial class SurveyApplicationService
 				stateProvince.SubdivisionType.ToUpper().Contains(term));
 		}
 
-		var states = await query
+		var itemsQuery = query
 			.OrderBy(stateProvince => stateProvince.Country.Name)
 			.ThenBy(stateProvince => stateProvince.Name)
+			.ThenBy(stateProvince => stateProvince.Id)
 			.Select(stateProvince => new StateProvinceListItem
 			{
 				Id = stateProvince.Id,
@@ -162,20 +168,36 @@ public sealed partial class SurveyApplicationService
 				CountryName = stateProvince.Country.Name,
 				Name = stateProvince.Name,
 				Code = stateProvince.Code,
-				SubdivisionType = stateProvince.SubdivisionType
-			})
-			.ToListAsync(cancellationToken);
+				SubdivisionType = stateProvince.SubdivisionType,
+				CountyCount = stateProvince.Counties.Count
+			});
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["country"] = [nameof(StateProvinceListItem.CountryName)],
+			["name"] = [nameof(StateProvinceListItem.Name)],
+			["code"] = [nameof(StateProvinceListItem.Code)],
+			["type"] = [nameof(StateProvinceListItem.SubdivisionType)],
+			["counties"] = [nameof(StateProvinceListItem.CountyCount)]
+		};
+		var pagedResult = await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(StateProvinceListItem.Id), cancellationToken);
+		if (pagedResult.Items.Count == 0)
+		{
+			return pagedResult;
+		}
 
 		var countryNameFilter = countryId.HasValue
-			? states.FirstOrDefault()?.CountryName
+			? await _dbContext.Countries
+				.AsNoTracking()
+				.Where(country => country.Id == countryId.Value)
+				.Select(country => country.Name)
+				.FirstOrDefaultAsync(cancellationToken)
 			: null;
-		foreach (var state in states)
+		foreach (var state in pagedResult.Items)
 		{
-			state.CountyCount = countyCounts.GetValueOrDefault(state.Id);
 			state.CountryFilterName = countryNameFilter;
 		}
 
-		return states;
+		return pagedResult;
 	}
 
 	public async Task<StateProvinceEditModel> GetStateProvinceAsync(int? id, int? countryId, CancellationToken cancellationToken = default)
@@ -287,7 +309,7 @@ public sealed partial class SurveyApplicationService
 		};
 	}
 
-	public async Task<IReadOnlyList<CountyListItem>> GetCountiesAsync(int? stateProvinceId = null, string? search = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<CountyListItem>> GetCountiesAsync(PagedQuery request, int? stateProvinceId = null, string? search = null, CancellationToken cancellationToken = default)
 	{
 		var query = _dbContext.Counties
 			.AsNoTracking()
@@ -313,20 +335,11 @@ public sealed partial class SurveyApplicationService
 				county.FipsCode.ToUpper().Contains(term));
 		}
 
-		var areaCounts = await _dbContext.AreaCounties
-			.AsNoTracking()
-			.GroupBy(areaCounty => areaCounty.CountyFips)
-			.ToDictionaryAsync(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase, cancellationToken);
-		var addressCounts = await _dbContext.PostalAddresses
-			.AsNoTracking()
-			.Where(address => address.CountyId.HasValue)
-			.GroupBy(address => address.CountyId!.Value)
-			.ToDictionaryAsync(group => group.Key, group => group.Count(), cancellationToken);
-
-		var counties = await query
+		var itemsQuery = query
 			.OrderBy(county => county.StateProvince.Country.Name)
 			.ThenBy(county => county.StateProvince.Name)
 			.ThenBy(county => county.Name)
+			.ThenBy(county => county.Id)
 			.Select(county => new CountyListItem
 			{
 				Id = county.Id,
@@ -335,27 +348,38 @@ public sealed partial class SurveyApplicationService
 				StateProvinceCode = county.StateProvince.Code,
 				CountryName = county.StateProvince.Country.Name,
 				Name = county.Name,
-				FipsCode = county.FipsCode
-			})
-			.ToListAsync(cancellationToken);
-
-		foreach (var county in counties)
+				FipsCode = county.FipsCode,
+				AddressCount = _dbContext.PostalAddresses.Count(address => address.CountyId == county.Id),
+				AreaCount = _dbContext.AreaCounties.Count(areaCounty => areaCounty.CountyFips == county.FipsCode)
+			});
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
 		{
-			county.AddressCount = addressCounts.GetValueOrDefault(county.Id);
-			county.AreaCount = areaCounts.GetValueOrDefault(county.FipsCode);
+			["country"] = [nameof(CountyListItem.CountryName)],
+			["state"] = [nameof(CountyListItem.StateProvinceName), nameof(CountyListItem.StateProvinceCode)],
+			["county"] = [nameof(CountyListItem.Name)],
+			["fips"] = [nameof(CountyListItem.FipsCode)],
+			["addresses"] = [nameof(CountyListItem.AddressCount)],
+			["areas"] = [nameof(CountyListItem.AreaCount)]
+		};
+		var pagedResult = await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(CountyListItem.Id), cancellationToken);
+		if (pagedResult.Items.Count == 0)
+		{
+			return pagedResult;
 		}
 
 		var stateProvinceFilterName = stateProvinceId.HasValue
-			? counties.FirstOrDefault() is { } firstCounty
-				? $"{firstCounty.StateProvinceName} ({firstCounty.StateProvinceCode})"
-				: null
+			? await _dbContext.StateProvinces
+				.AsNoTracking()
+				.Where(stateProvince => stateProvince.Id == stateProvinceId.Value)
+				.Select(stateProvince => $"{stateProvince.Name} ({stateProvince.Code})")
+				.FirstOrDefaultAsync(cancellationToken)
 			: null;
-		foreach (var county in counties)
+		foreach (var county in pagedResult.Items)
 		{
 			county.StateProvinceFilterName = stateProvinceFilterName;
 		}
 
-		return counties;
+		return pagedResult;
 	}
 
 	public async Task<CountyEditModel> GetCountyAsync(int? id, int? stateProvinceId, CancellationToken cancellationToken = default)
@@ -465,7 +489,7 @@ public sealed partial class SurveyApplicationService
 		};
 	}
 
-	public async Task<IReadOnlyList<PostalAddressListItem>> GetPostalAddressesAsync(string? search = null, int? countyId = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<PostalAddressListItem>> GetPostalAddressesAsync(PagedQuery request, string? search = null, int? countyId = null, CancellationToken cancellationToken = default)
 	{
 		var query = _dbContext.PostalAddresses
 			.AsNoTracking()
@@ -496,11 +520,12 @@ public sealed partial class SurveyApplicationService
 				address.FormattedAddress.ToUpper().Contains(term));
 		}
 
-		return await query
+		var itemsQuery = query
 			.OrderBy(address => address.Country.Name)
 			.ThenBy(address => address.StateProvince != null ? address.StateProvince.Code : string.Empty)
 			.ThenBy(address => address.City)
 			.ThenBy(address => address.AddressLine1)
+			.ThenBy(address => address.Id)
 			.Select(address => new PostalAddressListItem
 			{
 				Id = address.Id,
@@ -519,9 +544,17 @@ public sealed partial class SurveyApplicationService
 					+ address.LocationMailingAddresses.Count
 					+ address.SurveyResponses.Count
 					+ address.SurveyResponseMailingAddresses.Count
-			})
-			.Take(250)
-			.ToListAsync(cancellationToken);
+			});
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["address"] = [nameof(PostalAddressListItem.FormattedAddress)],
+			["county"] = [nameof(PostalAddressListItem.CountyName)],
+			["country"] = [nameof(PostalAddressListItem.CountryCode)],
+			["references"] = [nameof(PostalAddressListItem.ReferenceCount)]
+		};
+
+		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(PostalAddressListItem.Id), cancellationToken);
 	}
 
 	public async Task<PostalAddressEditModel> GetPostalAddressAsync(int? id, CancellationToken cancellationToken = default)
@@ -1139,7 +1172,7 @@ public sealed partial class SurveyApplicationService
 			IsArchived = entity?.IsArchived ?? false,
 			Locations = entity is null
 				? []
-				: await GetLocationsAsync(entity.Id, cancellationToken)
+				: await GetAllLocationsAsync(entity.Id, cancellationToken)
 		};
 	}
 

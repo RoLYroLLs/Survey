@@ -69,14 +69,14 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>When</th>
-						<th>Plane</th>
-						<th>Tenant</th>
-						<th>Actor</th>
-						<th>Action</th>
-						<th>Target</th>
-						<th>Result</th>
-						<th>Details</th>
+						<th><SortableHeader Label="When" SortKey="when" CurrentSort="@Sort" Href="@GetSortUrl("when")" /></th>
+						<th><SortableHeader Label="Plane" SortKey="plane" CurrentSort="@Sort" Href="@GetSortUrl("plane")" /></th>
+						<th><SortableHeader Label="Tenant" SortKey="tenant" CurrentSort="@Sort" Href="@GetSortUrl("tenant")" /></th>
+						<th><SortableHeader Label="Actor" SortKey="actor" CurrentSort="@Sort" Href="@GetSortUrl("actor")" /></th>
+						<th><SortableHeader Label="Action" SortKey="action" CurrentSort="@Sort" Href="@GetSortUrl("action")" /></th>
+						<th><SortableHeader Label="Target" SortKey="target" CurrentSort="@Sort" Href="@GetSortUrl("target")" /></th>
+						<th><SortableHeader Label="Result" SortKey="result" CurrentSort="@Sort" Href="@GetSortUrl("result")" /></th>
+						<th><SortableHeader Label="Details" SortKey="details" CurrentSort="@Sort" Href="@GetSortUrl("details")" /></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -98,6 +98,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -114,12 +123,22 @@
 	[SupplyParameterFromQuery]
 	public string? Search { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<AuditLogListItem> _items = Array.Empty<AuditLogListItem>();
 	private IReadOnlyList<SelectOption> _tenantOptions = Array.Empty<SelectOption>();
 	private string? _plane;
 	private int? _tenantId;
 	private bool? _succeeded;
 	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	private static readonly IReadOnlyList<SelectOption> _planeOptions =
 	[
@@ -135,8 +154,7 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
-		var tenants = await AdministrationService.GetPlatformTenantsAsync();
-		_tenantOptions = tenants
+		_tenantOptions = (await LoadTenantOptionsAsync())
 			.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
 			.ToArray();
 
@@ -144,35 +162,13 @@
 		_tenantId = TenantId;
 		_succeeded = Succeeded;
 		_searchText = Search ?? string.Empty;
-		_items = await AdministrationService.GetAuditLogsAsync(Plane, TenantId, Succeeded, Search);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private void ApplyFilters()
 	{
-		var queryParts = new List<string>();
-		if (!string.IsNullOrWhiteSpace(_plane))
-		{
-			queryParts.Add($"plane={Uri.EscapeDataString(_plane)}");
-		}
-
-		if (_tenantId.HasValue)
-		{
-			queryParts.Add($"tenantId={_tenantId.Value}");
-		}
-
-		if (_succeeded.HasValue)
-		{
-			queryParts.Add($"succeeded={_succeeded.Value.ToString().ToLowerInvariant()}");
-		}
-
-		if (!string.IsNullOrWhiteSpace(_searchText))
-		{
-			queryParts.Add($"search={Uri.EscapeDataString(_searchText)}");
-		}
-
-		NavigationManager.NavigateTo(queryParts.Count == 0
-			? "/admin/audit"
-			: $"/admin/audit?{string.Join("&", queryParts)}");
+		NavigationManager.NavigateTo(BuildUrl(_plane, _tenantId, _succeeded, _searchText, _pageSize, Sort));
 	}
 
 	private void ClearFilters()
@@ -181,7 +177,7 @@
 		_tenantId = null;
 		_succeeded = null;
 		_searchText = string.Empty;
-		NavigationManager.NavigateTo("/admin/audit");
+		NavigationManager.NavigateTo(BuildUrl(null, null, null, null, _pageSize, Sort));
 	}
 
 	private static string GetTargetLabel(AuditLogListItem item)
@@ -199,5 +195,94 @@
 	private static string GetResultLabel(bool succeeded)
 	{
 		return succeeded ? "Succeeded" : "Denied";
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetAuditLogsAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			Plane,
+			TenantId,
+			Succeeded,
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Plane, TenantId, Succeeded, Search, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(Plane, TenantId, Succeeded, Search, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private async Task<IReadOnlyList<PlatformTenantListItem>> LoadTenantOptionsAsync()
+	{
+		var items = new List<PlatformTenantListItem>();
+		var offset = 0;
+		while (true)
+		{
+			var result = await AdministrationService.GetPlatformTenantsAsync(
+				new PagedQuery
+				{
+					Offset = offset,
+					Limit = PagedQuery.MaxLimit
+				});
+			items.AddRange(result.Items);
+			if (!result.HasMore)
+			{
+				return items;
+			}
+
+			offset += result.Items.Count;
+		}
+	}
+
+	private static string BuildUrl(string? plane, int? tenantId, bool? succeeded, string? search, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(plane))
+		{
+			queryParts.Add($"plane={Uri.EscapeDataString(plane)}");
+		}
+		if (tenantId.HasValue)
+		{
+			queryParts.Add($"tenantId={tenantId.Value}");
+		}
+		if (succeeded.HasValue)
+		{
+			queryParts.Add($"succeeded={succeeded.Value.ToString().ToLowerInvariant()}");
+		}
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/admin/audit?{string.Join("&", queryParts)}";
 	}
 }

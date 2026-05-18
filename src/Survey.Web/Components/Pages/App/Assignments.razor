@@ -17,14 +17,14 @@
 				: "View the survey assignments that have been created.")</p>
 		</div>
 		<div class="toolbar toolbar--assignments">
-			<div class="field-stack mb-0">
-				<label>Status</label>
+			<div class="field-stack field-stack--compact mb-0">
 				<SearchableSelect class="form-select"
 								  @bind-Value="Status"
 								  AfterValueChanged="OnStatusChangedAsync"
 								  Options="_statusOptions"
 								  IncludeEmptyOption="true"
-								  EmptyOptionLabel="All" />
+								  EmptyOptionLabel="All statuses"
+								  ClosedEmptyLabel="Status" />
 			</div>
 			<a class="btn btn-outline-primary" href="@GetArchivedUrl()">@(ShowArchived ? "Back to Assignments" : "Archived Assignments")</a>
 			@if (!ShowArchived)
@@ -48,12 +48,12 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Person</th>
-						<th>Location</th>
-						<th>Survey</th>
-						<th>Expires</th>
-						<th>Archived</th>
-						<th>Status</th>
+						<th><SortableHeader Label="Person" SortKey="person" CurrentSort="@Sort" Href="@GetSortUrl("person")" /></th>
+						<th><SortableHeader Label="Location" SortKey="location" CurrentSort="@Sort" Href="@GetSortUrl("location")" /></th>
+						<th><SortableHeader Label="Survey" SortKey="survey" CurrentSort="@Sort" Href="@GetSortUrl("survey")" /></th>
+						<th><SortableHeader Label="Expires" SortKey="expires" CurrentSort="@Sort" Href="@GetSortUrl("expires")" /></th>
+						<th><SortableHeader Label="Archived" SortKey="archived" CurrentSort="@Sort" Href="@GetSortUrl("archived")" /></th>
+						<th><SortableHeader Label="Status" SortKey="status" CurrentSort="@Sort" Href="@GetSortUrl("status")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -113,6 +113,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -123,7 +132,17 @@
 	[SupplyParameterFromQuery(Name = "status")]
 	public string? Status { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<SurveyAssignmentListItem> _items = Array.Empty<SurveyAssignmentListItem>();
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 	private static readonly IReadOnlyList<SelectOption> _statusOptions =
 	[
 		new() { Value = "active", Label = "Active" },
@@ -133,7 +152,8 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_items = await AdministrationService.GetAssignmentsAsync(archivedOnly: ShowArchived, statusFilter: Status);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private string GetAssignmentUrl(int assignmentId)
@@ -157,13 +177,13 @@
 	private string GetArchivedUrl()
 	{
 		return ShowArchived
-			? BuildAssignmentsUrl(false, Status)
-			: BuildAssignmentsUrl(true, Status);
+			? BuildAssignmentsUrl(false, Status, _pageSize, Sort)
+			: BuildAssignmentsUrl(true, Status, _pageSize, Sort);
 	}
 
 	private Task OnStatusChangedAsync()
 	{
-		NavigationManager.NavigateTo(BuildAssignmentsUrl(ShowArchived, Status));
+		NavigationManager.NavigateTo(BuildAssignmentsUrl(ShowArchived, Status, _pageSize, Sort));
 		return Task.CompletedTask;
 	}
 
@@ -176,7 +196,7 @@
 			ToastService.ShowSuccess(
 				isArchived ? "Assignment archived successfully." : "Assignment restored successfully.",
 				isArchived ? "Archived" : "Restored");
-			_items = await AdministrationService.GetAssignmentsAsync(archivedOnly: ShowArchived, statusFilter: Status);
+			await LoadAsync();
 		}
 		catch (Exception ex)
 		{
@@ -184,9 +204,47 @@
 		}
 	}
 
-	private static string BuildAssignmentsUrl(bool showArchived, string? status)
+	private async Task LoadAsync(bool append = false)
 	{
-		var queryParts = new List<string>();
+		var result = await AdministrationService.GetAssignmentsAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			archivedOnly: ShowArchived,
+			statusFilter: Status);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildAssignmentsUrl(ShowArchived, Status, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildAssignmentsUrl(ShowArchived, Status, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private static string BuildAssignmentsUrl(bool showArchived, string? status, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
 		if (showArchived)
 		{
 			queryParts.Add("showArchived=true");
@@ -196,9 +254,11 @@
 		{
 			queryParts.Add($"status={Uri.EscapeDataString(status)}");
 		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
 
-		return queryParts.Count == 0
-			? "/app/assignments"
-			: $"/app/assignments?{string.Join("&", queryParts)}";
+		return $"/app/assignments?{string.Join("&", queryParts)}";
 	}
 }

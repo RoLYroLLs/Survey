@@ -1,6 +1,7 @@
 @page "/app/questions"
 @attribute [TenantAuthorize(TenantPermissionKeys.SurveysView)]
 @inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Questions</PageTitle>
 
@@ -37,11 +38,11 @@
 				<table class="admin-table">
 					<thead>
 						<tr>
-							<th>Prompt</th>
-							<th>Type</th>
-							<th>Required</th>
-							<th>Order</th>
-							<th>Options</th>
+							<th><SortableHeader Label="Prompt" SortKey="prompt" CurrentSort="@Sort" Href="@GetSortUrl("prompt")" /></th>
+							<th><SortableHeader Label="Type" SortKey="type" CurrentSort="@Sort" Href="@GetSortUrl("type")" /></th>
+							<th><SortableHeader Label="Required" SortKey="required" CurrentSort="@Sort" Href="@GetSortUrl("required")" /></th>
+							<th><SortableHeader Label="Order" SortKey="order" CurrentSort="@Sort" Href="@GetSortUrl("order")" /></th>
+							<th><SortableHeader Label="Options" SortKey="options" CurrentSort="@Sort" Href="@GetSortUrl("options")" /></th>
 							<th></th>
 						</tr>
 					</thead>
@@ -76,6 +77,15 @@
 					</tbody>
 				</table>
 			}
+
+			<ListPager ShownCount="_items.Count"
+					   TotalCount="_totalCount"
+					   PageSize="_pageSize"
+					   HasMore="_hasMore"
+					   IsLoadingMore="_isLoadingMore"
+					   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+					   PageSizeChanged="OnPageSizeChangedAsync"
+					   OnLoadMore="LoadMoreAsync" />
 		</div>
 	}
 </div>
@@ -90,13 +100,33 @@
 	[SupplyParameterFromQuery]
 	public int? SurveyDefinitionId { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<SurveyQuestionListItem> _items = Array.Empty<SurveyQuestionListItem>();
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_items = SurveySectionId.HasValue
-			? await AdministrationService.GetSurveyQuestionsAsync(SurveySectionId.Value)
-			: Array.Empty<SurveyQuestionListItem>();
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		if (!SurveySectionId.HasValue)
+		{
+			_items = Array.Empty<SurveyQuestionListItem>();
+			_totalCount = 0;
+			_hasMore = false;
+			return;
+		}
+
+		var result = await AdministrationService.GetSurveyQuestionsAsync(ListPagingDefaults.CreateRequest(_pageSize, 0, Sort), SurveySectionId.Value);
+		_items = result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
 	}
 
 	private string GetAddUrl()
@@ -105,20 +135,20 @@
 		var surveyVersionId = SurveyVersionId ?? 0;
 		if (SurveyDefinitionId.HasValue)
 		{
-			return $"app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}";
+			return $"app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}";
 		}
 
 		return SurveyVersionId.HasValue
-			? $"app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}"
-			: $"app/questions/new?surveySectionId={surveySectionId}";
+			? $"app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}"
+			: $"app/questions/new?surveySectionId={surveySectionId}&pageSize={_pageSize}";
 	}
 
 	private string GetSectionsUrl()
 	{
 		var surveyVersionId = SurveyVersionId ?? 0;
 		return SurveyDefinitionId.HasValue
-			? $"app/sections?surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}"
-			: $"app/sections?surveyVersionId={surveyVersionId}";
+			? $"app/sections?surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
+			: $"app/sections?surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
 	private string GetOptionsUrl(int surveyQuestionId)
@@ -126,8 +156,8 @@
 		var surveySectionId = SurveySectionId ?? 0;
 		var surveyVersionId = SurveyVersionId ?? 0;
 		return SurveyDefinitionId.HasValue
-			? $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}"
-			: $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+			? $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
+			: $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
 	private string GetEditUrl(int surveyQuestionId)
@@ -135,12 +165,69 @@
 		var surveySectionId = SurveySectionId ?? 0;
 		var surveyVersionId = SurveyVersionId ?? 0;
 		return SurveyDefinitionId.HasValue
-			? $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}"
-			: $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+			? $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
+			: $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
 	private static bool SupportsOptions(SurveyQuestionType questionType)
 	{
 		return questionType is SurveyQuestionType.SingleChoice or SurveyQuestionType.MultiSelect;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		if (!SurveySectionId.HasValue)
+		{
+			return;
+		}
+
+		_isLoadingMore = true;
+		try
+		{
+			var result = await AdministrationService.GetSurveyQuestionsAsync(
+				ListPagingDefaults.CreateRequest(_pageSize, _items.Count, Sort),
+				SurveySectionId.Value);
+			_items = _items.Concat(result.Items).ToArray();
+			_totalCount = result.TotalCount;
+			_hasMore = result.HasMore;
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(_pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private string BuildUrl(int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"surveySectionId={SurveySectionId ?? 0}",
+			$"pageSize={pageSize}"
+		};
+		if (SurveyVersionId.HasValue)
+		{
+			queryParts.Add($"surveyVersionId={SurveyVersionId.Value}");
+		}
+		if (SurveyDefinitionId.HasValue)
+		{
+			queryParts.Add($"surveyDefinitionId={SurveyDefinitionId.Value}");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/app/questions?{string.Join("&", queryParts)}";
 	}
 }

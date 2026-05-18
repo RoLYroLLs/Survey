@@ -49,11 +49,11 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Country</th>
-						<th>Name</th>
-						<th>Code</th>
-						<th>Type</th>
-						<th>Counties</th>
+						<th><SortableHeader Label="Country" SortKey="country" CurrentSort="@Sort" Href="@GetSortUrl("country")" /></th>
+						<th><SortableHeader Label="Name" SortKey="name" CurrentSort="@Sort" Href="@GetSortUrl("name")" /></th>
+						<th><SortableHeader Label="Code" SortKey="code" CurrentSort="@Sort" Href="@GetSortUrl("code")" /></th>
+						<th><SortableHeader Label="Type" SortKey="type" CurrentSort="@Sort" Href="@GetSortUrl("type")" /></th>
+						<th><SortableHeader Label="Counties" SortKey="counties" CurrentSort="@Sort" Href="@GetSortUrl("counties")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -77,6 +77,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -87,42 +96,93 @@
 	[SupplyParameterFromQuery]
 	public string? Search { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<StateProvinceListItem> _items = Array.Empty<StateProvinceListItem>();
 	private string? _filterLabel;
 	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_searchText = Search ?? string.Empty;
-		_items = await AdministrationService.GetStateProvincesAsync(CountryId, Search);
-		_filterLabel = _items.FirstOrDefault()?.CountryFilterName;
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private void ApplySearch()
 	{
-		var url = "admin/state-provinces";
-		var queryParts = new List<string>();
-		if (CountryId.HasValue)
-		{
-			queryParts.Add($"countryId={CountryId.Value}");
-		}
-		if (!string.IsNullOrWhiteSpace(_searchText))
-		{
-			queryParts.Add($"search={Uri.EscapeDataString(_searchText)}");
-		}
-		if (queryParts.Count > 0)
-		{
-			url = $"{url}?{string.Join("&", queryParts)}";
-		}
-		NavigationManager.NavigateTo(url);
+		NavigationManager.NavigateTo(BuildUrl(_searchText, _pageSize, Sort));
 	}
 
 	private void ClearSearch()
 	{
 		_searchText = string.Empty;
-		var url = CountryId.HasValue
-			? $"admin/state-provinces?countryId={CountryId.Value}"
-			: "admin/state-provinces";
-		NavigationManager.NavigateTo(url);
+		NavigationManager.NavigateTo(BuildUrl(null, _pageSize, Sort));
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetStateProvincesAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			CountryId,
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+		_filterLabel = _items.FirstOrDefault()?.CountryFilterName;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Search, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(Search, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private string BuildUrl(string? search, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (CountryId.HasValue)
+		{
+			queryParts.Add($"countryId={CountryId.Value}");
+		}
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/admin/state-provinces?{string.Join("&", queryParts)}";
 	}
 }

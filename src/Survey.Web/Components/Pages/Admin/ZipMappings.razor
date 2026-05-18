@@ -27,7 +27,7 @@
 		<div class="page-header">
 			<div>
 				<h2>Lookup Rows</h2>
-				<p>Search by ZIP, county name, county FIPS, or state code. The list shows up to 250 rows at a time.</p>
+				<p>Search by ZIP, county name, county FIPS, or state code.</p>
 			</div>
 			<div class="toolbar">
 				<input class="form-control" placeholder="Search mappings" @bind="_searchText" />
@@ -45,11 +45,11 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>ZIP</th>
-						<th>County</th>
-						<th>County FIPS</th>
-						<th>State</th>
-						<th>Residential Ratio</th>
+						<th><SortableHeader Label="ZIP" SortKey="zip" CurrentSort="@Sort" Href="@GetSortUrl("zip")" /></th>
+						<th><SortableHeader Label="County" SortKey="county" CurrentSort="@Sort" Href="@GetSortUrl("county")" /></th>
+						<th><SortableHeader Label="County FIPS" SortKey="countyfips" CurrentSort="@Sort" Href="@GetSortUrl("countyfips")" /></th>
+						<th><SortableHeader Label="State" SortKey="state" CurrentSort="@Sort" Href="@GetSortUrl("state")" /></th>
+						<th><SortableHeader Label="Residential Ratio" SortKey="ratio" CurrentSort="@Sort" Href="@GetSortUrl("ratio")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -72,6 +72,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -79,26 +88,86 @@
 	[SupplyParameterFromQuery]
 	public string? Search { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<ZipCountyMappingListItem> _items = Array.Empty<ZipCountyMappingListItem>();
 	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_searchText = Search ?? string.Empty;
-		_items = await AdministrationService.GetZipCountyMappingsAsync(Search);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private void ApplySearch()
 	{
-		var url = string.IsNullOrWhiteSpace(_searchText)
-			? "admin/zip-mappings"
-			: $"admin/zip-mappings?search={Uri.EscapeDataString(_searchText)}";
-		NavigationManager.NavigateTo(url);
+		NavigationManager.NavigateTo(BuildUrl(_searchText, _pageSize, Sort));
 	}
 
 	private void ClearSearch()
 	{
 		_searchText = string.Empty;
-		NavigationManager.NavigateTo("admin/zip-mappings");
+		NavigationManager.NavigateTo(BuildUrl(null, _pageSize, Sort));
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetZipCountyMappingsAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Search, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(Search, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private static string BuildUrl(string? search, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/admin/zip-mappings?{string.Join("&", queryParts)}";
 	}
 }

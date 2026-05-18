@@ -17,6 +17,15 @@ namespace Survey.Infrastructure.Tests;
 
 public class SurveyApplicationServiceTests
 {
+	private static PagedQuery CreatePagedRequest(int offset = 0, int limit = PagedQuery.MaxLimit)
+	{
+		return new PagedQuery
+		{
+			Offset = offset,
+			Limit = limit
+		};
+	}
+
 	[Fact]
 	public void NormalizeProvider_Defaults_To_Sqlite_For_Missing_Or_Unknown_Values()
 	{
@@ -175,11 +184,11 @@ public class SurveyApplicationServiceTests
 			.Include(stateProvince => stateProvince.Counties)
 			.FirstOrDefaultAsync(stateProvince => stateProvince.Code == "DC");
 
-		Assert.Equal(3143, countyCount);
+		Assert.Equal(3144, countyCount);
 		Assert.NotNull(districtOfColumbia);
 		Assert.Equal("District", districtOfColumbia!.SubdivisionType);
 		Assert.Single(districtOfColumbia.Counties);
-		Assert.Equal("District of Columbia", districtOfColumbia.Counties[0].Name);
+		Assert.Equal("District of Columbia", districtOfColumbia.Counties.Single().Name);
 	}
 
 	[Fact]
@@ -394,10 +403,142 @@ public class SurveyApplicationServiceTests
 		harness.DbContext.People.Add(otherPerson);
 		await harness.DbContext.SaveChangesAsync();
 
-		var people = await harness.TenantAdministrationService.GetPeopleAsync();
+		var people = (await harness.TenantAdministrationService.GetPeopleAsync(CreatePagedRequest())).Items;
 
 		Assert.Contains(people, item => item.Id == seed.PersonId);
 		Assert.DoesNotContain(people, item => item.Id == otherPerson.Id);
+	}
+
+	[Fact]
+	public async Task SearchTenantAsync_Returns_Only_Current_Tenant_Results()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var seed = await harness.SeedSurveyAsync();
+
+		var otherTenant = new Tenant("Other Tenant");
+		harness.DbContext.Tenants.Add(otherTenant);
+		await harness.DbContext.SaveChangesAsync();
+
+		harness.TenantExecutionContext.UseTenant(otherTenant.Id);
+		var otherAddress = new PostalAddress(seed.CountryId, seed.StateProvinceId, seed.MiamiDadeCountyId, "999 Other Street", null, "Miami", "33101", "US", "FL", "United States of America");
+		harness.DbContext.PostalAddresses.Add(otherAddress);
+		await harness.DbContext.SaveChangesAsync();
+
+		var otherPerson = new Person(
+			"Taylor",
+			null,
+			"Outside",
+			otherAddress.Id,
+			"999 Other Street",
+			null,
+			"Miami",
+			"FL",
+			"33101",
+			otherAddress.Id,
+			"999 Other Street",
+			null,
+			"Miami",
+			"FL",
+			"33101",
+			"555-0199",
+			"Morning",
+			"Call",
+			"outside@example.com",
+			"United States of America",
+			"United States of America");
+		harness.DbContext.People.Add(otherPerson);
+		await harness.DbContext.SaveChangesAsync();
+
+		harness.TenantExecutionContext.UseTenant(harness.PrimaryTenantId);
+		var results = await harness.TenantAdministrationService.SearchTenantAsync("Taylor");
+
+		var peopleSection = Assert.Single(results.Sections, section => section.Key == "people");
+		Assert.Contains(peopleSection.Items, item => item.Url == $"/app/people/{seed.PersonId}");
+		Assert.DoesNotContain(peopleSection.Items, item => item.Title.Contains("Outside", StringComparison.OrdinalIgnoreCase));
+	}
+
+	[Fact]
+	public async Task GetPeopleAsync_Defaults_To_Ten_And_Loads_The_Next_Batch_Without_Overlap()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var seed = await harness.SeedSurveyAsync();
+		var addressId = await harness.DbContext.PostalAddresses.Select(address => address.Id).SingleAsync();
+
+		for (var index = 0; index < 14; index++)
+		{
+			harness.DbContext.People.Add(new Person(
+				$"Person{index:00}",
+				null,
+				"Batch",
+				addressId,
+				"123 Main Street",
+				null,
+				"Miami",
+				"FL",
+				"33101",
+				addressId,
+				"123 Main Street",
+				null,
+				"Miami",
+				"FL",
+				"33101",
+				$"555-01{index:00}",
+				"Morning",
+				"Call",
+				$"person{index:00}@example.com",
+				"United States of America",
+				"United States of America"));
+		}
+
+		await harness.DbContext.SaveChangesAsync();
+
+		var firstPage = await harness.TenantAdministrationService.GetPeopleAsync(new PagedQuery());
+		var secondPage = await harness.TenantAdministrationService.GetPeopleAsync(new PagedQuery
+		{
+			Offset = firstPage.Items.Count,
+			Limit = PagedQuery.DefaultLimit
+		});
+
+		Assert.Equal(PagedQuery.DefaultLimit, firstPage.Items.Count);
+		Assert.Equal(15, firstPage.TotalCount);
+		Assert.True(firstPage.HasMore);
+		Assert.Equal(5, secondPage.Items.Count);
+		Assert.Equal(15, secondPage.TotalCount);
+		Assert.False(secondPage.HasMore);
+		var combinedIds = firstPage.Items.Select(item => item.Id).Concat(secondPage.Items.Select(item => item.Id)).ToArray();
+		Assert.Empty(firstPage.Items.Select(item => item.Id).Intersect(secondPage.Items.Select(item => item.Id)));
+		Assert.Contains(seed.PersonId, combinedIds);
+	}
+
+	[Fact]
+	public async Task GetCountriesAsync_Search_Filter_Still_Uses_Paged_Total_Counts()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		for (var index = 0; index < 12; index++)
+		{
+			var code = ((char)('A' + index)).ToString();
+			harness.DbContext.Countries.Add(new Country($"Alpha Country {index:00}", $"Q{code}", $"Q{code}{code}"));
+		}
+
+		harness.DbContext.Countries.Add(new Country("Beta Country", "BC", "BET"));
+		await harness.DbContext.SaveChangesAsync();
+
+		var firstPage = await harness.PlatformAdministrationService.GetCountriesAsync(new PagedQuery(), "Alpha");
+		var secondPage = await harness.PlatformAdministrationService.GetCountriesAsync(new PagedQuery
+		{
+			Offset = firstPage.Items.Count,
+			Limit = PagedQuery.DefaultLimit
+		}, "Alpha");
+
+		Assert.Equal(PagedQuery.DefaultLimit, firstPage.Items.Count);
+		Assert.Equal(12, firstPage.TotalCount);
+		Assert.True(firstPage.HasMore);
+		Assert.Equal(2, secondPage.Items.Count);
+		Assert.Equal(12, secondPage.TotalCount);
+		Assert.False(secondPage.HasMore);
+		Assert.All(firstPage.Items, item => Assert.Contains("Alpha", item.Name, StringComparison.OrdinalIgnoreCase));
+		Assert.All(secondPage.Items, item => Assert.Contains("Alpha", item.Name, StringComparison.OrdinalIgnoreCase));
 	}
 
 	[Fact]
@@ -419,12 +560,12 @@ public class SurveyApplicationServiceTests
 
 		Assert.NotEqual(firstInvite.Token, secondInvite.Token);
 
-		var invitations = await harness.TenantAdministrationService.GetTenantInvitationsAsync();
+		var invitations = (await harness.TenantAdministrationService.GetTenantInvitationsAsync(CreatePagedRequest())).Items;
 		Assert.Equal(2, invitations.Count);
 		Assert.Single(invitations, invitation => invitation.IsPending);
 		Assert.Single(invitations, invitation => invitation.RevokedUtc is not null);
 
-		var auditLogs = await harness.PlatformAdministrationService.GetAuditLogsAsync(plane: "tenant");
+		var auditLogs = (await harness.PlatformAdministrationService.GetAuditLogsAsync(CreatePagedRequest(), plane: "tenant")).Items;
 		Assert.Contains(auditLogs, log => log.ActionType == "tenant.user.invited");
 		Assert.Contains(auditLogs, log => log.ActionType == "tenant.invitation.revoked");
 	}
@@ -440,7 +581,7 @@ public class SurveyApplicationServiceTests
 			Role = TenantRole.User
 		});
 
-		var tenants = await harness.PlatformAdministrationService.GetPlatformTenantsAsync();
+		var tenants = (await harness.PlatformAdministrationService.GetPlatformTenantsAsync(CreatePagedRequest())).Items;
 		var tenant = Assert.Single(tenants);
 
 		Assert.Equal(harness.PrimaryTenantId, tenant.Id);
@@ -564,8 +705,8 @@ public class SurveyApplicationServiceTests
 
 		await harness.AdministrationService.SaveSurveyDefinitionAsync(model);
 
-		var active = await harness.AdministrationService.GetSurveyDefinitionsAsync();
-		var archived = await harness.AdministrationService.GetSurveyDefinitionsAsync(true);
+		var active = (await harness.AdministrationService.GetSurveyDefinitionsAsync(CreatePagedRequest())).Items;
+		var archived = (await harness.AdministrationService.GetSurveyDefinitionsAsync(CreatePagedRequest(), true)).Items;
 
 		Assert.Empty(active);
 		Assert.Single(archived);
@@ -582,8 +723,8 @@ public class SurveyApplicationServiceTests
 
 		await harness.AdministrationService.SaveSurveyVersionAsync(model);
 
-		var active = await harness.AdministrationService.GetSurveyVersionsAsync(seed.DefinitionId);
-		var archived = await harness.AdministrationService.GetSurveyVersionsAsync(seed.DefinitionId, true);
+		var active = (await harness.AdministrationService.GetSurveyVersionsAsync(CreatePagedRequest(), seed.DefinitionId)).Items;
+		var archived = (await harness.AdministrationService.GetSurveyVersionsAsync(CreatePagedRequest(), seed.DefinitionId, true)).Items;
 
 		Assert.Empty(active);
 		Assert.Single(archived);
@@ -614,8 +755,8 @@ public class SurveyApplicationServiceTests
 
 		await harness.AdministrationService.SaveSurveyVersionAsync(model);
 
-		var active = await harness.AdministrationService.GetSurveyVersionsAsync(definitionId);
-		var archived = await harness.AdministrationService.GetSurveyVersionsAsync(definitionId, true);
+		var active = (await harness.AdministrationService.GetSurveyVersionsAsync(CreatePagedRequest(), definitionId)).Items;
+		var archived = (await harness.AdministrationService.GetSurveyVersionsAsync(CreatePagedRequest(), definitionId, true)).Items;
 
 		Assert.Empty(active);
 		Assert.Single(archived);
@@ -628,7 +769,7 @@ public class SurveyApplicationServiceTests
 		await using var harness = await TestHarness.CreateAsync();
 		var seed = await harness.SeedSurveyAsync();
 
-		var states = await harness.PlatformAdministrationService.GetStateProvincesAsync(seed.CountryId);
+		var states = (await harness.PlatformAdministrationService.GetStateProvincesAsync(CreatePagedRequest(), seed.CountryId)).Items;
 
 		var florida = Assert.Single(states);
 		Assert.Equal("United States of America", florida.CountryFilterName);
@@ -650,7 +791,7 @@ public class SurveyApplicationServiceTests
 		harness.DbContext.Entry(laterAssignment).Property(assignment => assignment.CreatedUtc).CurrentValue = new DateTimeOffset(2026, 5, 2, 12, 0, 0, TimeSpan.Zero);
 		await harness.DbContext.SaveChangesAsync();
 
-		var assignments = await harness.AdministrationService.GetAssignmentsAsync();
+		var assignments = (await harness.AdministrationService.GetAssignmentsAsync(CreatePagedRequest())).Items;
 
 		Assert.Equal([laterAssignment.Id, earlierAssignment.Id], assignments.Select(assignment => assignment.Id).Take(2).ToArray());
 	}
@@ -755,20 +896,20 @@ public class SurveyApplicationServiceTests
 			SelectedCountyFips = ["12095"]
 		});
 
-		var states = await harness.PlatformAdministrationService.GetStateProvincesAsync(seed.CountryId);
+		var states = (await harness.PlatformAdministrationService.GetStateProvincesAsync(CreatePagedRequest(), seed.CountryId)).Items;
 		var state = Assert.Single(states);
 		Assert.Equal(2, state.CountyCount);
 
-		var counties = await harness.PlatformAdministrationService.GetCountiesAsync(seed.StateProvinceId);
+		var counties = (await harness.PlatformAdministrationService.GetCountiesAsync(CreatePagedRequest(), seed.StateProvinceId)).Items;
 		Assert.Equal(2, counties.Count);
 		Assert.All(counties, county => Assert.Equal("Florida (FL)", county.StateProvinceFilterName));
 
-		var addresses = await harness.PlatformAdministrationService.GetPostalAddressesAsync(countyId: seed.MiamiDadeCountyId);
+		var addresses = (await harness.PlatformAdministrationService.GetPostalAddressesAsync(CreatePagedRequest(), countyId: seed.MiamiDadeCountyId)).Items;
 		var address = Assert.Single(addresses);
 		Assert.Equal(seed.MiamiDadeCountyId, address.CountyId);
 		Assert.Equal("Miami-Dade County", address.CountyName);
 
-		var areas = await harness.AdministrationService.GetAreasAsync(seed.OrangeCountyId);
+		var areas = (await harness.AdministrationService.GetAreasAsync(CreatePagedRequest(), seed.OrangeCountyId)).Items;
 		var area = Assert.Single(areas);
 		Assert.Equal("Central Florida", area.Name);
 		Assert.Equal("Orange County", area.CountyNameFilter);
@@ -882,7 +1023,7 @@ public class SurveyApplicationServiceTests
 		var secondResult = await harness.ExperienceService.SubmitAsync(secondSubmission, null);
 		Assert.True(secondResult.Succeeded);
 
-		var goals = await harness.AdministrationService.GetGoalsAsync();
+		var goals = (await harness.AdministrationService.GetGoalsAsync(CreatePagedRequest())).Items;
 		var goal = Assert.Single(goals);
 		Assert.Null(goal.AreaName);
 
@@ -980,7 +1121,7 @@ public class SurveyApplicationServiceTests
 		harness.DbContext.Entry(laterResponse).Property(response => response.SubmittedUtc).CurrentValue = new DateTimeOffset(2026, 5, 2, 12, 0, 0, TimeSpan.Zero);
 		await harness.DbContext.SaveChangesAsync();
 
-		var responses = await harness.AdministrationService.GetResponsesAsync();
+		var responses = (await harness.AdministrationService.GetResponsesAsync(CreatePagedRequest())).Items;
 
 		Assert.Equal([laterResponse.Id, earlierResponse.Id], responses.Select(response => response.Id).Take(2).ToArray());
 	}

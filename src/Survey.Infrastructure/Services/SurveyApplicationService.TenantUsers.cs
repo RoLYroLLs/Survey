@@ -9,7 +9,7 @@ namespace Survey.Infrastructure.Services;
 
 public sealed partial class SurveyApplicationService
 {
-	public async Task<IReadOnlyList<TenantUserListItem>> GetTenantUsersAsync(string? search = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<TenantUserListItem>> GetTenantUsersAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.UsersView, cancellationToken);
 
@@ -59,10 +59,27 @@ public sealed partial class SurveyApplicationService
 				.ToList();
 		}
 
-		return items
+		items = items
 			.OrderBy(item => item.FullName, StringComparer.OrdinalIgnoreCase)
 			.ThenBy(item => item.Email, StringComparer.OrdinalIgnoreCase)
 			.ToList();
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(TenantUserListItem.FullName)],
+			["email"] = [nameof(TenantUserListItem.Email)],
+			["role"] = [nameof(TenantUserListItem.Role)],
+			["status"] = [nameof(TenantUserListItem.IsEnabled)],
+			["permissions"] = [nameof(TenantUserListItem.EffectivePermissionCount), nameof(TenantUserListItem.PermissionOverrideCount)]
+		};
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(TenantUserListItem.MembershipId)).ToList();
+		var normalizedRequest = NormalizePagedQuery(request);
+		var totalCount = orderedItems.Count;
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, totalCount, normalizedRequest.Offset);
 	}
 
 	public async Task<TenantUserEditModel> GetTenantUserAsync(int membershipId, CancellationToken cancellationToken = default)
@@ -262,7 +279,7 @@ public sealed partial class SurveyApplicationService
 		return await CreateTenantInvitationCoreAsync(context, model.Email.Trim(), model.Role, cancellationToken);
 	}
 
-	public async Task<IReadOnlyList<TenantInvitationListItem>> GetTenantInvitationsAsync(bool includeHistory = true, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<TenantInvitationListItem>> GetTenantInvitationsAsync(PagedQuery request, bool includeHistory = true, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.UsersView, cancellationToken);
 
@@ -292,7 +309,7 @@ public sealed partial class SurveyApplicationService
 			.ToDictionaryAsync(user => user.Id, user => BuildDisplayName(user.FirstName, user.LastName, user.Email), cancellationToken);
 
 		var nowUtc = DateTimeOffset.UtcNow;
-		return invitations
+		var items = invitations
 			.Select(invitation => new TenantInvitationListItem
 			{
 				Id = invitation.Id,
@@ -304,9 +321,34 @@ public sealed partial class SurveyApplicationService
 				AcceptedUtc = invitation.AcceptedUtc,
 				RevokedUtc = invitation.RevokedUtc,
 				IsPending = invitation.AcceptedUtc == null && invitation.RevokedUtc == null && invitation.ExpiresAtUtc > nowUtc,
-				IsExpired = invitation.AcceptedUtc == null && invitation.RevokedUtc == null && invitation.ExpiresAtUtc <= nowUtc
+				IsExpired = invitation.AcceptedUtc == null && invitation.RevokedUtc == null && invitation.ExpiresAtUtc <= nowUtc,
+				StatusSortOrder = invitation.AcceptedUtc != null
+					? 1
+					: invitation.RevokedUtc != null
+						? 3
+						: invitation.ExpiresAtUtc <= nowUtc
+							? 2
+							: 0
 			})
 			.ToList();
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["email"] = [nameof(TenantInvitationListItem.Email)],
+			["role"] = [nameof(TenantInvitationListItem.Role)],
+			["status"] = [nameof(TenantInvitationListItem.StatusSortOrder)],
+			["createdby"] = [nameof(TenantInvitationListItem.CreatedByDisplayName)],
+			["created"] = [nameof(TenantInvitationListItem.CreatedUtc)],
+			["expires"] = [nameof(TenantInvitationListItem.ExpiresAtUtc)]
+		};
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(TenantInvitationListItem.Id)).ToList();
+		var normalizedRequest = NormalizePagedQuery(request);
+		var totalCount = orderedItems.Count;
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
+
+		return CreatePagedResult(pagedItems, totalCount, normalizedRequest.Offset);
 	}
 
 	public async Task<TenantInvitationCreateResultModel> ReissueTenantInvitationAsync(int invitationId, CancellationToken cancellationToken = default)
@@ -426,6 +468,7 @@ public sealed partial class SurveyApplicationService
 			IsPlatformSuperAdmin = false,
 			IsPlatformUserEnabled = false
 		};
+		UserAvatarPalette.EnsureAssigned(user);
 
 		var createResult = await _userManager.CreateAsync(user, model.Password);
 		if (!createResult.Succeeded)

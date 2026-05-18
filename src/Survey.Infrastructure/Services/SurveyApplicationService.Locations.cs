@@ -6,10 +6,27 @@ namespace Survey.Infrastructure.Services;
 
 public sealed partial class SurveyApplicationService
 {
-	public async Task<IReadOnlyList<LocationListItem>> GetLocationsAsync(int? personId = null, CancellationToken cancellationToken = default)
+	public async Task<PagedResult<LocationListItem>> GetLocationsAsync(PagedQuery request, int? personId = null, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.LocationsView, cancellationToken);
 
+		var query = BuildLocationListQuery(personId);
+
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["nickname"] = [nameof(LocationListItem.Nickname)],
+			["zip"] = [nameof(LocationListItem.PostalCode)],
+			["email"] = [nameof(LocationListItem.Email)],
+			["phone"] = [nameof(LocationListItem.PhoneNumber)],
+			["assignments"] = [nameof(LocationListItem.AssignmentCount)],
+			["person"] = [nameof(LocationListItem.PersonName)]
+		};
+
+		return await BuildPagedResultAsync(query, request, sortMap, nameof(LocationListItem.Id), cancellationToken);
+	}
+
+	private IQueryable<LocationListItem> BuildLocationListQuery(int? personId)
+	{
 		var query = _dbContext.Locations
 			.AsNoTracking()
 			.Include(location => location.Person)
@@ -21,10 +38,11 @@ public sealed partial class SurveyApplicationService
 			query = query.Where(location => location.PersonId == personId.Value);
 		}
 
-		return await query
+		return query
 			.OrderBy(location => location.Person.LastName)
 			.ThenBy(location => location.Person.FirstName)
 			.ThenBy(location => location.Nickname)
+			.ThenBy(location => location.Id)
 			.Select(location => new LocationListItem
 			{
 				Id = location.Id,
@@ -35,8 +53,12 @@ public sealed partial class SurveyApplicationService
 				Email = location.Email,
 				PhoneNumber = location.PhoneNumber,
 				AssignmentCount = location.Assignments.Count
-			})
-			.ToListAsync(cancellationToken);
+			});
+	}
+
+	private async Task<IReadOnlyList<LocationListItem>> GetAllLocationsAsync(int? personId, CancellationToken cancellationToken)
+	{
+		return await BuildLocationListQuery(personId).ToListAsync(cancellationToken);
 	}
 
 	public async Task<LocationEditModel> GetLocationAsync(int? id, int? personId, CancellationToken cancellationToken = default)

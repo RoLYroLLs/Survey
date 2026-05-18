@@ -36,12 +36,12 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Tenant</th>
-						<th>Members</th>
-						<th>Enabled</th>
-						<th>Owners</th>
-						<th>Pending Invites</th>
-						<th>Updated</th>
+						<th><SortableHeader Label="Tenant" SortKey="tenant" CurrentSort="@Sort" Href="@GetSortUrl("tenant")" /></th>
+						<th><SortableHeader Label="Members" SortKey="members" CurrentSort="@Sort" Href="@GetSortUrl("members")" /></th>
+						<th><SortableHeader Label="Enabled" SortKey="enabled" CurrentSort="@Sort" Href="@GetSortUrl("enabled")" /></th>
+						<th><SortableHeader Label="Owners" SortKey="owners" CurrentSort="@Sort" Href="@GetSortUrl("owners")" /></th>
+						<th><SortableHeader Label="Pending Invites" SortKey="pendinginvites" CurrentSort="@Sort" Href="@GetSortUrl("pendinginvites")" /></th>
+						<th><SortableHeader Label="Updated" SortKey="updated" CurrentSort="@Sort" Href="@GetSortUrl("updated")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -72,6 +72,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -79,26 +88,86 @@
 	[SupplyParameterFromQuery]
 	public string? Search { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<PlatformTenantListItem> _items = Array.Empty<PlatformTenantListItem>();
 	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_searchText = Search ?? string.Empty;
-		_items = await AdministrationService.GetPlatformTenantsAsync(Search);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
 	}
 
 	private void ApplySearch()
 	{
-		var url = string.IsNullOrWhiteSpace(_searchText)
-			? "/admin/tenants"
-			: $"/admin/tenants?search={Uri.EscapeDataString(_searchText)}";
-		NavigationManager.NavigateTo(url);
+		NavigationManager.NavigateTo(BuildUrl(_searchText, _pageSize, Sort));
 	}
 
 	private void ClearSearch()
 	{
 		_searchText = string.Empty;
-		NavigationManager.NavigateTo("/admin/tenants");
+		NavigationManager.NavigateTo(BuildUrl(null, _pageSize, Sort));
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await AdministrationService.GetPlatformTenantsAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Search, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		return BuildUrl(Search, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private static string BuildUrl(string? search, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/admin/tenants?{string.Join("&", queryParts)}";
 	}
 }

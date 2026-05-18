@@ -1,6 +1,7 @@
 @page "/app/reports/unmapped-responses"
 @attribute [TenantAuthorize(TenantPermissionKeys.ResponsesView)]
 @inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Unmapped Responses</PageTitle>
 
@@ -34,12 +35,12 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>Respondent</th>
-						<th>Person / Location</th>
-						<th>ZIP / County</th>
-						<th>Survey</th>
-						<th>Submitted By</th>
-						<th>Submitted</th>
+						<th><SortableHeader Label="Respondent" SortKey="respondent" CurrentSort="@Sort" Href="@GetSortUrl("respondent")" /></th>
+						<th><SortableHeader Label="Person / Location" SortKey="personlocation" CurrentSort="@Sort" Href="@GetSortUrl("personlocation")" /></th>
+						<th><SortableHeader Label="ZIP / County" SortKey="zipcounty" CurrentSort="@Sort" Href="@GetSortUrl("zipcounty")" /></th>
+						<th><SortableHeader Label="Survey" SortKey="survey" CurrentSort="@Sort" Href="@GetSortUrl("survey")" /></th>
+						<th><SortableHeader Label="Submitted By" SortKey="submittedby" CurrentSort="@Sort" Href="@GetSortUrl("submittedby")" /></th>
+						<th><SortableHeader Label="Submitted" SortKey="submitted" CurrentSort="@Sort" Href="@GetSortUrl("submitted")" /></th>
 						<th></th>
 					</tr>
 				</thead>
@@ -73,6 +74,15 @@
 				</tbody>
 			</table>
 		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
 	</div>
 </div>
 
@@ -80,7 +90,17 @@
 	[SupplyParameterFromQuery(Name = "postalCode")]
 	public string? PostalCode { get; set; }
 
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	[SupplyParameterFromQuery(Name = "sort")]
+	public string? Sort { get; set; }
+
 	private IReadOnlyList<SurveyResponseListItem> _items = Array.Empty<SurveyResponseListItem>();
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
 
 	private bool IsMissingFilter => string.Equals(PostalCode, "Missing", StringComparison.OrdinalIgnoreCase);
 
@@ -91,6 +111,59 @@
 	protected override async Task OnParametersSetAsync()
 	{
 		var filter = string.IsNullOrWhiteSpace(PostalCode) ? "Missing" : PostalCode.Trim();
-		_items = await AdministrationService.GetUnmappedResponsesAsync(filter);
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync(filter);
+	}
+
+	private async Task LoadAsync(string filter, bool append = false)
+	{
+		var result = await AdministrationService.GetUnmappedResponsesAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0, Sort),
+			filter);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		var filter = string.IsNullOrWhiteSpace(PostalCode) ? "Missing" : PostalCode.Trim();
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(filter, append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		var filter = string.IsNullOrWhiteSpace(PostalCode) ? "Missing" : PostalCode.Trim();
+		NavigationManager.NavigateTo(BuildUrl(filter, pageSize, Sort));
+		return Task.CompletedTask;
+	}
+
+	private string GetSortUrl(string key)
+	{
+		var filter = string.IsNullOrWhiteSpace(PostalCode) ? "Missing" : PostalCode.Trim();
+		return BuildUrl(filter, _pageSize, PagingSort.Toggle(Sort, key));
+	}
+
+	private static string BuildUrl(string filter, int pageSize, string? sort)
+	{
+		var queryParts = new List<string>
+		{
+			$"postalCode={Uri.EscapeDataString(filter)}",
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(sort))
+		{
+			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
+		}
+
+		return $"/app/reports/unmapped-responses?{string.Join("&", queryParts)}";
 	}
 }
