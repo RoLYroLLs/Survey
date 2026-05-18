@@ -6,6 +6,10 @@
 # dotenv files
 .env
 
+# Local environment-only files
+inspect_db.cs
+src/Survey.Web/Data/
+
 # Local .NET CLI home / caches
 .dotnet/
 
