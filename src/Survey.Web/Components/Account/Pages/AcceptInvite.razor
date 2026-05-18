@@ -1,4 +1,5 @@
 @page "/Account/AcceptInvite"
+@using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Identity
 @inject ITenantAdministrationService AdministrationService
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -58,9 +59,11 @@
 				}
 				else
 				{
-					<div class="form-footer">
-						<button class="btn btn-primary" type="button" @onclick="AcceptExistingAsync">Accept Invitation</button>
-					</div>
+					<EditForm Model="AcceptExistingInput" OnValidSubmit="AcceptExistingAsync" FormName="accept-existing-invite" method="post">
+						<div class="form-footer">
+							<button class="btn btn-primary" type="submit">Accept Invitation</button>
+						</div>
+					</EditForm>
 				}
 			}
 			else if (_isAuthenticated)
@@ -69,30 +72,30 @@
 			}
 			else
 			{
-				<EditForm Model="_registrationModel" OnValidSubmit="AcceptNewAsync">
+				<EditForm Model="RegistrationInput" OnValidSubmit="AcceptNewAsync" FormName="accept-new-invite" method="post">
 					<DataAnnotationsValidator />
 					<ValidationSummary />
 
 					<div class="form-grid">
 						<div class="field-stack">
 							<FieldLabel Text="First Name" Required />
-							<InputText class="form-control" @bind-Value="_registrationModel.FirstName" />
-							<ValidationMessage For="@(() => _registrationModel.FirstName)" />
+							<InputText class="form-control" @bind-Value="RegistrationInput.FirstName" />
+							<ValidationMessage For="@(() => RegistrationInput.FirstName)" />
 						</div>
 						<div class="field-stack">
 							<FieldLabel Text="Last Name" Required />
-							<InputText class="form-control" @bind-Value="_registrationModel.LastName" />
-							<ValidationMessage For="@(() => _registrationModel.LastName)" />
+							<InputText class="form-control" @bind-Value="RegistrationInput.LastName" />
+							<ValidationMessage For="@(() => RegistrationInput.LastName)" />
 						</div>
 						<div class="field-stack">
 							<FieldLabel Text="Password" Required />
-							<SecretInput class="form-control" @bind-Value="_registrationModel.Password" />
-							<ValidationMessage For="@(() => _registrationModel.Password)" />
+							<SecretInput class="form-control" @bind-Value="RegistrationInput.Password" />
+							<ValidationMessage For="@(() => RegistrationInput.Password)" />
 						</div>
 						<div class="field-stack">
 							<FieldLabel Text="Confirm Password" Required />
-							<SecretInput class="form-control" @bind-Value="_registrationModel.ConfirmPassword" />
-							<ValidationMessage For="@(() => _registrationModel.ConfirmPassword)" />
+							<SecretInput class="form-control" @bind-Value="RegistrationInput.ConfirmPassword" />
+							<ValidationMessage For="@(() => RegistrationInput.ConfirmPassword)" />
 						</div>
 					</div>
 
@@ -109,8 +112,13 @@
 	[SupplyParameterFromQuery(Name = "token")]
 	public string? Token { get; set; }
 
+	[SupplyParameterFromForm]
+	private TenantInvitationRegistrationModel RegistrationInput { get; set; } = default!;
+
+	[SupplyParameterFromForm]
+	private AcceptExistingInvitationModel AcceptExistingInput { get; set; } = default!;
+
 	private TenantInvitationAcceptanceContextModel? _context;
-	private readonly TenantInvitationRegistrationModel _registrationModel = new();
 	private string? _errorMessage;
 	private bool _isAuthenticated;
 	private bool _isMatchingUser;
@@ -120,7 +128,9 @@
 	protected override async Task OnParametersSetAsync()
 	{
 		_errorMessage = null;
-		_registrationModel.Token = Token ?? string.Empty;
+		RegistrationInput ??= new();
+		RegistrationInput.Token = Token ?? string.Empty;
+		AcceptExistingInput ??= new();
 		_context = await AdministrationService.GetTenantInvitationAcceptanceAsync(Token ?? string.Empty);
 
 		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -173,7 +183,7 @@
 	{
 		try
 		{
-			var userId = await AdministrationService.AcceptTenantInvitationForNewUserAsync(_registrationModel);
+			var userId = await AdministrationService.AcceptTenantInvitationForNewUserAsync(RegistrationInput);
 			var user = await UserManager.FindByIdAsync(userId)
 				?? throw new InvalidOperationException("The new account could not be loaded after creation.");
 			await SignInManager.SignInAsync(user, isPersistent: false);
@@ -188,5 +198,9 @@
 	private string GetLoginUrl()
 	{
 		return $"Account/Login?returnUrl={Uri.EscapeDataString($"/Account/AcceptInvite?token={Token}")}";
+	}
+
+	private sealed class AcceptExistingInvitationModel
+	{
 	}
 }
