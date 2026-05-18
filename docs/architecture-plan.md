@@ -34,7 +34,8 @@
 - Tenant access is permission-based. Roles provide defaults, and membership-level allow/deny overrides fine-tune effective permissions.
 - Platform access is separate from tenant access. Platform administration uses platform permissions and must not imply automatic tenant access.
 - A user may belong to multiple tenants. One active tenant membership is selected server-side for the current session, and the UI provides a tenant switcher when needed.
-- Self-serve onboarding creates a tenant plus its first user atomically. The first membership becomes the initial `Owner`.
+- Self-serve onboarding is phased: first collect email, username, and password; then require email confirmation; then collect name, address, and phone; then create the first tenant. The first membership becomes the initial `Owner`.
+- Self-serve onboarding should prefill the first tenant name as `My First Tenant` until the user changes it.
 - Tenant admins can invite users into their tenant with secure invitation tokens. Existing accounts can accept an invite after signing in, and new accounts can be created directly from the invitation flow.
 - Tenant membership management must prevent privilege escalation, disallow changing one’s own tenant role/status/permissions through normal tenant-admin flows, and block removal, disablement, or demotion of the final enabled `Owner` or the final enabled admin-capable membership.
 - Sensitive authorization denials and tenant-admin security changes should be audit logged.
@@ -106,6 +107,19 @@
 - Toast notifications should be implemented through one shared app-wide host and service so action feedback uses a single system instead of per-page custom markup.
 - Toast visual treatment should communicate severity consistently: success uses green, warning uses yellow, and error uses red.
 - The shared toast host should support multiple simultaneous toasts, stack them oldest-first near the top edge of the screen, and animate remaining toasts upward when one is dismissed or expires.
+- The authenticated app shell should use a shared top bar across `/app` and `/admin`, with `Survey` branding on the left, a centered tenant-wide search entry point, and tenant/profile controls on the right.
+- The tenant-wide top-bar search should search across the current tenant's accessible records and return only sections the current membership is authorized to view.
+- The authenticated shell should expose tenant switching as a top-bar control rather than a standalone navigation-only action.
+- User profile entry in the shell should render as a colored circular avatar with the user's initial; avatar color is assigned once at account creation and reused until a future profile editor changes it.
+- Sidebar menu icons should use a consistent outlined icon style rather than colored emoji-style glyphs.
+- Standalone routed list pages should use progressive server-side paging rather than loading the full dataset at once.
+- The standard list batch size is `10` by default, with supported view-count options of `10`, `25`, `50`, and `100`.
+- Standalone routed list pages should use a `Load More` pattern that appends the next batch beneath the current rows instead of replacing the view with discrete previous/next pages.
+- The shared list pager should show `Showing X of Y`, disable `Load More` when there are no more records, and preserve the selected `pageSize` in the query string when filters or searches rebuild the URL.
+- Filter, archive, and search changes on standalone routed list pages should reset the loaded batch back to the first page while preserving the selected `pageSize`.
+- Standalone routed list pages should allow sorting on every visible data column, remember the last three selected sort columns, and use the most recently selected column as the primary sort.
+- Selecting the current primary sort column repeatedly should cycle it through ascending, descending, and removed states while retaining any remaining secondary and tertiary sort columns.
+- Embedded child tables inside detail pages are excluded from the progressive paging standard unless they are explicitly upgraded later.
 - Person-edit address section titles should use concise end-user labels such as `Address` and `Mailing Address` instead of internal profile-oriented wording.
 - Required fields on forms should show a consistent red asterisk next to the field label, with markers aligned to the actual validation rules rather than decorative-only hints.
 - Person mailing address is required in the admin editor and must be entered or explicitly copied by the user; it should not silently inherit the physical address during save.
