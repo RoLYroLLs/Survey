@@ -1,3 +1,7 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,6 +10,8 @@ using Survey.Application.Services;
 using Survey.Domain;
 using Survey.Infrastructure.Identity;
 using Survey.Infrastructure.Persistence;
+using Survey.Infrastructure.Security;
+using Survey.Infrastructure.Services;
 
 namespace Survey.Infrastructure.Tests;
 
@@ -44,11 +50,136 @@ public class SurveyApplicationServiceTests
 		});
 
 		var appearance = await harness.ExperienceService.GetSiteAppearanceAsync();
-		var entity = await harness.DbContext.SiteSettings.SingleAsync();
+		var entity = await harness.DbContext.TenantSettings.SingleAsync();
 
 		Assert.Equal("harbor-blue", entity.ThemePresetKey);
 		Assert.Equal("harbor-blue", appearance.ThemePresetKey);
 		Assert.Equal("Harbor Blue", appearance.ThemePresetName);
+	}
+
+	[Fact]
+	public async Task SaveSiteSettingsAsync_Throws_When_Current_User_Is_Not_Tenant_Owner()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var adminUser = new ApplicationUser
+		{
+			UserName = "tenant.admin@example.com",
+			Email = "tenant.admin@example.com",
+			EmailConfirmed = true,
+			FirstName = "Tenant",
+			LastName = "Admin",
+			IsPlatformSuperAdmin = false,
+			IsPlatformUserEnabled = false
+		};
+
+		var createResult = await harness.UserManager.CreateAsync(adminUser, "TempPass123!");
+		Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(static error => error.Description)));
+
+		var membership = new TenantMembership(harness.PrimaryTenantId, adminUser.Id, TenantRole.Admin);
+		harness.DbContext.TenantMemberships.Add(membership);
+		await harness.DbContext.SaveChangesAsync();
+		await harness.SetCurrentUserAsync(adminUser, membership.Id);
+
+		var exception = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+			harness.AdministrationService.SaveSiteSettingsAsync(new SiteSettingsEditModel
+			{
+				ThemePresetKey = "harbor-blue"
+			}));
+
+		Assert.Contains("tenant owner", exception.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task SaveTenantGeographyVisibilityAsync_Throws_When_Current_User_Is_Not_Tenant_Owner()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var seed = await harness.SeedSurveyAsync();
+
+		var adminUser = new ApplicationUser
+		{
+			UserName = "tenant.admin@example.com",
+			Email = "tenant.admin@example.com",
+			EmailConfirmed = true,
+			FirstName = "Tenant",
+			LastName = "Admin",
+			IsPlatformSuperAdmin = false,
+			IsPlatformUserEnabled = false
+		};
+
+		var createResult = await harness.UserManager.CreateAsync(adminUser, "TempPass123!");
+		Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(static error => error.Description)));
+
+		var membership = new TenantMembership(harness.PrimaryTenantId, adminUser.Id, TenantRole.Admin);
+		harness.DbContext.TenantMemberships.Add(membership);
+		await harness.DbContext.SaveChangesAsync();
+		await harness.SetCurrentUserAsync(adminUser, membership.Id);
+
+		var exception = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+			harness.TenantAdministrationService.SaveTenantGeographyVisibilityAsync(new TenantGeographyVisibilityEditModel
+			{
+				VisibleCountryIds = [seed.CountryId]
+			}));
+
+		Assert.Contains("tenant owner", exception.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task GetTenantCountySelectOptionsAsync_Respects_TenantVisibility()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var seed = await harness.SeedSurveyAsync();
+
+		await harness.TenantAdministrationService.SaveTenantGeographyVisibilityAsync(new TenantGeographyVisibilityEditModel
+		{
+			VisibleCountyIds = [seed.MiamiDadeCountyId]
+		});
+
+		var options = await harness.TenantAdministrationService.GetTenantCountySelectOptionsAsync(seed.StateProvinceId);
+
+		Assert.Single(options);
+		Assert.Contains("Miami-Dade County", options[0].Label, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task SaveAreaAsync_Rejects_County_Outside_TenantVisibility()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var seed = await harness.SeedSurveyAsync();
+
+		await harness.TenantAdministrationService.SaveTenantGeographyVisibilityAsync(new TenantGeographyVisibilityEditModel
+		{
+			VisibleCountyIds = [seed.MiamiDadeCountyId]
+		});
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			harness.TenantAdministrationService.SaveAreaAsync(new AreaEditModel
+			{
+				Name = "Orange Area",
+				Description = "Should fail",
+				SelectedCountyFips = ["12095"]
+			}));
+
+		Assert.Contains("was not found in the counties list", exception.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task GeographyDataSeeder_Seeds_All_UnitedStatesCounties_And_DistrictOfColumbia()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		await harness.GeographySeeder.SeedAsync(forceRun: true);
+
+		var countyCount = await harness.DbContext.Counties.CountAsync();
+		var districtOfColumbia = await harness.DbContext.StateProvinces
+			.Include(stateProvince => stateProvince.Counties)
+			.FirstOrDefaultAsync(stateProvince => stateProvince.Code == "DC");
+
+		Assert.Equal(3143, countyCount);
+		Assert.NotNull(districtOfColumbia);
+		Assert.Equal("District", districtOfColumbia!.SubdivisionType);
+		Assert.Single(districtOfColumbia.Counties);
+		Assert.Equal("District of Columbia", districtOfColumbia.Counties[0].Name);
 	}
 
 	[Fact]
@@ -165,13 +296,14 @@ public class SurveyApplicationServiceTests
 
 		Assert.True(result.Succeeded);
 		Assert.NotNull(result.ResponseId);
+		var currentUserId = await harness.DbContext.Users.Select(user => user.Id).SingleAsync();
 
 		var response = await harness.DbContext.SurveyResponses
 			.Include(entity => entity.Answers)
 			.SingleAsync();
 
 		Assert.True(response.SubmittedByEmployee);
-		Assert.Equal("employee-42", response.SubmittedByUserId);
+		Assert.Equal(currentUserId, response.SubmittedByUserId);
 		Assert.Equal("Alicia", response.RespondentFirstName);
 		Assert.Equal("M.", response.RespondentMiddleName);
 		Assert.Equal("Lopez", response.RespondentLastName);
@@ -189,22 +321,209 @@ public class SurveyApplicationServiceTests
 	}
 
 	[Fact]
-	public async Task SaveEmployeeAsync_Throws_For_Unknown_Role()
+	public async Task SavePlatformUserAsync_Throws_When_Final_SuperAdmin_Would_Be_Removed()
 	{
 		await using var harness = await TestHarness.CreateAsync();
 
-		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			harness.AdministrationService.SaveEmployeeAsync(new EmployeeEditModel
-			{
-				FirstName = "Pat",
-				LastName = "Jordan",
-				Email = "pat@example.com",
-				Password = "TempPass123",
-				ConfirmPassword = "TempPass123",
-				RoleName = "Supervisor"
-			}));
+		var operatorUser = new ApplicationUser
+		{
+			UserName = "operator@example.com",
+			Email = "operator@example.com",
+			EmailConfirmed = true,
+			FirstName = "Platform",
+			LastName = "Operator",
+			IsPlatformSuperAdmin = false,
+			IsPlatformUserEnabled = true
+		};
 
-		Assert.Contains("Admin or Employee role", exception.Message, StringComparison.OrdinalIgnoreCase);
+		var createResult = await harness.UserManager.CreateAsync(operatorUser, "TempPass123!");
+		Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(static error => error.Description)));
+
+		harness.DbContext.PlatformUserPermissions.AddRange(
+			new PlatformUserPermission(operatorUser.Id, PlatformPermissionKeys.UsersView),
+			new PlatformUserPermission(operatorUser.Id, PlatformPermissionKeys.UsersManage),
+			new PlatformUserPermission(operatorUser.Id, PlatformPermissionKeys.PermissionsManage));
+		await harness.DbContext.SaveChangesAsync();
+		await harness.SetCurrentUserAsync(operatorUser);
+
+		var model = await harness.PlatformAdministrationService.GetPlatformUserAsync(harness.PrimaryUserId);
+		model.IsPlatformSuperAdmin = false;
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => harness.PlatformAdministrationService.SavePlatformUserAsync(model));
+
+		Assert.Contains("final enabled platform super admin", exception.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task GetPeopleAsync_Isolated_To_The_Active_Tenant()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var seed = await harness.SeedSurveyAsync();
+
+		var otherTenant = new Tenant("Other Tenant");
+		harness.DbContext.Tenants.Add(otherTenant);
+		await harness.DbContext.SaveChangesAsync();
+
+		harness.TenantExecutionContext.UseTenant(otherTenant.Id);
+		var otherAddress = new PostalAddress(seed.CountryId, seed.StateProvinceId, seed.OrangeCountyId, "500 Oak Avenue", null, "Orlando", "32801", "US", "FL", "United States of America");
+		harness.DbContext.PostalAddresses.Add(otherAddress);
+		await harness.DbContext.SaveChangesAsync();
+
+		var otherPerson = new Person(
+			"Jordan",
+			null,
+			"Lee",
+			otherAddress.Id,
+			"500 Oak Avenue",
+			null,
+			"Orlando",
+			"FL",
+			"32801",
+			otherAddress.Id,
+			"500 Oak Avenue",
+			null,
+			"Orlando",
+			"FL",
+			"32801",
+			"555-0111",
+			"Afternoon",
+			"Call",
+			"jordan@example.com",
+			"United States of America",
+			"United States of America");
+		harness.DbContext.People.Add(otherPerson);
+		await harness.DbContext.SaveChangesAsync();
+
+		var people = await harness.TenantAdministrationService.GetPeopleAsync();
+
+		Assert.Contains(people, item => item.Id == seed.PersonId);
+		Assert.DoesNotContain(people, item => item.Id == otherPerson.Id);
+	}
+
+	[Fact]
+	public async Task CreateTenantInvitationAsync_Reissues_Pending_Invitations_And_Audits_The_Change()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var firstInvite = await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
+		{
+			Email = "invitee@example.com",
+			Role = TenantRole.User
+		});
+
+		var secondInvite = await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
+		{
+			Email = "invitee@example.com",
+			Role = TenantRole.User
+		});
+
+		Assert.NotEqual(firstInvite.Token, secondInvite.Token);
+
+		var invitations = await harness.TenantAdministrationService.GetTenantInvitationsAsync();
+		Assert.Equal(2, invitations.Count);
+		Assert.Single(invitations, invitation => invitation.IsPending);
+		Assert.Single(invitations, invitation => invitation.RevokedUtc is not null);
+
+		var auditLogs = await harness.PlatformAdministrationService.GetAuditLogsAsync(plane: "tenant");
+		Assert.Contains(auditLogs, log => log.ActionType == "tenant.user.invited");
+		Assert.Contains(auditLogs, log => log.ActionType == "tenant.invitation.revoked");
+	}
+
+	[Fact]
+	public async Task GetPlatformTenantsAsync_Returns_Pending_Invitation_Counts_On_Sqlite()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
+		{
+			Email = "pending@example.com",
+			Role = TenantRole.User
+		});
+
+		var tenants = await harness.PlatformAdministrationService.GetPlatformTenantsAsync();
+		var tenant = Assert.Single(tenants);
+
+		Assert.Equal(harness.PrimaryTenantId, tenant.Id);
+		Assert.Equal(1, tenant.PendingInvitationCount);
+		Assert.Equal(1, tenant.OwnerCount);
+	}
+
+	[Fact]
+	public async Task AcceptTenantInvitationForNewUserAsync_Creates_A_Membership_In_The_Invited_Tenant()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var invite = await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
+		{
+			Email = "new.user@example.com",
+			Role = TenantRole.Admin
+		});
+
+		var userId = await harness.TenantAdministrationService.AcceptTenantInvitationForNewUserAsync(new TenantInvitationRegistrationModel
+		{
+			Token = invite.Token,
+			FirstName = "New",
+			LastName = "User",
+			Password = "TempPass123!",
+			ConfirmPassword = "TempPass123!"
+		});
+
+		var membership = await harness.DbContext.TenantMemberships
+			.AsNoTracking()
+			.SingleAsync(item => item.UserId == userId && item.TenantId == harness.PrimaryTenantId);
+		var user = await harness.UserManager.FindByIdAsync(userId);
+
+		Assert.NotNull(user);
+		Assert.Equal(TenantRole.Admin, membership.Role);
+		Assert.True(membership.IsEnabled);
+		Assert.Equal(membership.Id, user!.ActiveTenantMembershipId);
+	}
+
+	[Fact]
+	public async Task SaveTenantUserAsync_Throws_When_Current_User_Tries_To_Change_Their_Own_Access()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var model = await harness.TenantAdministrationService.GetTenantUserAsync(harness.PrimaryMembershipId);
+		model.IsEnabled = false;
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => harness.TenantAdministrationService.SaveTenantUserAsync(model));
+
+		Assert.Contains("cannot change your own tenant role, status, or permissions", exception.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task TenantContextAccessor_Uses_HttpContext_User_When_Component_Auth_State_Is_Unavailable()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var user = await harness.UserManager.FindByIdAsync(harness.PrimaryUserId);
+		Assert.NotNull(user);
+
+		harness.HttpContextAccessor.HttpContext = new DefaultHttpContext
+		{
+			User = new ClaimsPrincipal(new ClaimsIdentity(
+			[
+				new Claim(ClaimTypes.NameIdentifier, harness.PrimaryUserId),
+				new Claim(ClaimTypes.Name, user!.UserName ?? user.Email ?? harness.PrimaryUserId),
+				new Claim(ClaimTypes.Email, user.Email ?? string.Empty)
+			], "TestHttpContext"))
+		};
+
+		var accessor = new TenantContextAccessor(
+			new ThrowingAuthenticationStateProvider(),
+			harness.HttpContextAccessor,
+			harness.UserManager,
+			harness.DbContext,
+			harness.TenantExecutionContext);
+
+		var context = await accessor.GetCurrentAsync();
+
+		Assert.True(context.IsAuthenticated);
+		Assert.True(context.HasTenantAccess);
+		Assert.Equal(harness.PrimaryUserId, context.UserId);
+		Assert.Equal(harness.PrimaryTenantId, context.TenantId);
+		Assert.Equal(harness.PrimaryMembershipId, context.ActiveTenantMembershipId);
 	}
 
 	[Fact]
@@ -309,7 +628,7 @@ public class SurveyApplicationServiceTests
 		await using var harness = await TestHarness.CreateAsync();
 		var seed = await harness.SeedSurveyAsync();
 
-		var states = await harness.AdministrationService.GetStateProvincesAsync(seed.CountryId);
+		var states = await harness.PlatformAdministrationService.GetStateProvincesAsync(seed.CountryId);
 
 		var florida = Assert.Single(states);
 		Assert.Equal("United States of America", florida.CountryFilterName);
@@ -342,7 +661,7 @@ public class SurveyApplicationServiceTests
 		await using var harness = await TestHarness.CreateAsync();
 		var seed = await harness.SeedSurveyAsync();
 
-		await harness.AdministrationService.ImportZipCountyMappingsAsync(new ZipCountyImportModel
+		await harness.PlatformAdministrationService.ImportZipCountyMappingsAsync(new ZipCountyImportModel
 		{
 			CsvContent = """
 				ZIP,COUNTY,COUNTYNAME,STATE,RES_RATIO
@@ -436,15 +755,15 @@ public class SurveyApplicationServiceTests
 			SelectedCountyFips = ["12095"]
 		});
 
-		var states = await harness.AdministrationService.GetStateProvincesAsync(seed.CountryId);
+		var states = await harness.PlatformAdministrationService.GetStateProvincesAsync(seed.CountryId);
 		var state = Assert.Single(states);
 		Assert.Equal(2, state.CountyCount);
 
-		var counties = await harness.AdministrationService.GetCountiesAsync(seed.StateProvinceId);
+		var counties = await harness.PlatformAdministrationService.GetCountiesAsync(seed.StateProvinceId);
 		Assert.Equal(2, counties.Count);
 		Assert.All(counties, county => Assert.Equal("Florida (FL)", county.StateProvinceFilterName));
 
-		var addresses = await harness.AdministrationService.GetPostalAddressesAsync(countyId: seed.MiamiDadeCountyId);
+		var addresses = await harness.PlatformAdministrationService.GetPostalAddressesAsync(countyId: seed.MiamiDadeCountyId);
 		var address = Assert.Single(addresses);
 		Assert.Equal(seed.MiamiDadeCountyId, address.CountyId);
 		Assert.Equal("Miami-Dade County", address.CountyName);
@@ -461,7 +780,7 @@ public class SurveyApplicationServiceTests
 		await using var harness = await TestHarness.CreateAsync();
 		var seed = await harness.SeedSurveyAsync();
 
-		await harness.AdministrationService.ImportZipCountyMappingsAsync(new ZipCountyImportModel
+		await harness.PlatformAdministrationService.ImportZipCountyMappingsAsync(new ZipCountyImportModel
 		{
 			CsvContent = """
 				ZIP,COUNTY,COUNTYNAME,STATE,RES_RATIO
@@ -789,13 +1108,30 @@ public class SurveyApplicationServiceTests
 			_scope = scope;
 			_databasePath = databasePath;
 			DbContext = _scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
-			AdministrationService = _scope.ServiceProvider.GetRequiredService<ISurveyAdministrationService>();
+			TenantAdministrationService = _scope.ServiceProvider.GetRequiredService<ITenantAdministrationService>();
+			PlatformAdministrationService = _scope.ServiceProvider.GetRequiredService<IPlatformAdministrationService>();
+			AdministrationService = _scope.ServiceProvider.GetRequiredService<ITenantAdministrationService>();
 			ExperienceService = _scope.ServiceProvider.GetRequiredService<ISurveyExperienceService>();
+			UserManager = _scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+			TenantExecutionContext = _scope.ServiceProvider.GetRequiredService<TenantExecutionContext>();
+			AuthenticationStateProvider = (TestAuthenticationStateProvider)_scope.ServiceProvider.GetRequiredService<AuthenticationStateProvider>();
+			HttpContextAccessor = _scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+			GeographySeeder = _scope.ServiceProvider.GetRequiredService<GeographyDataSeeder>();
 		}
 
 		public SurveyDbContext DbContext { get; }
-		public ISurveyAdministrationService AdministrationService { get; }
+		public ITenantAdministrationService TenantAdministrationService { get; }
+		public IPlatformAdministrationService PlatformAdministrationService { get; }
+		public ITenantAdministrationService AdministrationService { get; }
 		public ISurveyExperienceService ExperienceService { get; }
+		public UserManager<ApplicationUser> UserManager { get; }
+		public TenantExecutionContext TenantExecutionContext { get; }
+		public TestAuthenticationStateProvider AuthenticationStateProvider { get; }
+		public IHttpContextAccessor HttpContextAccessor { get; }
+		public GeographyDataSeeder GeographySeeder { get; }
+		public int PrimaryTenantId { get; private set; }
+		public int PrimaryMembershipId { get; private set; }
+		public string PrimaryUserId { get; private set; } = string.Empty;
 
 		public static async Task<TestHarness> CreateAsync()
 		{
@@ -812,6 +1148,7 @@ public class SurveyApplicationServiceTests
 			services.AddDataProtection();
 			services.AddLogging();
 			services.AddSurveyInfrastructure(configuration);
+			services.AddScoped<AuthenticationStateProvider, TestAuthenticationStateProvider>();
 
 			var provider = services.BuildServiceProvider();
 			var scope = provider.CreateScope();
@@ -819,8 +1156,75 @@ public class SurveyApplicationServiceTests
 
 			await harness.DbContext.Database.EnsureDeletedAsync();
 			await harness.DbContext.Database.EnsureCreatedAsync();
+			await harness.InitializeAccessAsync();
 
 			return harness;
+		}
+
+		private async Task InitializeAccessAsync()
+		{
+			var tenant = new Tenant("Test Tenant");
+			DbContext.Tenants.Add(tenant);
+			await DbContext.SaveChangesAsync();
+
+			var user = new ApplicationUser
+			{
+				UserName = "admin@example.com",
+				Email = "admin@example.com",
+				EmailConfirmed = true,
+				FirstName = "Test",
+				LastName = "Admin",
+				IsPlatformSuperAdmin = true,
+				IsPlatformUserEnabled = true
+			};
+
+			var createResult = await UserManager.CreateAsync(user, "TempPass123!");
+			if (!createResult.Succeeded)
+			{
+				throw new InvalidOperationException(string.Join("; ", createResult.Errors.Select(static error => error.Description)));
+			}
+
+			var membership = new TenantMembership(tenant.Id, user.Id, TenantRole.Owner);
+			DbContext.TenantMemberships.Add(membership);
+			await DbContext.SaveChangesAsync();
+
+			PrimaryTenantId = tenant.Id;
+			PrimaryMembershipId = membership.Id;
+			PrimaryUserId = user.Id;
+			await SetCurrentUserAsync(user, membership.Id);
+			DbContext.TenantSettings.Add(new TenantSetting(tenant.Id, SiteThemePresetCatalog.DefaultPresetKey));
+			await DbContext.SaveChangesAsync();
+		}
+
+		public async Task SetCurrentUserAsync(ApplicationUser user, int? membershipId = null)
+		{
+			user.ActiveTenantMembershipId = membershipId;
+			var updateResult = await UserManager.UpdateAsync(user);
+			if (!updateResult.Succeeded)
+			{
+				throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
+			}
+
+			if (membershipId.HasValue)
+			{
+				var tenantId = await DbContext.TenantMemberships
+					.AsNoTracking()
+					.Where(item => item.Id == membershipId.Value)
+					.Select(item => item.TenantId)
+					.SingleAsync();
+				TenantExecutionContext.UseTenant(tenantId);
+			}
+			else
+			{
+				TenantExecutionContext.Clear();
+			}
+
+			AuthenticationStateProvider.SetPrincipal(new ClaimsPrincipal(new ClaimsIdentity(
+			[
+				new Claim(ClaimTypes.NameIdentifier, user.Id),
+				new Claim(ClaimTypes.Name, user.UserName ?? user.Email ?? user.Id),
+				new Claim(ClaimTypes.Email, user.Email ?? string.Empty)
+			], "TestAuth")));
 		}
 
 		public async Task<SeedData> SeedSurveyAsync()
@@ -974,6 +1378,30 @@ public class SurveyApplicationServiceTests
 				{
 				}
 			}
+		}
+	}
+
+	private sealed class TestAuthenticationStateProvider : AuthenticationStateProvider
+	{
+		private ClaimsPrincipal _principal = new(new ClaimsIdentity());
+
+		public override Task<AuthenticationState> GetAuthenticationStateAsync()
+		{
+			return Task.FromResult(new AuthenticationState(_principal));
+		}
+
+		public void SetPrincipal(ClaimsPrincipal principal)
+		{
+			_principal = principal;
+			NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+		}
+	}
+
+	private sealed class ThrowingAuthenticationStateProvider : AuthenticationStateProvider
+	{
+		public override Task<AuthenticationState> GetAuthenticationStateAsync()
+		{
+			throw new InvalidOperationException("Authentication state is unavailable in this scope.");
 		}
 	}
 

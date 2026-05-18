@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class PersonPhone
+public class PersonPhone : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public int PersonId { get; private set; }
 	public string Label { get; private set; } = string.Empty;
 	public string PhoneNumber { get; private set; } = string.Empty;

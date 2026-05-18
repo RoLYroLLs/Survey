@@ -1,0 +1,231 @@
+@page "/app/goals/new"
+@page "/app/goals/{Id:int}"
+@page "/app/goals/{Id:int}/edit"
+@implements IDisposable
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+@inject ITenantPermissionEvaluator TenantPermissionEvaluator
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>@GetPageTitle()</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Response Goal</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update a response goal.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Name</strong>
+						<span>@DisplayOrDash(_model.Name)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Description</strong>
+						<span>@DisplayOrDash(_model.Description)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Area</strong>
+						<span>@GetAreaLabel()</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Survey Filter</strong>
+						<span>@GetSurveyLabel()</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Target Responses</strong>
+						<span>@_model.TargetResponseCount</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Start Date</strong>
+						<span>@FormatDate(_model.StartDate)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>End Date</strong>
+						<span>@FormatDate(_model.EndDate)</span>
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.GoalsEdit)">
+						<Authorized>
+							<a class="btn btn-primary" href="/app/goals/@Id/edit">Edit Goal</a>
+						</Authorized>
+					</AuthorizeView>
+					<a class="btn btn-outline-primary" href="app/goals">Back to Goals</a>
+				</div>
+			</div>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<FieldLabel Text="Name" Required />
+						<InputText class="form-control" @bind-Value="_model.Name" />
+						<ValidationMessage For="@(() => _model.Name)" />
+					</div>
+					<div class="field-stack">
+						<label>Description</label>
+						<InputTextArea class="form-control" rows="4" @bind-Value="_model.Description" />
+						<ValidationMessage For="@(() => _model.Description)" />
+					</div>
+					<div class="field-stack">
+						<label>Area</label>
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.AreaId"
+										  Options="_model.AreaOptions" />
+						<ValidationMessage For="@(() => _model.AreaId)" />
+					</div>
+					<div class="field-stack">
+						<label>Survey Filter</label>
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.SurveyDefinitionId"
+										  Options="_model.SurveyOptions"
+										  IncludeEmptyOption="true"
+										  EmptyOptionLabel="All Surveys" />
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Target Responses" Required />
+						<InputNumber class="form-control" @bind-Value="_model.TargetResponseCount" />
+						<ValidationMessage For="@(() => _model.TargetResponseCount)" />
+					</div>
+					<div class="field-stack">
+						<label>Start Date</label>
+						<InputDate class="form-control" @bind-Value="_model.StartDate" />
+					</div>
+					<div class="field-stack">
+						<label>End Date</label>
+						<InputDate class="form-control" @bind-Value="_model.EndDate" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Goal</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/goals/{Id.Value}" : "app/goals")">Cancel</a>
+				</div>
+			</EditForm>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private GoalEditModel _model = new();
+	private string? _errorMessage;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetGoalAsync(Id);
+		_errorMessage = null;
+	}
+
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveGoalAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Goal saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"app/goals/{savedId}");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Goal";
+		}
+
+		return Id.HasValue ? "Edit Goal" : "Add Goal";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private string GetAreaLabel()
+	{
+		if (!_model.AreaId.HasValue)
+		{
+			return "All Areas";
+		}
+
+		return _model.AreaOptions.FirstOrDefault(option => option.Value == _model.AreaId.Value.ToString())?.Label ?? "-";
+	}
+
+	private string GetSurveyLabel()
+	{
+		if (! _model.SurveyDefinitionId.HasValue)
+		{
+			return "All Surveys";
+		}
+
+		return _model.SurveyOptions.FirstOrDefault(option => option.Value == _model.SurveyDefinitionId.Value.ToString())?.Label ?? "-";
+	}
+
+	private static string FormatDate(DateOnly? value)
+	{
+		return value?.ToString("MM/dd/yyyy") ?? "-";
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = IsViewMode
+			? TenantPermissionKeys.GoalsView
+			: Id.HasValue
+				? TenantPermissionKeys.GoalsEdit
+				: TenantPermissionKeys.GoalsCreate;
+		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+	}
+}

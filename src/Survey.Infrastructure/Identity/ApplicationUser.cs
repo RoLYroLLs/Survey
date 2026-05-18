@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
+using Survey.Domain;
 
 namespace Survey.Infrastructure.Identity;
 
@@ -13,6 +14,16 @@ public class ApplicationUser : IdentityUser
 
 	[StringLength(2000)]
 	public string? FavoriteGoalIds { get; set; }
+
+	public int? ActiveTenantMembershipId { get; set; }
+
+	public bool IsPlatformSuperAdmin { get; set; }
+
+	public bool IsPlatformUserEnabled { get; set; }
+
+	public ICollection<TenantMembership> TenantMemberships { get; } = new List<TenantMembership>();
+
+	public ICollection<PlatformUserPermission> PlatformPermissions { get; } = new List<PlatformUserPermission>();
 
 	public string DisplayName
 	{

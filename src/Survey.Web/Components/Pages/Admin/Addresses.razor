@@ -1,6 +1,6 @@
 @page "/admin/addresses"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyView)]
+@inject IPlatformAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Addresses</PageTitle>
@@ -18,8 +18,12 @@
 				<a class="btn btn-outline-primary" href="admin/addresses">View All</a>
 			}
 			<a class="btn btn-outline-primary" href="/admin/import-samples/addresses">Download Sample Excel</a>
-			<a class="btn btn-outline-primary" href="admin/addresses/import">Import CSV</a>
-			<a class="btn btn-primary" href="admin/addresses/new">Add Address</a>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+				<Authorized>
+					<a class="btn btn-outline-primary" href="admin/addresses/import">Import CSV</a>
+					<a class="btn btn-primary" href="admin/addresses/new">Add Address</a>
+				</Authorized>
+			</AuthorizeView>
 		</div>
 	</div>
 

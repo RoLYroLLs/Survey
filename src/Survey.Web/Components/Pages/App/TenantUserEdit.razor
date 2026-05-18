@@ -1,0 +1,158 @@
+@page "/app/users/{MembershipId:int}"
+@attribute [TenantAuthorize(TenantPermissionKeys.UsersView)]
+@inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>View User</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Access</p>
+			<h1>View User</h1>
+			<p>Review tenant membership details, role, status, and permission overrides.</p>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<ValidationSummary />
+
+			<div class="form-grid">
+				<div class="field-stack">
+					<FieldLabel Text="Name" />
+					<input class="form-control" value="@_model.FullName" disabled />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Email" />
+					<input class="form-control" value="@_model.Email" disabled />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Role" Required />
+					<InputSelect class="form-select" @bind-Value="_model.Role" disabled="@(!_model.CanChangeRole)">
+						@foreach (var option in _roleOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Enabled" />
+					<div class="form-check">
+						<InputCheckbox class="form-check-input" @bind-Value="_model.IsEnabled" disabled="@(!_model.CanEnableDisable)" />
+						<label class="form-check-label">Membership is enabled</label>
+					</div>
+				</div>
+			</div>
+
+			@if (_model.IsCurrentUser)
+			{
+				<div class="inline-banner inline-banner--info">
+					Your own tenant role, status, and permissions cannot be changed from this page.
+				</div>
+			}
+
+			@if (_model.CanReviewEffectivePermissions && _model.Permissions.Count > 0)
+			{
+				<div class="page-header">
+					<div>
+						<h2>Permission Overrides</h2>
+						<p>Roles provide the defaults. Overrides can explicitly allow or deny a permission for this membership.</p>
+					</div>
+				</div>
+
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Feature</th>
+							<th>Permission</th>
+							<th>Default</th>
+							<th>Override</th>
+							<th>Effective</th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var permission in _model.Permissions.OrderBy(item => item.Category).ThenBy(item => item.PermissionLabel))
+						{
+							<tr>
+								<td>@permission.Category</td>
+								<td>@permission.PermissionLabel</td>
+								<td>@(permission.DefaultGranted ? "Allowed" : "Denied")</td>
+								<td>
+									<select class="form-select form-select-sm" @bind="permission.OverrideMode" disabled="@(!_model.CanManagePermissions)">
+										<option value="@TenantPermissionOverrideModes.Default">Default</option>
+										<option value="@TenantPermissionOverrideModes.Allow">Allow</option>
+										<option value="@TenantPermissionOverrideModes.Deny">Deny</option>
+									</select>
+								</td>
+								<td>@(permission.EffectiveGranted ? "Allowed" : "Denied")</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+
+			<div class="form-footer">
+				@if (_model.CanChangeRole || _model.CanManagePermissions || _model.CanEnableDisable)
+				{
+					<button class="btn btn-primary" type="submit">Save User</button>
+				}
+				@if (_model.CanRemove && !_model.IsCurrentUser)
+				{
+					<button class="btn btn-outline-danger" type="button" @onclick="RemoveAsync">Remove User</button>
+				}
+				<a class="btn btn-outline-primary" href="/app/users/invitations">Invitations</a>
+				<a class="btn btn-outline-primary" href="/app/users">Back to Users</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int MembershipId { get; set; }
+
+	private readonly IReadOnlyList<SelectOption> _roleOptions =
+	[
+		new() { Value = TenantRole.User.ToString(), Label = "User" },
+		new() { Value = TenantRole.Admin.ToString(), Label = "Admin" },
+		new() { Value = TenantRole.Owner.ToString(), Label = "Owner" }
+	];
+
+	private TenantUserEditModel _model = new();
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetTenantUserAsync(MembershipId);
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveTenantUserAsync(_model);
+			ToastService.ShowSuccess("User membership saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"/app/users/{savedId}", replace: true);
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+
+	private async Task RemoveAsync()
+	{
+		try
+		{
+			await AdministrationService.RemoveTenantUserAsync(MembershipId);
+			ToastService.ShowSuccess("User membership removed successfully.", "Removed");
+			NavigationManager.NavigateTo("/app/users");
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Remove failed");
+		}
+	}
+}

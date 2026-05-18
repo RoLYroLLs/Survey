@@ -10,6 +10,7 @@ public class Country
 	public DateTimeOffset UpdatedUtc { get; private set; }
 	public ICollection<StateProvince> StateProvinces { get; } = new List<StateProvince>();
 	public ICollection<PostalAddress> PostalAddresses { get; } = new List<PostalAddress>();
+	public ICollection<TenantVisibleCountry> TenantVisibility { get; } = new List<TenantVisibleCountry>();
 
 	private Country()
 	{

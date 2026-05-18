@@ -1,0 +1,232 @@
+@page "/app/areas/new"
+@page "/app/areas/{Id:int}"
+@page "/app/areas/{Id:int}/edit"
+@implements IDisposable
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+@inject ITenantPermissionEvaluator TenantPermissionEvaluator
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>@GetPageTitle()</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Geographic Area</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update an area and the counties it includes.</p>
+		</div>
+	</div>
+
+	<div class="form-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (_model.CountyOptions.Count == 0)
+		{
+			<div class="inline-banner mb-3">Add or import counties first if you want county choices to appear here.</div>
+		}
+
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Name</strong>
+						<span>@DisplayOrDash(_model.Name)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Description</strong>
+						<span>@DisplayOrDash(_model.Description)</span>
+					</div>
+				</div>
+
+				<section class="content-card">
+					<div class="page-header">
+						<div>
+							<h2 class="content-card__title-sm">Counties</h2>
+						</div>
+					</div>
+					@if (_model.CountyOptions.Count == 0)
+					{
+						<p class="empty-state">No counties are available yet.</p>
+					}
+					else
+					{
+						<div class="detail-chip-list">
+							@foreach (var county in _model.CountyOptions.Where(county => _model.SelectedCountyFips.Contains(county.CountyFips, StringComparer.OrdinalIgnoreCase)))
+							{
+								<div class="detail-chip">@county.CountyName, @county.StateCode</div>
+							}
+						</div>
+					}
+				</section>
+
+				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AreasEdit)">
+						<Authorized>
+							<a class="btn btn-primary" href="/app/areas/@Id/edit">Edit Area</a>
+						</Authorized>
+					</AuthorizeView>
+					<a class="btn btn-outline-primary" href="app/areas">Back to Areas</a>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+						<Authorized Context="platformContext">
+							<a class="btn btn-outline-primary" href="admin/counties/import">Import Counties</a>
+						</Authorized>
+					</AuthorizeView>
+				</div>
+			</div>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<FieldLabel Text="Name" Required />
+						<InputText class="form-control" @bind-Value="_model.Name" />
+						<ValidationMessage For="@(() => _model.Name)" />
+					</div>
+					<div class="field-stack">
+						<label>Description</label>
+						<InputTextArea class="form-control" rows="4" @bind-Value="_model.Description" />
+						<ValidationMessage For="@(() => _model.Description)" />
+					</div>
+					<div class="field-stack">
+						<label>Counties</label>
+						@if (_model.CountyOptions.Count == 0)
+						{
+							<p class="helper-copy mb-0">No counties are available yet.</p>
+						}
+						else
+						{
+							<div class="checkbox-grid">
+								@foreach (var county in _model.CountyOptions)
+								{
+									<label class="checkbox-card">
+										<input
+											type="checkbox"
+											checked="@_model.SelectedCountyFips.Contains(county.CountyFips, StringComparer.OrdinalIgnoreCase)"
+											@onchange="@((ChangeEventArgs args) => ToggleCounty(county.CountyFips, args.Value is bool isChecked && isChecked))" />
+										<span>@county.CountyName, @county.StateCode</span>
+										<small>@county.ZipCount ZIPs</small>
+									</label>
+								}
+							</div>
+						}
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Area</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/areas/{Id.Value}" : "app/areas")">Cancel</a>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+						<Authorized Context="platformContext">
+							<a class="btn btn-outline-primary" href="admin/counties/import">Import Counties</a>
+						</Authorized>
+					</AuthorizeView>
+				</div>
+			</EditForm>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private AreaEditModel _model = new();
+	private string? _errorMessage;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetAreaAsync(Id);
+		_errorMessage = null;
+	}
+
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
+	private void ToggleCounty(string countyFips, bool isSelected)
+	{
+		if (isSelected)
+		{
+			if (!_model.SelectedCountyFips.Contains(countyFips, StringComparer.OrdinalIgnoreCase))
+			{
+				_model.SelectedCountyFips.Add(countyFips);
+			}
+
+			return;
+		}
+
+		_model.SelectedCountyFips.RemoveAll(value => string.Equals(value, countyFips, StringComparison.OrdinalIgnoreCase));
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveAreaAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Area saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"app/areas/{savedId}");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Area";
+		}
+
+		return Id.HasValue ? "Edit Area" : "Add Area";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = IsViewMode
+			? TenantPermissionKeys.AreasView
+			: Id.HasValue
+				? TenantPermissionKeys.AreasEdit
+				: TenantPermissionKeys.AreasCreate;
+		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+	}
+}

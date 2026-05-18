@@ -1,0 +1,85 @@
+@page "/app/users/invite"
+@attribute [TenantAuthorize(TenantPermissionKeys.UsersInvite)]
+@inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>Invite User</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Access</p>
+			<h1>Invite User</h1>
+			<p>Create a secure invitation link for a user to join this tenant.</p>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<ValidationSummary />
+
+			<div class="form-grid">
+				<div class="field-stack">
+					<FieldLabel Text="Email" Required />
+					<InputText class="form-control" @bind-Value="_model.Email" />
+					<ValidationMessage For="@(() => _model.Email)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Role" Required />
+					<InputSelect class="form-select" @bind-Value="_model.Role">
+						@foreach (var option in _roleOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+					<ValidationMessage For="@(() => _model.Role)" />
+				</div>
+			</div>
+
+			@if (!string.IsNullOrWhiteSpace(_inviteUrl))
+			{
+				<div class="field-stack">
+					<FieldLabel Text="Invite Link" />
+					<textarea class="form-control" rows="3" readonly>@_inviteUrl</textarea>
+					<div class="text-muted">Expires @_expiresAtLabel.</div>
+				</div>
+			}
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Create Invitation</button>
+				<a class="btn btn-outline-primary" href="/app/users/invitations">View Invitations</a>
+				<a class="btn btn-outline-primary" href="/app/users">Back to Users</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	private readonly TenantUserInviteModel _model = new();
+	private readonly IReadOnlyList<SelectOption> _roleOptions =
+	[
+		new() { Value = TenantRole.User.ToString(), Label = "User" },
+		new() { Value = TenantRole.Admin.ToString(), Label = "Admin" },
+		new() { Value = TenantRole.Owner.ToString(), Label = "Owner" }
+	];
+
+	private string? _inviteUrl;
+	private string? _expiresAtLabel;
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var result = await AdministrationService.CreateTenantInvitationAsync(_model);
+			_inviteUrl = NavigationManager.ToAbsoluteUri($"/Account/AcceptInvite?token={Uri.EscapeDataString(result.Token)}").ToString();
+			_expiresAtLabel = result.ExpiresAtUtc.ToLocalTime().ToString("f");
+			ToastService.ShowSuccess("Invitation created successfully.", "Invitation created");
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Invitation failed");
+		}
+	}
+}

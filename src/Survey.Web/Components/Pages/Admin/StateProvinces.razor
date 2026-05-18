@@ -1,6 +1,6 @@
 @page "/admin/state-provinces"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyView)]
+@inject IPlatformAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
 
 <PageTitle>States / Territories</PageTitle>
@@ -18,8 +18,12 @@
 				<a class="btn btn-outline-primary" href="admin/state-provinces">View All</a>
 			}
 			<a class="btn btn-outline-primary" href="/admin/import-samples/state-provinces">Download Sample Excel</a>
-			<a class="btn btn-outline-primary" href="admin/state-provinces/import">Import CSV</a>
-			<a class="btn btn-primary" href="admin/state-provinces/new">Add State / Territory</a>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+				<Authorized>
+					<a class="btn btn-outline-primary" href="admin/state-provinces/import">Import CSV</a>
+					<a class="btn btn-primary" href="admin/state-provinces/new">Add State / Territory</a>
+				</Authorized>
+			</AuthorizeView>
 		</div>
 	</div>
 

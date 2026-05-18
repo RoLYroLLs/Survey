@@ -2,8 +2,9 @@
 @page "/admin/state-provinces/{Id:int}"
 @page "/admin/state-provinces/{Id:int}/edit"
 @implements IDisposable
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize]
+@inject IPlatformAdministrationService AdministrationService
+@inject IPlatformPermissionEvaluator PlatformPermissionEvaluator
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
@@ -47,7 +48,11 @@
 				</div>
 
 				<div class="form-footer">
-					<a class="btn btn-primary" href="/admin/state-provinces/@Id/edit">Edit State / Territory</a>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+						<Authorized>
+							<a class="btn btn-primary" href="/admin/state-provinces/@Id/edit">Edit State / Territory</a>
+						</Authorized>
+					</AuthorizeView>
 					<a class="btn btn-outline-primary" href="admin/state-provinces">Back to States / Territories</a>
 				</div>
 			</div>
@@ -108,6 +113,11 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
 		_model = await AdministrationService.GetStateProvinceAsync(Id, null);
 		_errorMessage = null;
 	}
@@ -151,6 +161,20 @@
 	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, int value)
 	{
 		return options.FirstOrDefault(option => option.Value == value.ToString())?.Label ?? "-";
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = IsViewMode
+			? PlatformPermissionKeys.GeographyView
+			: PlatformPermissionKeys.GeographyManage;
+		if (await PlatformPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
 	}
 
 	public void Dispose()

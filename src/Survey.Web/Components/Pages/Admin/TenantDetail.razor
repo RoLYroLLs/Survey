@@ -1,0 +1,154 @@
+@page "/admin/tenants/{TenantId:int}"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.TenantsOversight)]
+@inject IPlatformAdministrationService AdministrationService
+
+<PageTitle>Tenant Detail</PageTitle>
+
+@if (_item is null)
+{
+	<div class="status-card narrow-card">
+		<p class="eyebrow">Tenant</p>
+		<h1>That tenant couldn't be found.</h1>
+		<p class="mb-0">It may have been removed or the identifier may be invalid.</p>
+	</div>
+}
+else
+{
+	<div class="page-stack">
+		<div class="page-header">
+			<div>
+				<p class="eyebrow">Platform Oversight</p>
+				<h1>@_item.Name</h1>
+				<p>@_item.Slug</p>
+			</div>
+			<div class="toolbar">
+				<a class="btn btn-outline-primary" href="/admin/tenants">Back to Tenants</a>
+			</div>
+		</div>
+
+		<div class="dashboard-grid">
+			<div class="metric-card">
+				<p class="metric-card__label">Members</p>
+				<p class="metric-card__value">@_item.MembershipCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Enabled Members</p>
+				<p class="metric-card__value">@_item.EnabledMembershipCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Owners</p>
+				<p class="metric-card__value">@_item.OwnerCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Pending Invites</p>
+				<p class="metric-card__value">@_item.PendingInvitationCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">People</p>
+				<p class="metric-card__value">@_item.PeopleCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Locations</p>
+				<p class="metric-card__value">@_item.LocationCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Surveys</p>
+				<p class="metric-card__value">@_item.SurveyCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Assignments</p>
+				<p class="metric-card__value">@_item.AssignmentCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Responses</p>
+				<p class="metric-card__value">@_item.ResponseCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Goals</p>
+				<p class="metric-card__value">@_item.GoalCount</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Areas</p>
+				<p class="metric-card__value">@_item.AreaCount</p>
+			</div>
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Tenant Metadata</h2>
+					<p>Review theme, creation, and update details for this tenant.</p>
+				</div>
+			</div>
+
+			<div class="assignment-detail-list">
+				<div class="assignment-detail-row">
+					<strong>Theme Preset</strong>
+					<span>@(string.IsNullOrWhiteSpace(_item.ThemePresetKey) ? "-" : _item.ThemePresetKey)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Created</strong>
+					<span>@_item.CreatedUtc.LocalDateTime.ToString("f")</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Updated</strong>
+					<span>@_item.UpdatedUtc.LocalDateTime.ToString("f")</span>
+				</div>
+			</div>
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Memberships</h2>
+					<p>Review tenant role distribution and permission override counts.</p>
+				</div>
+			</div>
+
+			@if (_item.Memberships.Count == 0)
+			{
+				<p class="empty-state">No memberships are currently attached to this tenant.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Email</th>
+							<th>Role</th>
+							<th>Status</th>
+							<th>Overrides</th>
+							<th>Effective Permissions</th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var membership in _item.Memberships)
+						{
+							<tr>
+								<td>@membership.FullName</td>
+								<td>@membership.Email</td>
+								<td>@membership.Role</td>
+								<td>@(membership.IsEnabled ? "Enabled" : "Disabled")</td>
+								<td>@membership.PermissionOverrideCount</td>
+								<td>@membership.EffectivePermissionCount</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	</div>
+}
+
+@code {
+	[Parameter]
+	public int TenantId { get; set; }
+
+	private PlatformTenantDetailModel? _item;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_item = await AdministrationService.GetPlatformTenantAsync(TenantId);
+	}
+}

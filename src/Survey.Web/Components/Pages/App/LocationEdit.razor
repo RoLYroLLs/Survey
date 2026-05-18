@@ -1,0 +1,707 @@
+@page "/app/people/{PersonId:int}/locations/new"
+@page "/app/people/{PersonId:int}/locations/{Id:int}"
+@page "/app/people/{PersonId:int}/locations/{Id:int}/edit"
+@implements IDisposable
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+@inject ITenantPermissionEvaluator TenantPermissionEvaluator
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>@GetPageTitle()</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Recipient Location</p>
+			<h1>@GetHeading()</h1>
+			<p>View or update this location and its contact details.</p>
+		</div>
+	</div>
+
+	<div class="form-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Person</strong>
+						<span>@DisplayOrDash(GetSelectedOptionLabel(_model.PersonOptions, _model.PersonId))</span>
+					</div>
+				</div>
+
+				<div class="card-grid">
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2 class="content-card__title-sm">Physical Address</h2>
+							</div>
+						</div>
+						<div class="address-block">
+							@foreach (var line in FormatAddress(_model.PhysicalAddress))
+							{
+								<div>@line</div>
+							}
+						</div>
+					</section>
+
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2 class="content-card__title-sm">Mailing Address</h2>
+							</div>
+						</div>
+						<div class="address-block">
+							@foreach (var line in FormatAddress(_model.MailingAddress))
+							{
+								<div>@line</div>
+							}
+						</div>
+					</section>
+				</div>
+
+				<div class="card-grid">
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2 class="content-card__title-sm">Phone Numbers</h2>
+							</div>
+						</div>
+						@if (_model.Phones.Count == 0)
+						{
+							<p class="empty-state">No phone numbers.</p>
+						}
+						else
+						{
+							<div class="contact-detail-list">
+								@foreach (var phone in _model.Phones)
+								{
+									<div class="contact-detail-item">
+										<strong>@GetContactOptionLabel(ContactOptionCatalog.PhoneTypeOptions, phone.Label)</strong>
+										<span>@DisplayOrDash(phone.PhoneNumber)@(phone.IsPrimary ? " (Primary)" : string.Empty)</span>
+									</div>
+								}
+							</div>
+						}
+					</section>
+
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2 class="content-card__title-sm">Email Addresses</h2>
+							</div>
+						</div>
+						@if (_model.Emails.Count == 0)
+						{
+							<p class="empty-state">No email addresses.</p>
+						}
+						else
+						{
+							<div class="contact-detail-list">
+								@foreach (var email in _model.Emails)
+								{
+									<div class="contact-detail-item">
+										<strong>@GetContactOptionLabel(ContactOptionCatalog.EmailTypeOptions, email.Label)</strong>
+										<span>@DisplayOrDash(email.EmailAddress)@(email.IsPrimary ? " (Primary)" : string.Empty)</span>
+									</div>
+								}
+							</div>
+						}
+					</section>
+				</div>
+
+				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.LocationsEdit)">
+						<Authorized>
+							<a class="btn btn-primary" href="/app/people/@PersonId/locations/@Id/edit">Edit Location</a>
+						</Authorized>
+					</AuthorizeView>
+					<a class="btn btn-outline-primary" href="/app/people/@PersonId/locations">Back to Locations</a>
+				</div>
+			</div>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid">
+					<div class="field-stack">
+						<FieldLabel Text="Person" Required />
+						<SearchableSelect class="form-control"
+										  @bind-Value="_model.PersonId"
+										  AfterValueChanged="OnPersonChangedAsync"
+										  Options="_model.PersonOptions"
+										  IncludeEmptyOption="true"
+										  EmptyOptionLabel="Select a person"
+										  EmptyOptionValue="0"
+										  Disabled="@Id.HasValue" />
+					</div>
+					<div class="field-stack form-grid--single">
+						<FieldLabel Text="Nickname" Required />
+						<InputText class="form-control" @bind-Value="_model.Nickname" />
+						<ValidationMessage For="@(() => _model.Nickname)" />
+					</div>
+				</div>
+
+				<div class="card-grid mt-4">
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2>Physical Address</h2>
+								<p>Enter the physical address for this location.</p>
+							</div>
+							<div class="toolbar">
+								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyProfilePhysicalToPhysical">Same as Profile Address</button>
+							</div>
+						</div>
+						@AddressEditor(_model.PhysicalAddress, AddressMode.Physical)
+					</section>
+
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2>Mailing Address</h2>
+								<p>Enter the mailing address for this location.</p>
+							</div>
+							<div class="toolbar">
+								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyPhysicalToMailing">Same as Physical Address</button>
+								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyProfileMailingToMailing">Same as Profile Mailing</button>
+							</div>
+						</div>
+						@AddressEditor(_model.MailingAddress, AddressMode.Mailing)
+					</section>
+				</div>
+
+				<div class="card-grid mt-4">
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2>Phone Numbers</h2>
+								<p>View or update the phone numbers for this location.</p>
+							</div>
+							<div class="toolbar">
+								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyProfilePhones">Same as Profile Phones</button>
+								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="AddPhone">Add Phone</button>
+							</div>
+						</div>
+						<ValidationMessage For="@(() => _model.ContactMethodsValidationMessage)" />
+						@for (var index = 0; index < _model.Phones.Count; index++)
+						{
+							var currentIndex = index;
+							var phone = _model.Phones[index];
+							<div class="form-grid mb-3">
+								<div class="field-stack">
+									<label>Type</label>
+									<SearchableSelect class="form-control"
+													  @bind-Value="phone.Label"
+													  Options="ContactOptionCatalog.PhoneTypeOptions" />
+								</div>
+								<div class="field-stack">
+									<label>Phone</label>
+									<InputText class="form-control" @bind-Value="phone.PhoneNumber" />
+								</div>
+								<div class="field-stack">
+									<label>Actions</label>
+									<div class="toolbar">
+										<label class="form-check mb-0">
+											<InputCheckbox class="form-check-input" Value="phone.IsPrimary" ValueChanged="checkedValue => SetPrimaryPhone(currentIndex, checkedValue)" ValueExpression="@(() => phone.IsPrimary)" />
+											<span>Primary</span>
+										</label>
+										<button class="btn btn-outline-primary" type="button" @onclick="() => RemovePhone(currentIndex)">Remove</button>
+									</div>
+								</div>
+							</div>
+						}
+					</section>
+
+					<section class="content-card">
+						<div class="page-header">
+							<div>
+								<h2>Email Addresses</h2>
+								<p>View or update the email addresses for this location.</p>
+							</div>
+							<div class="toolbar">
+								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="CopyProfileEmails">Same as Profile Emails</button>
+								<button class="btn btn-sm btn-outline-primary" type="button" @onclick="AddEmail">Add Email</button>
+							</div>
+						</div>
+						@for (var index = 0; index < _model.Emails.Count; index++)
+						{
+							var currentIndex = index;
+							var email = _model.Emails[index];
+							<div class="form-grid mb-3">
+								<div class="field-stack">
+									<label>Type</label>
+									<SearchableSelect class="form-control"
+													  @bind-Value="email.Label"
+													  Options="ContactOptionCatalog.EmailTypeOptions" />
+								</div>
+								<div class="field-stack">
+									<label>Email</label>
+									<InputText class="form-control" @bind-Value="email.EmailAddress" />
+								</div>
+								<div class="field-stack">
+									<label>Actions</label>
+									<div class="toolbar">
+										<label class="form-check mb-0">
+											<InputCheckbox class="form-check-input" Value="email.IsPrimary" ValueChanged="checkedValue => SetPrimaryEmail(currentIndex, checkedValue)" ValueExpression="@(() => email.IsPrimary)" />
+											<span>Primary</span>
+										</label>
+										<button class="btn btn-outline-primary" type="button" @onclick="() => RemoveEmail(currentIndex)">Remove</button>
+									</div>
+								</div>
+							</div>
+						}
+					</section>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Location</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/people/{PersonId}/locations/{Id.Value}" : $"/app/people/{PersonId}/locations")">Cancel</a>
+				</div>
+			</EditForm>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int PersonId { get; set; }
+
+	[Parameter]
+	public int? Id { get; set; }
+
+	private LocationEditModel _model = new();
+	private string? _errorMessage;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	private enum AddressMode
+	{
+		Physical,
+		Mailing
+	}
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetLocationAsync(Id, PersonId);
+		_errorMessage = null;
+	}
+
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
+	private RenderFragment AddressEditor(AddressInputModel address, AddressMode mode) => @<div class="form-grid">
+		<div class="field-stack form-grid--single">
+			<FieldLabel Text="Country" Required="@(mode == AddressMode.Physical)" />
+			<SearchableSelect class="form-control"
+							  @bind-Value="address.CountryId"
+							  AfterValueChanged="() => UpdateCountryAsync(mode, address.CountryId)"
+							  Options="address.CountryOptions"
+							  IncludeEmptyOption="true"
+							  EmptyOptionLabel="Select a country"
+							  EmptyOptionValue="0" />
+		</div>
+		<div class="field-stack">
+			<FieldLabel Text="State / Territory" Required="@(mode == AddressMode.Physical)" />
+			<SearchableSelect class="form-control"
+							  @bind-Value="address.StateProvinceId"
+							  AfterValueChanged="() => UpdateStateAsync(mode, address.StateProvinceId)"
+							  Options="address.StateProvinceOptions"
+							  IncludeEmptyOption="true"
+							  EmptyOptionLabel="Select a state or territory"
+							  EmptyOptionValue="0"
+							  Disabled="@(address.CountryId <= 0)" />
+		</div>
+		<div class="field-stack">
+			<FieldLabel Text="County" Required="@(mode == AddressMode.Physical)" />
+			<SearchableSelect class="form-control"
+							  @bind-Value="address.CountyId"
+							  Options="address.CountyOptions"
+							  IncludeEmptyOption="true"
+							  EmptyOptionLabel="Select a county"
+							  Disabled="@(address.StateProvinceId <= 0)" />
+		</div>
+		<div class="field-stack form-grid--single">
+			<FieldLabel Text="Address Line 1" Required="@(mode == AddressMode.Physical)" />
+			<InputText class="form-control" @bind-Value="address.AddressLine1" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+		<div class="field-stack form-grid--single">
+			<label>Address Line 2</label>
+			<InputText class="form-control" @bind-Value="address.AddressLine2" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+		<div class="field-stack">
+			<FieldLabel Text="City" Required="@(mode == AddressMode.Physical)" />
+			<InputText class="form-control" @bind-Value="address.City" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+		<div class="field-stack">
+			<FieldLabel Text="Postal Code" Required="@(mode == AddressMode.Physical)" />
+			<InputText class="form-control" @bind-Value="address.PostalCode" disabled="@(!address.CountyId.HasValue)" />
+		</div>
+	</div>;
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveLocationAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Location saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"app/people/{_model.PersonId}/locations/{savedId}");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Location";
+		}
+
+		return Id.HasValue ? "Edit Location" : "Add Location";
+	}
+
+	private string GetHeading()
+	{
+		if (IsViewMode)
+		{
+			var personName = !string.IsNullOrWhiteSpace(_model.PersonName)
+				? _model.PersonName
+				: GetSelectedOptionLabel(_model.PersonOptions, _model.PersonId);
+			var nickname = DisplayOrDash(_model.Nickname);
+			var combined = string.Join(" - ", new[] { personName, nickname }.Where(value => !string.IsNullOrWhiteSpace(value) && value != "-"));
+			return string.IsNullOrWhiteSpace(combined) ? "View Location" : combined;
+		}
+
+		return GetPageTitle();
+	}
+
+	private async Task OnPersonChangedAsync()
+	{
+		if (Id.HasValue || _model.PersonId <= 0)
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetLocationAsync(null, _model.PersonId);
+	}
+
+	private async Task UpdateCountryAsync(AddressMode mode, int value)
+	{
+		var address = GetAddress(mode);
+		address.CountryId = value;
+		address.StateProvinceId = 0;
+		address.CountyId = null;
+		address.StateProvinceOptions = value > 0
+			? await AdministrationService.GetTenantStateProvinceSelectOptionsAsync(value)
+			: Array.Empty<SelectOption>();
+		address.CountyOptions = Array.Empty<SelectOption>();
+	}
+
+	private async Task UpdateStateAsync(AddressMode mode, int value)
+	{
+		var address = GetAddress(mode);
+		address.StateProvinceId = value;
+		address.CountyId = null;
+		address.CountyOptions = value > 0
+			? await AdministrationService.GetTenantCountySelectOptionsAsync(value)
+			: Array.Empty<SelectOption>();
+	}
+
+	private AddressInputModel GetAddress(AddressMode mode)
+	{
+		return mode == AddressMode.Physical ? _model.PhysicalAddress : _model.MailingAddress;
+	}
+
+	private void CopyProfilePhysicalToPhysical()
+	{
+		_model.PhysicalAddress = CloneAddress(_model.ProfilePhysicalAddress);
+	}
+
+	private void CopyPhysicalToMailing()
+	{
+		_model.MailingAddress = CloneAddress(_model.PhysicalAddress);
+	}
+
+	private void CopyProfileMailingToMailing()
+	{
+		_model.MailingAddress = CloneAddress(_model.ProfileMailingAddress);
+	}
+
+	private void CopyProfilePhones()
+	{
+		_model.Phones = _model.ProfilePhones.Select(ClonePhone).ToList();
+		if (_model.Phones.Count == 0)
+		{
+			AddPhone();
+		}
+	}
+
+	private void CopyProfileEmails()
+	{
+		_model.Emails = _model.ProfileEmails.Select(CloneEmail).ToList();
+		if (_model.Emails.Count == 0)
+		{
+			AddEmail();
+		}
+	}
+
+	private void AddPhone()
+	{
+		_model.Phones.Add(new PhoneContactEditModel
+		{
+			Label = ContactOptionCatalog.PhoneTypes.Home,
+			IsPrimary = _model.Phones.Count == 0,
+			SortOrder = (_model.Phones.Count + 1) * 10
+		});
+	}
+
+	private void RemovePhone(int index)
+	{
+		if (index >= 0 && index < _model.Phones.Count)
+		{
+			var wasPrimary = _model.Phones[index].IsPrimary;
+			_model.Phones.RemoveAt(index);
+			if (wasPrimary && _model.Phones.Count > 0)
+			{
+				_model.Phones[0].IsPrimary = true;
+			}
+		}
+	}
+
+	private void AddEmail()
+	{
+		_model.Emails.Add(new EmailContactEditModel
+		{
+			Label = ContactOptionCatalog.EmailTypes.Home,
+			IsPrimary = _model.Emails.Count == 0,
+			SortOrder = (_model.Emails.Count + 1) * 10
+		});
+	}
+
+	private void RemoveEmail(int index)
+	{
+		if (index >= 0 && index < _model.Emails.Count)
+		{
+			var wasPrimary = _model.Emails[index].IsPrimary;
+			_model.Emails.RemoveAt(index);
+			if (wasPrimary && _model.Emails.Count > 0)
+			{
+				_model.Emails[0].IsPrimary = true;
+			}
+		}
+	}
+
+	private static AddressInputModel CloneAddress(AddressInputModel source)
+	{
+		return new AddressInputModel
+		{
+			AddressLine1 = source.AddressLine1,
+			AddressLine2 = source.AddressLine2,
+			City = source.City,
+			CountryId = source.CountryId,
+			StateProvinceId = source.StateProvinceId,
+			CountyId = source.CountyId,
+			PostalCode = source.PostalCode,
+			CountryOptions = source.CountryOptions,
+			StateProvinceOptions = source.StateProvinceOptions,
+			CountyOptions = source.CountyOptions
+		};
+	}
+
+	private static PhoneContactEditModel ClonePhone(PhoneContactEditModel source)
+	{
+		return new PhoneContactEditModel
+		{
+			Label = source.Label,
+			PhoneNumber = source.PhoneNumber,
+			IsPrimary = source.IsPrimary,
+			SortOrder = source.SortOrder
+		};
+	}
+
+	private static EmailContactEditModel CloneEmail(EmailContactEditModel source)
+	{
+		return new EmailContactEditModel
+		{
+			Label = source.Label,
+			EmailAddress = source.EmailAddress,
+			IsPrimary = source.IsPrimary,
+			SortOrder = source.SortOrder
+		};
+	}
+
+	private void SetPrimaryPhone(int index, bool isPrimary)
+	{
+		if (index < 0 || index >= _model.Phones.Count)
+		{
+			return;
+		}
+
+		if (!isPrimary && _model.Phones[index].IsPrimary)
+		{
+			return;
+		}
+
+		for (var itemIndex = 0; itemIndex < _model.Phones.Count; itemIndex++)
+		{
+			_model.Phones[itemIndex].IsPrimary = itemIndex == index;
+		}
+	}
+
+	private void SetPrimaryEmail(int index, bool isPrimary)
+	{
+		if (index < 0 || index >= _model.Emails.Count)
+		{
+			return;
+		}
+
+		if (!isPrimary && _model.Emails[index].IsPrimary)
+		{
+			return;
+		}
+
+		for (var itemIndex = 0; itemIndex < _model.Emails.Count; itemIndex++)
+		{
+			_model.Emails[itemIndex].IsPrimary = itemIndex == index;
+		}
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string GetContactOptionLabel(IEnumerable<SelectOption> options, string? value)
+	{
+		return options.FirstOrDefault(option => string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase))?.Label
+			?? DisplayOrDash(value);
+	}
+
+	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, int value)
+	{
+		return options.FirstOrDefault(option => option.Value == value.ToString())?.Label ?? "-";
+	}
+
+	private static IReadOnlyList<string> FormatAddress(AddressInputModel address)
+	{
+		var lines = new List<string>();
+
+		if (!string.IsNullOrWhiteSpace(address.AddressLine1))
+		{
+			lines.Add(address.AddressLine1);
+		}
+
+		if (!string.IsNullOrWhiteSpace(address.AddressLine2))
+		{
+			lines.Add(address.AddressLine2);
+		}
+
+		var localityParts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(address.City))
+		{
+			localityParts.Add(address.City);
+		}
+
+		var state = ExtractStateCode(address.StateProvinceOptions.FirstOrDefault(option => option.Value == address.StateProvinceId.ToString())?.Label);
+		var postal = address.PostalCode;
+		var statePostal = string.Join(" ", new[] { state, postal }.Where(part => !string.IsNullOrWhiteSpace(part)));
+		if (!string.IsNullOrWhiteSpace(statePostal))
+		{
+			localityParts.Add(statePostal);
+		}
+
+		if (localityParts.Count > 0)
+		{
+			lines.Add(string.Join(", ", localityParts));
+		}
+
+		var country = ExtractCountryName(address.CountryOptions.FirstOrDefault(option => option.Value == address.CountryId.ToString())?.Label);
+		if (!string.IsNullOrWhiteSpace(country))
+		{
+			lines.Add(country);
+		}
+
+		if (lines.Count == 0)
+		{
+			lines.Add("-");
+		}
+
+		return lines;
+	}
+
+	private static string? ExtractStateCode(string? stateLabel)
+	{
+		if (string.IsNullOrWhiteSpace(stateLabel))
+		{
+			return null;
+		}
+
+		var openParenIndex = stateLabel.LastIndexOf('(');
+		var closeParenIndex = stateLabel.LastIndexOf(')');
+		if (openParenIndex >= 0 && closeParenIndex > openParenIndex)
+		{
+			return stateLabel.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
+		}
+
+		return stateLabel;
+	}
+
+	private static string? ExtractCountryName(string? countryLabel)
+	{
+		if (string.IsNullOrWhiteSpace(countryLabel))
+		{
+			return null;
+		}
+
+		var suffixStart = countryLabel.LastIndexOf(" (", StringComparison.Ordinal);
+		if (suffixStart > 0 && countryLabel.EndsWith(")", StringComparison.Ordinal))
+		{
+			return countryLabel.Substring(0, suffixStart).Trim();
+		}
+
+		return countryLabel;
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = IsViewMode
+			? TenantPermissionKeys.LocationsView
+			: Id.HasValue
+				? TenantPermissionKeys.LocationsEdit
+				: TenantPermissionKeys.LocationsCreate;
+		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+	}
+}

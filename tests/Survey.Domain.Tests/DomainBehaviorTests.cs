@@ -76,4 +76,37 @@ public class DomainBehaviorTests
 
 		Assert.Equal("endDate", exception.ParamName);
 	}
+
+	[Fact]
+	public void TenantInvitation_Is_Not_Usable_After_Accept()
+	{
+		var invitation = new TenantInvitation(1, "invitee@example.com", TenantRole.User, "token-hash", DateTimeOffset.UtcNow.AddDays(1), "admin-user");
+
+		invitation.Accept();
+
+		Assert.False(invitation.IsUsable(DateTimeOffset.UtcNow));
+		Assert.NotNull(invitation.AcceptedUtc);
+	}
+
+	[Fact]
+	public void TenantInvitation_Is_Not_Usable_After_Revoke()
+	{
+		var invitation = new TenantInvitation(1, "invitee@example.com", TenantRole.Admin, "token-hash", DateTimeOffset.UtcNow.AddDays(1), "admin-user");
+
+		invitation.Revoke();
+
+		Assert.False(invitation.IsUsable(DateTimeOffset.UtcNow));
+		Assert.NotNull(invitation.RevokedUtc);
+	}
+
+	[Fact]
+	public void PermissionDefaults_Give_Admin_User_Management_Capabilities()
+	{
+		var permissions = PermissionDefaults.GetTenantPermissions(TenantRole.Admin);
+
+		Assert.Contains(TenantPermissionKeys.UsersView, permissions);
+		Assert.Contains(TenantPermissionKeys.UsersInvite, permissions);
+		Assert.Contains(TenantPermissionKeys.UsersChangeRole, permissions);
+		Assert.Contains(TenantPermissionKeys.UsersManagePermissions, permissions);
+	}
 }

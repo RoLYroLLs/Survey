@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class SurveyDefinition
+public class SurveyDefinition : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public string Name { get; private set; } = string.Empty;
 	public string? Description { get; private set; }
 	public bool IsArchived { get; private set; }

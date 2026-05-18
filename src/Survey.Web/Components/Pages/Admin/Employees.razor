@@ -1,30 +1,34 @@
-@page "/admin/employees"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@page "/admin/users"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.UsersView)]
+@inject IPlatformAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
 
-<PageTitle>Employees</PageTitle>
+<PageTitle>Users</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
-			<p class="eyebrow">Staff Access</p>
-			<h1>Employees</h1>
-			<p>View the employee accounts that can access the site.</p>
+			<p class="eyebrow">Platform Access</p>
+			<h1>Users</h1>
+			<p>View the platform user accounts that can administer the survey platform.</p>
 		</div>
 		<div class="toolbar">
-			<a class="btn btn-primary" href="admin/employees/new">Add Employee</a>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
+				<Authorized>
+					<a class="btn btn-primary" href="admin/users/new">Add User</a>
+				</Authorized>
+			</AuthorizeView>
 		</div>
 	</div>
 
 	<div class="list-card">
 		<div class="page-header">
 			<div>
-				<h2>Employee Accounts</h2>
-				<p>Search by name, email, username, or role.</p>
+				<h2>Platform Users</h2>
+				<p>Search by name, email, status, or effective platform scope.</p>
 			</div>
 			<div class="toolbar">
-				<input class="form-control" placeholder="Search employees" @bind="_searchText" />
+				<input class="form-control" placeholder="Search users" @bind="_searchText" />
 				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
 				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
 			</div>
@@ -32,7 +36,7 @@
 
 		@if (_items.Count == 0)
 		{
-			<p class="empty-state">No employee accounts matched the current search.</p>
+			<p class="empty-state">No platform users matched the current search.</p>
 		}
 		else
 		{
@@ -41,7 +45,9 @@
 					<tr>
 						<th>Name</th>
 						<th>Email</th>
-						<th>Role</th>
+						<th>Status</th>
+						<th>Scope</th>
+						<th>Permissions</th>
 						<th></th>
 					</tr>
 				</thead>
@@ -51,10 +57,12 @@
 						<tr>
 							<td>@item.FirstName @item.LastName</td>
 							<td>@item.Email</td>
-							<td>@item.RoleName</td>
+							<td>@(item.IsPlatformUserEnabled ? "Enabled" : "Disabled")</td>
+							<td>@(item.IsPlatformSuperAdmin ? "Super admin" : "Granular permissions")</td>
+							<td>@item.PermissionCount</td>
 							<td>
 								<div class="table-actions">
-								<a class="btn btn-sm btn-outline-primary" href="admin/employees/@item.Id">View</a>
+									<a class="btn btn-sm btn-outline-primary" href="admin/users/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>
@@ -69,26 +77,26 @@
 	[SupplyParameterFromQuery]
 	public string? Search { get; set; }
 
-	private IReadOnlyList<EmployeeListItem> _items = Array.Empty<EmployeeListItem>();
+	private IReadOnlyList<PlatformUserListItem> _items = Array.Empty<PlatformUserListItem>();
 	private string _searchText = string.Empty;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_searchText = Search ?? string.Empty;
-		_items = await AdministrationService.GetEmployeesAsync(Search);
+		_items = await AdministrationService.GetPlatformUsersAsync(Search);
 	}
 
 	private void ApplySearch()
 	{
 		var url = string.IsNullOrWhiteSpace(_searchText)
-			? "admin/employees"
-			: $"admin/employees?search={Uri.EscapeDataString(_searchText)}";
+			? "admin/users"
+			: $"admin/users?search={Uri.EscapeDataString(_searchText)}";
 		NavigationManager.NavigateTo(url);
 	}
 
 	private void ClearSearch()
 	{
 		_searchText = string.Empty;
-		NavigationManager.NavigateTo("admin/employees");
+		NavigationManager.NavigateTo("admin/users");
 	}
 }

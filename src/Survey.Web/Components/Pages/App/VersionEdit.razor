@@ -1,0 +1,219 @@
+@page "/app/versions/new"
+@page "/app/versions/{Id:int}"
+@page "/app/versions/{Id:int}/edit"
+@implements IDisposable
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+@inject ITenantPermissionEvaluator TenantPermissionEvaluator
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>@GetPageTitle()</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Survey Version</p>
+			<h1>@GetPageTitle()</h1>
+			<p>View or update this survey version.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (_model.IsLocked)
+		{
+			<div class="inline-banner mb-3">This version is locked because it already has assignments. Clone it to change survey content, but you can still archive it.</div>
+		}
+
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Survey</strong>
+						<span>@GetSelectedOptionLabel(_model.SurveyOptions, _model.SurveyDefinitionId)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Display Name</strong>
+						<span>@DisplayOrDash(_model.DisplayName)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Version Number</strong>
+						<span>@_model.VersionNumber</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Published</strong>
+						<span>@(_model.IsPublished ? "Yes" : "No")</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Archived</strong>
+						<span>@(_model.IsArchived ? "Yes" : "No")</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Locked</strong>
+						<span>@(_model.IsLocked ? "Yes" : "No")</span>
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
+						<Authorized>
+							<a class="btn btn-primary" href="/app/versions/@Id/edit?surveyDefinitionId=@SurveyDefinitionId&showArchived=@ShowArchived.ToString().ToLowerInvariant()">Edit Version</a>
+						</Authorized>
+					</AuthorizeView>
+					<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to Versions</a>
+				</div>
+			</div>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid">
+					<div class="field-stack">
+						<FieldLabel Text="Survey" Required />
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.SurveyDefinitionId"
+										  Options="_model.SurveyOptions"
+										  Disabled="@_model.Id.HasValue" />
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Display Name" Required />
+						<InputText class="form-control" @bind-Value="_model.DisplayName" disabled="@_model.IsLocked" />
+						<ValidationMessage For="@(() => _model.DisplayName)" />
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Version Number" Required />
+						<InputNumber class="form-control" @bind-Value="_model.VersionNumber" disabled="@_model.IsLocked" />
+						<ValidationMessage For="@(() => _model.VersionNumber)" />
+					</div>
+					<div class="field-stack">
+						<label>Published</label>
+						<InputCheckbox class="form-check-input" @bind-Value="_model.IsPublished" disabled="@_model.IsLocked" />
+					</div>
+					<div class="field-stack">
+						<label>Archived</label>
+						<InputCheckbox class="form-check-input" @bind-Value="_model.IsArchived" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Version</button>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/versions/{Id.Value}?surveyDefinitionId={SurveyDefinitionId}&showArchived={ShowArchived.ToString().ToLowerInvariant()}" : GetBackUrl())">Cancel</a>
+				</div>
+			</EditForm>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyDefinitionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public bool ShowArchived { get; set; }
+
+	private SurveyVersionEditModel _model = new();
+	private string? _errorMessage;
+	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetSurveyVersionAsync(Id, SurveyDefinitionId);
+		_errorMessage = null;
+	}
+
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveSurveyVersionAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Version saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"app/versions/{savedId}?surveyDefinitionId={_model.SurveyDefinitionId}&showArchived={ShowArchived.ToString().ToLowerInvariant()}");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+
+	private string GetBackUrl(bool? isArchived = null)
+	{
+		var archived = isArchived ?? (ShowArchived || _model.IsArchived);
+		if (SurveyDefinitionId.HasValue || _model.SurveyDefinitionId > 0)
+		{
+			var surveyDefinitionId = SurveyDefinitionId ?? _model.SurveyDefinitionId;
+			return archived
+				? $"app/versions?surveyDefinitionId={surveyDefinitionId}&showArchived=true"
+				: $"app/versions?surveyDefinitionId={surveyDefinitionId}";
+		}
+
+		return archived ? "app/versions?showArchived=true" : "app/versions";
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "View Version";
+		}
+
+		return Id.HasValue ? "Edit Version" : "Add Version";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, int value)
+	{
+		return options.FirstOrDefault(option => option.Value == value.ToString())?.Label ?? "-";
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = IsViewMode
+			? TenantPermissionKeys.SurveysView
+			: Id.HasValue
+				? TenantPermissionKeys.SurveysEdit
+				: TenantPermissionKeys.SurveysCreate;
+		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+	}
+}

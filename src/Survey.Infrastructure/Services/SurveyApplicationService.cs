@@ -7,19 +7,32 @@ using Survey.Application.Services;
 using Survey.Domain;
 using Survey.Infrastructure.Identity;
 using Survey.Infrastructure.Persistence;
+using Survey.Infrastructure.Security;
 
 namespace Survey.Infrastructure.Services;
 
 public sealed partial class SurveyApplicationService(
 	SurveyDbContext dbContext,
-	UserManager<ApplicationUser> userManager) : ISurveyAdministrationService, ISurveyExperienceService
+	UserManager<ApplicationUser> userManager,
+	ITenantContextAccessor tenantContextAccessor,
+	ITenantPermissionEvaluator tenantPermissionEvaluator,
+	IPlatformPermissionEvaluator platformPermissionEvaluator,
+	IAuditWriter auditWriter,
+	TenantExecutionContext tenantExecutionContext) : ITenantAdministrationService, IPlatformAdministrationService, ISurveyExperienceService
 {
 	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 	private readonly SurveyDbContext _dbContext = dbContext;
 	private readonly UserManager<ApplicationUser> _userManager = userManager;
+	private readonly ITenantContextAccessor _tenantContextAccessor = tenantContextAccessor;
+	private readonly ITenantPermissionEvaluator _tenantPermissionEvaluator = tenantPermissionEvaluator;
+	private readonly IPlatformPermissionEvaluator _platformPermissionEvaluator = platformPermissionEvaluator;
+	private readonly IAuditWriter _auditWriter = auditWriter;
+	private readonly TenantExecutionContext _tenantExecutionContext = tenantExecutionContext;
 
 	public async Task<IReadOnlyList<SurveyDefinitionListItem>> GetSurveyDefinitionsAsync(bool archivedOnly = false, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		return await _dbContext.SurveyDefinitions
 			.AsNoTracking()
 			.Where(definition => definition.IsArchived == archivedOnly)
@@ -38,6 +51,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<SurveyDefinitionEditModel> GetSurveyDefinitionAsync(int? id, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			return new SurveyDefinitionEditModel();
@@ -59,10 +74,14 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<int> SaveSurveyDefinitionAsync(SurveyDefinitionEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.SurveysEdit : TenantPermissionKeys.SurveysCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		SurveyDefinition entity;
-		if (model.Id.HasValue)
+		if (!isNew)
 		{
-			entity = await _dbContext.SurveyDefinitions.FirstOrDefaultAsync(definition => definition.Id == model.Id.Value, cancellationToken)
+			var surveyDefinitionId = model.Id ?? throw new InvalidOperationException("The requested survey was not found.");
+			entity = await _dbContext.SurveyDefinitions.FirstOrDefaultAsync(definition => definition.Id == surveyDefinitionId, cancellationToken)
 				?? throw new InvalidOperationException("The requested survey was not found.");
 			entity.Update(model.Name, model.Description);
 		}
@@ -75,11 +94,19 @@ public sealed partial class SurveyApplicationService(
 		entity.SetArchived(model.IsArchived);
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isNew ? "tenant.survey.created" : "tenant.survey.updated",
+			nameof(SurveyDefinition),
+			entity.Id,
+			$"Survey '{entity.Name}' was {(isNew ? "created" : "saved")} (archived: {entity.IsArchived}).",
+			cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task<IReadOnlyList<SurveyVersionListItem>> GetSurveyVersionsAsync(int? surveyDefinitionId, bool archivedOnly = false, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		var query = _dbContext.SurveyVersions
 			.AsNoTracking()
 			.Include(version => version.SurveyDefinition)
@@ -117,6 +144,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<SurveyVersionEditModel> GetSurveyVersionAsync(int? id, int? surveyDefinitionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			var surveyOptions = await GetSurveyDefinitionOptionsAsync(surveyDefinitionId, cancellationToken);
@@ -158,6 +187,9 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<int> SaveSurveyVersionAsync(SurveyVersionEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.SurveysEdit : TenantPermissionKeys.SurveysCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		await EnsureSurveyDefinitionExistsAsync(model.SurveyDefinitionId, cancellationToken);
 
 		SurveyVersion entity;
@@ -192,11 +224,19 @@ public sealed partial class SurveyApplicationService(
 		entity.SetArchived(model.IsArchived);
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isNew ? "tenant.survey-version.created" : "tenant.survey-version.updated",
+			nameof(SurveyVersion),
+			entity.Id,
+			$"Survey version '{entity.DisplayName}' was {(isNew ? "created" : "saved")} (archived: {entity.IsArchived}, published: {entity.IsPublished}).",
+			cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task<int> CloneSurveyVersionAsync(int surveyVersionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysCreate, cancellationToken);
+
 		var source = await _dbContext.SurveyVersions
 			.AsNoTracking()
 			.Include(version => version.SurveyDefinition)
@@ -243,11 +283,19 @@ public sealed partial class SurveyApplicationService(
 			}
 		}
 
+		await AuditTenantEntityChangeAsync(
+			"tenant.survey-version.cloned",
+			nameof(SurveyVersion),
+			clone.Id,
+			$"Survey version '{source.DisplayName}' was cloned into '{clone.DisplayName}'.",
+			cancellationToken);
 		return clone.Id;
 	}
 
 	public async Task<IReadOnlyList<SurveySectionListItem>> GetSurveySectionsAsync(int surveyVersionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		return await _dbContext.SurveySections
 			.AsNoTracking()
 			.Where(section => section.SurveyVersionId == surveyVersionId)
@@ -272,6 +320,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<SurveySectionEditModel> GetSurveySectionAsync(int? id, int? surveyVersionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			var versionOptions = await GetSurveyVersionOptionsAsync(includeUnpublished: true, includeVersionId: surveyVersionId, cancellationToken: cancellationToken);
@@ -319,13 +369,18 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<int> SaveSurveySectionAsync(SurveySectionEditModel model, CancellationToken cancellationToken = default)
 	{
-		if (model.Id.HasValue)
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.SurveysEdit : TenantPermissionKeys.SurveysCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
+		if (!isNew)
 		{
-			var section = await _dbContext.SurveySections.FirstOrDefaultAsync(entity => entity.Id == model.Id.Value, cancellationToken)
+			var sectionId = model.Id ?? throw new InvalidOperationException("The requested section was not found.");
+			var section = await _dbContext.SurveySections.FirstOrDefaultAsync(entity => entity.Id == sectionId, cancellationToken)
 				?? throw new InvalidOperationException("The requested section was not found.");
 			await EnsureVersionEditableAsync(section.SurveyVersionId, cancellationToken);
 			section.Update(model.Title, model.Description, model.SortOrder);
 			await _dbContext.SaveChangesAsync(cancellationToken);
+			await AuditTenantEntityChangeAsync("tenant.survey-section.updated", nameof(SurveySection), section.Id, $"Survey section '{section.Title}' was updated.", cancellationToken);
 			return section.Id;
 		}
 
@@ -333,11 +388,14 @@ public sealed partial class SurveyApplicationService(
 		var entity = new SurveySection(model.SurveyVersionId, model.Title, model.Description, model.SortOrder);
 		_dbContext.SurveySections.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync("tenant.survey-section.created", nameof(SurveySection), entity.Id, $"Survey section '{entity.Title}' was created.", cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task<IReadOnlyList<SurveyQuestionListItem>> GetSurveyQuestionsAsync(int surveySectionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		return await _dbContext.SurveyQuestions
 			.AsNoTracking()
 			.Where(question => question.SurveySectionId == surveySectionId)
@@ -364,6 +422,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<SurveyQuestionEditModel> GetSurveyQuestionAsync(int? id, int? surveySectionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			var sectionOptions = await GetSurveySectionOptionsAsync(surveySectionId, cancellationToken);
@@ -415,14 +475,19 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<int> SaveSurveyQuestionAsync(SurveyQuestionEditModel model, CancellationToken cancellationToken = default)
 	{
-		if (model.Id.HasValue)
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.SurveysEdit : TenantPermissionKeys.SurveysCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
+		if (!isNew)
 		{
-			var question = await _dbContext.SurveyQuestions.FirstOrDefaultAsync(entity => entity.Id == model.Id.Value, cancellationToken)
+			var questionId = model.Id ?? throw new InvalidOperationException("The requested question was not found.");
+			var question = await _dbContext.SurveyQuestions.FirstOrDefaultAsync(entity => entity.Id == questionId, cancellationToken)
 				?? throw new InvalidOperationException("The requested question was not found.");
 			var versionId = await GetVersionIdForQuestionAsync(question.Id, cancellationToken);
 			await EnsureVersionEditableAsync(versionId, cancellationToken);
 			question.Update(model.Prompt, model.HelpText, model.Type, model.IsRequired, model.SortOrder);
 			await _dbContext.SaveChangesAsync(cancellationToken);
+			await AuditTenantEntityChangeAsync("tenant.survey-question.updated", nameof(SurveyQuestion), question.Id, $"Survey question '{TrimLabel(question.Prompt, 80)}' was updated.", cancellationToken);
 			return question.Id;
 		}
 
@@ -431,11 +496,14 @@ public sealed partial class SurveyApplicationService(
 		var entity = new SurveyQuestion(model.SurveySectionId, model.Prompt, model.HelpText, model.Type, model.IsRequired, model.SortOrder);
 		_dbContext.SurveyQuestions.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync("tenant.survey-question.created", nameof(SurveyQuestion), entity.Id, $"Survey question '{TrimLabel(entity.Prompt, 80)}' was created.", cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task<IReadOnlyList<QuestionOptionListItem>> GetQuestionOptionsAsync(int surveyQuestionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		return await _dbContext.QuestionOptions
 			.AsNoTracking()
 			.Where(option => option.SurveyQuestionId == surveyQuestionId)
@@ -459,6 +527,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<QuestionOptionEditModel> GetQuestionOptionAsync(int? id, int? surveyQuestionId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			var questionContext = surveyQuestionId.HasValue
@@ -529,6 +599,9 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<int> SaveQuestionOptionAsync(QuestionOptionEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.SurveysEdit : TenantPermissionKeys.SurveysCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		var question = await _dbContext.SurveyQuestions
 			.AsNoTracking()
 			.Include(entity => entity.Options)
@@ -543,23 +616,28 @@ public sealed partial class SurveyApplicationService(
 		var versionId = await GetVersionIdForQuestionAsync(model.SurveyQuestionId, cancellationToken);
 		await EnsureVersionEditableAsync(versionId, cancellationToken);
 
-		if (model.Id.HasValue)
+		if (!isNew)
 		{
-			var option = await _dbContext.QuestionOptions.FirstOrDefaultAsync(entity => entity.Id == model.Id.Value, cancellationToken)
+			var optionId = model.Id ?? throw new InvalidOperationException("The requested option was not found.");
+			var option = await _dbContext.QuestionOptions.FirstOrDefaultAsync(entity => entity.Id == optionId, cancellationToken)
 				?? throw new InvalidOperationException("The requested option was not found.");
 			option.Update(model.Label, model.SortOrder);
 			await _dbContext.SaveChangesAsync(cancellationToken);
+			await AuditTenantEntityChangeAsync("tenant.question-option.updated", nameof(QuestionOption), option.Id, $"Question option '{option.Label}' was updated.", cancellationToken);
 			return option.Id;
 		}
 
 		var entity = new QuestionOption(model.SurveyQuestionId, model.Label, model.SortOrder);
 		_dbContext.QuestionOptions.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync("tenant.question-option.created", nameof(QuestionOption), entity.Id, $"Question option '{entity.Label}' was created.", cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task<IReadOnlyList<PersonListItem>> GetPeopleAsync(bool archivedOnly = false, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.PeopleView, cancellationToken);
+
 		return await _dbContext.People
 			.AsNoTracking()
 			.Where(person => person.IsArchived == archivedOnly)
@@ -583,6 +661,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<PersonEditModel> GetPersonAsync(int? id, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.PeopleView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			return await BuildPersonEditModelAsync(null, cancellationToken);
@@ -603,15 +683,26 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task SetPersonArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.PeopleEdit, cancellationToken);
+
 		var entity = await _dbContext.People.FirstOrDefaultAsync(person => person.Id == id, cancellationToken)
 			?? throw new InvalidOperationException("The requested person was not found.");
 
 		entity.SetArchived(isArchived);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isArchived ? "tenant.person.archived" : "tenant.person.restored",
+			nameof(Person),
+			entity.Id,
+			$"Person '{BuildFullName(entity.FirstName, entity.MiddleName, entity.LastName)}' was {(isArchived ? "archived" : "restored")}.",
+			cancellationToken);
 	}
 
 	public async Task<int> SavePersonAsync(PersonEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.PeopleEdit : TenantPermissionKeys.PeopleCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		var normalizedPhones = NormalizePhoneContacts(model.Phones);
 		var normalizedEmails = NormalizeEmailContacts(model.Emails);
 		var primaryPhone = normalizedPhones.FirstOrDefault();
@@ -702,11 +793,19 @@ public sealed partial class SurveyApplicationService(
 		await SyncPersonEmailsAsync(entity, normalizedEmails, cancellationToken);
 		entity.UpdatePrimaryContactSnapshot(primaryPhone?.PhoneNumber, primaryEmail?.EmailAddress);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isNew ? "tenant.person.created" : "tenant.person.updated",
+			nameof(Person),
+			entity.Id,
+			$"Person '{BuildFullName(entity.FirstName, entity.MiddleName, entity.LastName)}' was {(isNew ? "created" : "saved")}.",
+			cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task<IReadOnlyList<SurveyAssignmentListItem>> GetAssignmentsAsync(int? personId = null, bool archivedOnly = false, string? statusFilter = null, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.AssignmentsView, cancellationToken);
+
 		var now = DateTimeOffset.UtcNow;
 
 		IQueryable<SurveyAssignment> query = _dbContext.SurveyAssignments
@@ -760,6 +859,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<SurveyAssignmentEditModel> GetAssignmentAsync(int? id, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.AssignmentsView, cancellationToken);
+
 		var now = DateTimeOffset.UtcNow;
 		var personOptions = await GetPersonSelectOptionsAsync(cancellationToken, id.HasValue ? await GetAssignmentPersonIdAsync(id.Value, cancellationToken) : null);
 
@@ -819,6 +920,9 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<int> SaveAssignmentAsync(SurveyAssignmentEditModel model, string? createdByUserId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.AssignmentsEdit : TenantPermissionKeys.AssignmentsCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		await EnsurePersonExistsAsync(model.PersonId, cancellationToken);
 		await EnsureLocationExistsAsync(model.LocationId, cancellationToken);
 
@@ -856,11 +960,12 @@ public sealed partial class SurveyApplicationService(
 			throw new InvalidOperationException("Archived survey versions cannot be assigned.");
 		}
 
-		if (model.Id.HasValue)
+		if (!isNew)
 		{
+			var assignmentId = model.Id ?? throw new InvalidOperationException("The requested assignment was not found.");
 			var assignment = await _dbContext.SurveyAssignments
 				.Include(entity => entity.Response)
-				.FirstOrDefaultAsync(entity => entity.Id == model.Id.Value, cancellationToken)
+				.FirstOrDefaultAsync(entity => entity.Id == assignmentId, cancellationToken)
 				?? throw new InvalidOperationException("The requested assignment was not found.");
 
 			if (assignment.Response is not null)
@@ -871,6 +976,7 @@ public sealed partial class SurveyApplicationService(
 			assignment.Update(assignment.PublicToken, model.ExpiresAtUtc);
 			assignment.SetArchived(model.IsArchived);
 			await _dbContext.SaveChangesAsync(cancellationToken);
+			await AuditTenantEntityChangeAsync("tenant.assignment.updated", nameof(SurveyAssignment), assignment.Id, $"Assignment '{assignment.PublicToken}' was updated (archived: {assignment.IsArchived}).", cancellationToken);
 			return assignment.Id;
 		}
 
@@ -881,25 +987,36 @@ public sealed partial class SurveyApplicationService(
 			model.SurveyVersionId,
 			string.IsNullOrWhiteSpace(model.PublicToken) ? GeneratePublicToken() : model.PublicToken,
 			model.ExpiresAtUtc,
-			createdByUserId);
+			await RequireCurrentUserIdAsync(cancellationToken));
 		entity.SetArchived(model.IsArchived);
 		_dbContext.SurveyAssignments.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync("tenant.assignment.created", nameof(SurveyAssignment), entity.Id, $"Assignment '{entity.PublicToken}' was created (archived: {entity.IsArchived}).", cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task SetAssignmentArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.AssignmentsArchive, cancellationToken);
+
 		var assignment = await _dbContext.SurveyAssignments
 			.FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken)
 			?? throw new InvalidOperationException("The requested assignment was not found.");
 
 		assignment.SetArchived(isArchived);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isArchived ? "tenant.assignment.archived" : "tenant.assignment.restored",
+			nameof(SurveyAssignment),
+			assignment.Id,
+			$"Assignment '{assignment.PublicToken}' was {(isArchived ? "archived" : "restored")}.",
+			cancellationToken);
 	}
 
 	public async Task<IReadOnlyList<SurveyResponseListItem>> GetResponsesAsync(CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.ResponsesView, cancellationToken);
+
 		var responses = await _dbContext.SurveyResponses
 			.AsNoTracking()
 			.Include(response => response.SurveyAssignment)
@@ -921,6 +1038,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<IReadOnlyList<SurveyResponseListItem>> GetUnmappedResponsesAsync(string postalCode, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.ResponsesView, cancellationToken);
+
 		var normalizedFilter = postalCode?.Trim() ?? string.Empty;
 		var responses = await _dbContext.SurveyResponses
 			.AsNoTracking()
@@ -960,6 +1079,8 @@ public sealed partial class SurveyApplicationService(
 
 	public async Task<SurveyResponseDetailModel?> GetResponseAsync(int id, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.ResponsesView, cancellationToken);
+
 		var response = await _dbContext.SurveyResponses
 			.AsNoTracking()
 			.Include(entity => entity.SurveyAssignment)
@@ -1052,157 +1173,6 @@ public sealed partial class SurveyApplicationService(
 			.ToList();
 	}
 
-	public async Task<IReadOnlyList<EmployeeListItem>> GetEmployeesAsync(string? search = null, CancellationToken cancellationToken = default)
-	{
-		var query = _userManager.Users.AsQueryable();
-
-		if (!string.IsNullOrWhiteSpace(search))
-		{
-			var term = search.Trim().ToUpperInvariant();
-			query = query.Where(user =>
-				(user.FirstName != null && user.FirstName.ToUpper().Contains(term)) ||
-				(user.LastName != null && user.LastName.ToUpper().Contains(term)) ||
-				(user.Email != null && user.Email.ToUpper().Contains(term)) ||
-				(user.UserName != null && user.UserName.ToUpper().Contains(term)));
-		}
-
-		var users = await query
-			.OrderBy(user => user.LastName)
-			.ThenBy(user => user.FirstName)
-			.ThenBy(user => user.Email)
-			.ToListAsync(cancellationToken);
-
-		var items = new List<EmployeeListItem>(users.Count);
-		foreach (var user in users)
-		{
-			var roles = await _userManager.GetRolesAsync(user);
-			var roleName = roles.FirstOrDefault() ?? RoleNames.Employee;
-			if (!string.IsNullOrWhiteSpace(search)
-				&& !MatchesEmployeeSearch(user, roleName, search))
-			{
-				continue;
-			}
-
-			items.Add(new EmployeeListItem
-			{
-				Id = user.Id,
-				FirstName = user.FirstName ?? string.Empty,
-				LastName = user.LastName ?? string.Empty,
-				Email = user.Email ?? string.Empty,
-				RoleName = roleName
-			});
-		}
-
-		return items;
-	}
-
-	private static bool MatchesEmployeeSearch(ApplicationUser user, string roleName, string search)
-	{
-		var term = search.Trim();
-		if (string.IsNullOrWhiteSpace(term))
-		{
-			return true;
-		}
-
-		return (user.FirstName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
-			|| (user.LastName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
-			|| (user.Email?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
-			|| (user.UserName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
-			|| roleName.Contains(term, StringComparison.OrdinalIgnoreCase);
-	}
-
-	public async Task<EmployeeEditModel> GetEmployeeAsync(string? id, CancellationToken cancellationToken = default)
-	{
-		if (string.IsNullOrWhiteSpace(id))
-		{
-			return new EmployeeEditModel();
-		}
-
-		var user = await _userManager.Users.FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken)
-			?? throw new InvalidOperationException("The requested employee was not found.");
-		var roles = await _userManager.GetRolesAsync(user);
-
-		return new EmployeeEditModel
-		{
-			Id = user.Id,
-			FirstName = user.FirstName ?? string.Empty,
-			LastName = user.LastName ?? string.Empty,
-			Email = user.Email ?? string.Empty,
-			RoleName = roles.FirstOrDefault() ?? RoleNames.Employee
-		};
-	}
-
-	public async Task<string> SaveEmployeeAsync(EmployeeEditModel model, CancellationToken cancellationToken = default)
-	{
-		if (model.RoleName != RoleNames.Admin && model.RoleName != RoleNames.Employee)
-		{
-			throw new InvalidOperationException("An employee must be assigned either the Admin or Employee role.");
-		}
-
-		ApplicationUser user;
-		if (string.IsNullOrWhiteSpace(model.Id))
-		{
-			if (string.IsNullOrWhiteSpace(model.Password))
-			{
-				throw new InvalidOperationException("A password is required when creating a new employee.");
-			}
-
-			user = new ApplicationUser
-			{
-				UserName = model.Email.Trim(),
-				Email = model.Email.Trim(),
-				EmailConfirmed = true,
-				FirstName = model.FirstName.Trim(),
-				LastName = model.LastName.Trim()
-			};
-
-			var createResult = await _userManager.CreateAsync(user, model.Password);
-			if (!createResult.Succeeded)
-			{
-				throw new InvalidOperationException(string.Join("; ", createResult.Errors.Select(static error => error.Description)));
-			}
-		}
-		else
-		{
-			user = await _userManager.FindByIdAsync(model.Id)
-				?? throw new InvalidOperationException("The requested employee was not found.");
-			user.UserName = model.Email.Trim();
-			user.Email = model.Email.Trim();
-			user.FirstName = model.FirstName.Trim();
-			user.LastName = model.LastName.Trim();
-
-			var updateResult = await _userManager.UpdateAsync(user);
-			if (!updateResult.Succeeded)
-			{
-				throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
-			}
-
-			if (!string.IsNullOrWhiteSpace(model.Password))
-			{
-				if (await _userManager.HasPasswordAsync(user))
-				{
-					var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
-					var resetResult = await _userManager.ResetPasswordAsync(user, resetToken, model.Password);
-					if (!resetResult.Succeeded)
-					{
-						throw new InvalidOperationException(string.Join("; ", resetResult.Errors.Select(static error => error.Description)));
-					}
-				}
-				else
-				{
-					var addPasswordResult = await _userManager.AddPasswordAsync(user, model.Password);
-					if (!addPasswordResult.Succeeded)
-					{
-						throw new InvalidOperationException(string.Join("; ", addPasswordResult.Errors.Select(static error => error.Description)));
-					}
-				}
-			}
-		}
-
-		await SynchronizeRolesAsync(user, model.RoleName);
-		return user.Id;
-	}
-
 	public async Task<SurveySessionModel?> GetPublicSessionAsync(string token, CancellationToken cancellationToken = default)
 	{
 		if (string.IsNullOrWhiteSpace(token))
@@ -1214,20 +1184,33 @@ public sealed partial class SurveyApplicationService(
 			.AsNoTracking()
 			.FirstOrDefaultAsync(entity => entity.PublicToken == token.Trim() && !entity.IsArchived, cancellationToken);
 
+		if (assignment is not null)
+		{
+			_tenantExecutionContext.UseTenant(assignment.TenantId);
+		}
+
 		return assignment is null ? null : await BuildSessionModelAsync(assignment, false, cancellationToken);
 	}
 
 	public async Task<SurveySessionModel?> GetStaffSessionAsync(int assignmentId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.AssignmentsFill, cancellationToken);
+		var tenantId = await RequireTenantIdAsync(cancellationToken);
+
 		var assignment = await QueryAssignmentsForSession()
 			.AsNoTracking()
-			.FirstOrDefaultAsync(entity => entity.Id == assignmentId && !entity.IsArchived, cancellationToken);
+			.FirstOrDefaultAsync(entity => entity.Id == assignmentId && !entity.IsArchived && entity.TenantId == tenantId, cancellationToken);
 
 		return assignment is null ? null : await BuildSessionModelAsync(assignment, true, cancellationToken);
 	}
 
 	public async Task<SubmitSurveyResult> SubmitAsync(SurveySubmissionModel model, string? submittedByUserId, CancellationToken cancellationToken = default)
 	{
+		if (model.IsStaffMode)
+		{
+			await RequireTenantPermissionAsync(TenantPermissionKeys.AssignmentsFill, cancellationToken);
+		}
+
 		var assignment = await QueryAssignmentsForSession()
 			.FirstOrDefaultAsync(entity => entity.Id == model.AssignmentId && entity.PublicToken == model.Token, cancellationToken);
 		if (assignment is null)
@@ -1256,6 +1239,21 @@ public sealed partial class SurveyApplicationService(
 				Message = "This survey link has expired."
 			};
 		}
+
+		if (model.IsStaffMode)
+		{
+			var tenantId = await RequireTenantIdAsync(cancellationToken);
+			if (assignment.TenantId != tenantId)
+			{
+				return new SubmitSurveyResult
+				{
+					Succeeded = false,
+					Message = "The survey link is invalid."
+				};
+			}
+		}
+
+		_tenantExecutionContext.UseTenant(assignment.TenantId);
 
 		if (assignment.IsArchived)
 		{
@@ -1290,9 +1288,10 @@ public sealed partial class SurveyApplicationService(
 		var normalizedPreferredContactMethod = ContactOptionCatalog.NormalizePreferredContactMethod(model.Contact.PreferredContactMethod);
 		var normalizedEmailLabel = ContactOptionCatalog.NormalizeEmailType(model.Contact.EmailLabel);
 
+		var effectiveSubmittedByUserId = model.IsStaffMode ? await RequireCurrentUserIdAsync(cancellationToken) : null;
 		var response = new SurveyResponse(
 			assignment.Id,
-			submittedByUserId,
+			effectiveSubmittedByUserId,
 			model.IsStaffMode,
 			model.Contact.FirstName,
 			model.Contact.MiddleName,
@@ -1341,6 +1340,12 @@ public sealed partial class SurveyApplicationService(
 
 		_dbContext.SurveyResponses.Add(response);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			"tenant.response.created",
+			nameof(SurveyResponse),
+			response.Id,
+			$"Survey response was submitted for assignment '{assignment.PublicToken}'.",
+			cancellationToken);
 
 		return new SubmitSurveyResult
 		{
@@ -1353,6 +1358,7 @@ public sealed partial class SurveyApplicationService(
 	private IQueryable<SurveyAssignment> QueryAssignmentsForSession()
 	{
 		return _dbContext.SurveyAssignments
+			.IgnoreQueryFilters()
 			.Include(assignment => assignment.Location)
 				.ThenInclude(location => location.Person)
 					.ThenInclude(person => person.PostalAddress)
@@ -1687,30 +1693,6 @@ public sealed partial class SurveyApplicationService(
 		return versionId == 0
 			? throw new InvalidOperationException("The requested question was not found.")
 			: versionId;
-	}
-
-	private async Task SynchronizeRolesAsync(ApplicationUser user, string desiredRole)
-	{
-		var existingRoles = await _userManager.GetRolesAsync(user);
-		if (existingRoles.Contains(desiredRole, StringComparer.OrdinalIgnoreCase) && existingRoles.Count == 1)
-		{
-			return;
-		}
-
-		if (existingRoles.Count > 0)
-		{
-			var removeResult = await _userManager.RemoveFromRolesAsync(user, existingRoles);
-			if (!removeResult.Succeeded)
-			{
-				throw new InvalidOperationException(string.Join("; ", removeResult.Errors.Select(static error => error.Description)));
-			}
-		}
-
-		var addResult = await _userManager.AddToRoleAsync(user, desiredRole);
-		if (!addResult.Succeeded)
-		{
-			throw new InvalidOperationException(string.Join("; ", addResult.Errors.Select(static error => error.Description)));
-		}
 	}
 
 	private async Task<Dictionary<string, string>> GetUserDisplayLookupAsync(IReadOnlyCollection<string> ids, CancellationToken cancellationToken)

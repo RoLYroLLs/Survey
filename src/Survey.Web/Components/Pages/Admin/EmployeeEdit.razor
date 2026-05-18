@@ -1,9 +1,10 @@
-@page "/admin/employees/new"
-@page "/admin/employees/{Id}"
-@page "/admin/employees/{Id}/edit"
+@page "/admin/users/new"
+@page "/admin/users/{Id}"
+@page "/admin/users/{Id}/edit"
 @implements IDisposable
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize]
+@inject IPlatformAdministrationService AdministrationService
+@inject IPlatformPermissionEvaluator PlatformPermissionEvaluator
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
@@ -12,9 +13,9 @@
 <div class="page-stack">
 	<div class="page-header">
 		<div>
-			<p class="eyebrow">Employee Account</p>
+			<p class="eyebrow">Platform User</p>
 			<h1>@GetPageTitle()</h1>
-			<p>View or update an employee account.</p>
+			<p>View or update a platform user account and its effective platform permissions.</p>
 		</div>
 	</div>
 
@@ -41,14 +42,54 @@
 						<span>@DisplayOrDash(_model.Email)</span>
 					</div>
 					<div class="assignment-detail-row">
-						<strong>Role</strong>
-						<span>@DisplayOrDash(_model.RoleName)</span>
+						<strong>Enabled</strong>
+						<span>@(_model.IsPlatformUserEnabled ? "Yes" : "No")</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Platform Super Admin</strong>
+						<span>@(_model.IsPlatformSuperAdmin ? "Yes" : "No")</span>
 					</div>
 				</div>
 
+				@if (_model.Permissions.Count > 0)
+				{
+					<div class="list-card">
+						<div class="page-header">
+							<div>
+								<h2 class="content-card__title-sm">Platform Permissions</h2>
+								<p>Review the explicit platform permissions assigned to this user.</p>
+							</div>
+						</div>
+
+						<table class="admin-table">
+							<thead>
+								<tr>
+									<th>Category</th>
+									<th>Permission</th>
+									<th>Assigned</th>
+								</tr>
+							</thead>
+							<tbody>
+								@foreach (var permission in _model.Permissions.OrderBy(item => item.Category).ThenBy(item => item.PermissionLabel))
+								{
+									<tr>
+										<td>@permission.Category</td>
+										<td>@permission.PermissionLabel</td>
+										<td>@(permission.Selected ? "Yes" : "No")</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+
 				<div class="form-footer">
-					<a class="btn btn-primary" href="/admin/employees/@Id/edit">Edit Employee</a>
-					<a class="btn btn-outline-primary" href="admin/employees">Back to Employees</a>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
+						<Authorized>
+							<a class="btn btn-primary" href="/admin/users/@Id/edit">Edit User</a>
+						</Authorized>
+					</AuthorizeView>
+					<a class="btn btn-outline-primary" href="admin/users">Back to Users</a>
 				</div>
 			</div>
 		}
@@ -73,10 +114,22 @@
 						<ValidationMessage For="@(() => _model.Email)" />
 					</div>
 					<div class="field-stack">
-						<FieldLabel Text="Role" Required />
-						<SearchableSelect class="form-select"
-										  @bind-Value="_model.RoleName"
-										  Options="_roleOptions" />
+						<FieldLabel Text="Enabled" />
+						<div class="form-check">
+							<InputCheckbox class="form-check-input" @bind-Value="_model.IsPlatformUserEnabled" />
+							<label class="form-check-label">Platform access is enabled</label>
+						</div>
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Platform Super Admin" />
+						<div class="form-check">
+							<InputCheckbox class="form-check-input" @bind-Value="_model.IsPlatformSuperAdmin" />
+							<label class="form-check-label">Grant full platform administration</label>
+						</div>
+						@if (_model.IsCurrentUser)
+						{
+							<div class="text-muted">Your own platform access and permission scope cannot be changed from this page.</div>
+						}
 					</div>
 					<div class="field-stack">
 						<label>@(_model.IsNew ? "Password" : "New Password")</label>
@@ -90,9 +143,45 @@
 					</div>
 				</div>
 
+				<div class="list-card mt-4">
+					<div class="page-header">
+						<div>
+							<h2 class="content-card__title-sm">Platform Permissions</h2>
+							<p>Use granular permissions for non-super-admin platform users.</p>
+						</div>
+					</div>
+
+					<table class="admin-table">
+						<thead>
+							<tr>
+								<th>Category</th>
+								<th>Permission</th>
+								<th>Assigned</th>
+							</tr>
+						</thead>
+						<tbody>
+							@foreach (var permission in _model.Permissions.OrderBy(item => item.Category).ThenBy(item => item.PermissionLabel))
+							{
+								<tr>
+									<td>@permission.Category</td>
+									<td>@permission.PermissionLabel</td>
+									<td>
+										<InputCheckbox class="form-check-input" @bind-Value="permission.Selected" disabled="@_model.IsPlatformSuperAdmin" />
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+
+					@if (_model.IsPlatformSuperAdmin)
+					{
+						<p class="text-muted mb-0">Super admins receive every platform permission automatically, so the granular list is read-only.</p>
+					}
+				</div>
+
 				<div class="form-footer">
-					<button class="btn btn-primary" type="submit">Save Employee</button>
-					<a class="btn btn-outline-primary" href="@(!string.IsNullOrWhiteSpace(Id) ? $"/admin/employees/{Id}" : "admin/employees")">Cancel</a>
+					<button class="btn btn-primary" type="submit">Save User</button>
+					<a class="btn btn-outline-primary" href="@(!string.IsNullOrWhiteSpace(Id) ? $"/admin/users/{Id}" : "admin/users")">Cancel</a>
 				</div>
 			</EditForm>
 		}
@@ -103,14 +192,9 @@
 	[Parameter]
 	public string? Id { get; set; }
 
-	private EmployeeEditModel _model = new();
+	private PlatformUserEditModel _model = new();
 	private string? _errorMessage;
 	private bool IsViewMode => !string.IsNullOrWhiteSpace(Id) && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
-	private static readonly IReadOnlyList<SelectOption> _roleOptions =
-	[
-		new() { Value = RoleNames.Employee, Label = "Employee" },
-		new() { Value = RoleNames.Admin, Label = "Admin" }
-	];
 
 	protected override void OnInitialized()
 	{
@@ -119,7 +203,12 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_model = await AdministrationService.GetEmployeeAsync(Id);
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetPlatformUserAsync(Id);
 		_errorMessage = null;
 	}
 
@@ -132,10 +221,10 @@
 	{
 		try
 		{
-			var savedId = await AdministrationService.SaveEmployeeAsync(_model);
+			var savedId = await AdministrationService.SavePlatformUserAsync(_model);
 			_errorMessage = null;
-			ToastService.ShowSuccess("Employee saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"admin/employees/{savedId}");
+			ToastService.ShowSuccess("User saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"admin/users/{savedId}");
 		}
 		catch (Exception ex)
 		{
@@ -148,15 +237,29 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Employee";
+			return "View User";
 		}
 
-		return _model.IsNew ? "Add Employee" : "Edit Employee";
+		return _model.IsNew ? "Add User" : "Edit User";
 	}
 
 	private static string DisplayOrDash(string? value)
 	{
 		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = IsViewMode
+			? PlatformPermissionKeys.UsersView
+			: PlatformPermissionKeys.UsersManage;
+		if (await PlatformPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
 	}
 
 	public void Dispose()

@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class SurveyQuestion
+public class SurveyQuestion : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public int SurveySectionId { get; private set; }
 	public string Prompt { get; private set; } = string.Empty;
 	public string? HelpText { get; private set; }

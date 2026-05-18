@@ -1,0 +1,116 @@
+@page "/app/sections"
+@attribute [TenantAuthorize(TenantPermissionKeys.SurveysView)]
+@inject ITenantAdministrationService AdministrationService
+
+<PageTitle>Sections</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Section Builder</p>
+			<h1>Sections</h1>
+			<p>View the sections in the selected survey version.</p>
+		</div>
+		<div class="toolbar">
+			@if (SurveyDefinitionId.HasValue)
+			{
+				<a class="btn btn-outline-primary" href="@($"app/versions?surveyDefinitionId={SurveyDefinitionId.Value}")">Back to Versions</a>
+			}
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysCreate)">
+				<Authorized>
+					<a class="btn btn-primary" href="@GetAddUrl()">Add Section</a>
+				</Authorized>
+			</AuthorizeView>
+		</div>
+	</div>
+
+	@if (!SurveyVersionId.HasValue)
+	{
+		<div class="inline-banner">Choose a survey version before managing sections.</div>
+	}
+	else
+	{
+		<div class="list-card">
+			@if (_items.Count == 0)
+			{
+				<p class="empty-state">No sections exist for this version yet.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Title</th>
+							<th>Order</th>
+							<th>Questions</th>
+							<th>Locked</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _items)
+						{
+							<tr>
+								<td>@item.Title</td>
+								<td>@item.SortOrder</td>
+								<td>@item.QuestionCount</td>
+								<td>@(item.IsLocked ? "Yes" : "No")</td>
+								<td>
+									<div class="table-actions">
+										<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
+											<Authorized>
+												<a class="btn btn-sm btn-outline-primary" href="@GetEditUrl(item.Id)">Edit</a>
+											</Authorized>
+										</AuthorizeView>
+										<a class="btn btn-sm btn-outline-primary" href="@GetQuestionsUrl(item.Id)">Questions</a>
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	}
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public int? SurveyVersionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyDefinitionId { get; set; }
+
+	private IReadOnlyList<SurveySectionListItem> _items = Array.Empty<SurveySectionListItem>();
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_items = SurveyVersionId.HasValue
+			? await AdministrationService.GetSurveySectionsAsync(SurveyVersionId.Value)
+			: Array.Empty<SurveySectionListItem>();
+	}
+
+	private string GetAddUrl()
+	{
+		var surveyVersionId = SurveyVersionId ?? 0;
+		return SurveyDefinitionId.HasValue
+			? $"app/sections/new?surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}"
+			: $"app/sections/new?surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetQuestionsUrl(int surveySectionId)
+	{
+		var surveyVersionId = SurveyVersionId ?? 0;
+		return SurveyDefinitionId.HasValue
+			? $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}"
+			: $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetEditUrl(int sectionId)
+	{
+		var surveyVersionId = SurveyVersionId ?? 0;
+		return SurveyDefinitionId.HasValue
+			? $"app/sections/{sectionId}/edit?surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}"
+			: $"app/sections/{sectionId}/edit?surveyVersionId={surveyVersionId}";
+	}
+}

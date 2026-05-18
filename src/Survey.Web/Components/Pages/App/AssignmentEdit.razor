@@ -1,0 +1,267 @@
+@page "/app/assignments/new"
+@page "/app/assignments/{Id:int}/edit"
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITenantPermissionEvaluator TenantPermissionEvaluator
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>@(Id.HasValue ? "Edit Assignment" : "Add Assignment")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Survey Assignment</p>
+			<h1>@(Id.HasValue ? "Edit Assignment" : "Add Assignment")</h1>
+			<p>View or update the person, location, survey, and timing for this assignment.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (_model.IsCompleted)
+		{
+			<div class="inline-banner mb-3">This assignment already has a completed response and can no longer be changed.</div>
+		}
+
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<div class="form-grid form-grid--single">
+				<div class="field-stack">
+					<FieldLabel Text="Person" Required />
+					<SearchableSelect class="form-select"
+									  @bind-Value="_model.PersonId"
+									  AfterValueChanged="OnPersonChangedAsync"
+									  Options="_model.PersonOptions"
+									  IncludeEmptyOption="true"
+									  EmptyOptionLabel="Select a person"
+									  EmptyOptionValue="0"
+									  Disabled="@_model.Id.HasValue" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Location" Required />
+					<SearchableSelect class="form-select"
+									  @bind-Value="_model.LocationId"
+									  AfterValueChanged="OnLocationChangedAsync"
+									  Options="_model.LocationOptions"
+									  IncludeEmptyOption="true"
+									  EmptyOptionLabel="Select a location"
+									  EmptyOptionValue="0"
+									  Disabled="@_model.Id.HasValue" />
+				</div>
+				<div class="field-stack">
+					<label>Location Phone</label>
+					<SearchableSelect class="form-select"
+									  @bind-Value="_model.LocationPhoneId"
+									  Options="_model.LocationPhoneOptions"
+									  IncludeEmptyOption="true"
+									  EmptyOptionLabel="Select a phone"
+									  Disabled="@_model.Id.HasValue" />
+				</div>
+				<div class="field-stack">
+					<label>Location Email</label>
+					<SearchableSelect class="form-select"
+									  @bind-Value="_model.LocationEmailId"
+									  Options="_model.LocationEmailOptions"
+									  IncludeEmptyOption="true"
+									  EmptyOptionLabel="Select an email"
+									  Disabled="@_model.Id.HasValue" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Published Survey Version" Required />
+					<SearchableSelect class="form-select"
+									  @bind-Value="_model.SurveyVersionId"
+									  Options="_model.SurveyVersionOptions"
+									  Disabled="@_model.Id.HasValue" />
+				</div>
+				<div class="field-stack">
+					<label>Public Token</label>
+					<SecretInput class="form-control" @bind-Value="_model.PublicToken" readonly />
+				</div>
+				<div class="field-stack">
+					<label>Expires (UTC)</label>
+					<InputDate class="form-control" @bind-Value="_expiresDate" disabled="@_model.IsCompleted" />
+				</div>
+				<div class="field-stack">
+					<label>Archived</label>
+					<InputCheckbox class="form-check-input" @bind-Value="_model.IsArchived" disabled="@_model.IsCompleted" />
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit" disabled="@_model.IsCompleted">Save Assignment</button>
+				<a class="btn btn-outline-primary" href="@(Id.HasValue ? GetAssignmentViewUrl(Id.Value) : GetAssignmentsBackUrl())">Cancel</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? PersonId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public bool ShowArchived { get; set; }
+
+	[SupplyParameterFromQuery(Name = "status")]
+	public string? Status { get; set; }
+
+	private SurveyAssignmentEditModel _model = new();
+	private string? _errorMessage;
+	private DateTime? _expiresDate;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetAssignmentAsync(Id);
+		_expiresDate = _model.ExpiresAtUtc?.UtcDateTime.Date;
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			_model.ExpiresAtUtc = _expiresDate.HasValue
+				? new DateTimeOffset(DateTime.SpecifyKind(_expiresDate.Value, DateTimeKind.Utc))
+				: null;
+
+			var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+			var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			var savedId = await AdministrationService.SaveAssignmentAsync(_model, userId);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Assignment saved successfully.", "Saved");
+			NavigationManager.NavigateTo(GetAssignmentViewUrl(savedId));
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+
+	private async Task OnPersonChangedAsync()
+	{
+		if (_model.Id.HasValue)
+		{
+			return;
+		}
+
+		_model.LocationId = 0;
+		_model.LocationPhoneId = null;
+		_model.LocationEmailId = null;
+		_model.LocationOptions = await AdministrationService.GetLocationSelectOptionsAsync(_model.PersonId);
+		_model.LocationId = _model.LocationOptions.Select(option => int.TryParse(option.Value, out var value) ? value : 0).FirstOrDefault(value => value > 0);
+		_model.LocationPhoneOptions = await AdministrationService.GetLocationPhoneSelectOptionsAsync(_model.LocationId);
+		_model.LocationEmailOptions = await AdministrationService.GetLocationEmailSelectOptionsAsync(_model.LocationId);
+		_model.LocationPhoneId = GetFirstOptionId(_model.LocationPhoneOptions);
+		_model.LocationEmailId = GetFirstOptionId(_model.LocationEmailOptions);
+	}
+
+	private async Task OnLocationChangedAsync()
+	{
+		if (_model.Id.HasValue)
+		{
+			return;
+		}
+
+		_model.LocationPhoneOptions = await AdministrationService.GetLocationPhoneSelectOptionsAsync(_model.LocationId);
+		_model.LocationEmailOptions = await AdministrationService.GetLocationEmailSelectOptionsAsync(_model.LocationId);
+		_model.LocationPhoneId = GetFirstOptionId(_model.LocationPhoneOptions);
+		_model.LocationEmailId = GetFirstOptionId(_model.LocationEmailOptions);
+	}
+
+	private static int? GetFirstOptionId(IReadOnlyList<SelectOption> options)
+	{
+		foreach (var option in options)
+		{
+			if (int.TryParse(option.Value, out var value) && value > 0)
+			{
+				return value;
+			}
+		}
+
+		return null;
+	}
+
+	private string GetAssignmentsBackUrl()
+	{
+		var queryParts = new List<string>();
+		if (ShowArchived)
+		{
+			queryParts.Add("showArchived=true");
+		}
+
+		if (!string.IsNullOrWhiteSpace(Status))
+		{
+			queryParts.Add($"status={Uri.EscapeDataString(Status)}");
+		}
+
+		if (PersonId.HasValue)
+		{
+			return queryParts.Count == 0
+				? $"/app/people/{PersonId.Value}/assignments"
+				: $"/app/people/{PersonId.Value}/assignments?{string.Join("&", queryParts)}";
+		}
+
+		return queryParts.Count == 0
+			? "/app/assignments"
+			: $"/app/assignments?{string.Join("&", queryParts)}";
+	}
+
+	private string GetAssignmentViewUrl(int assignmentId)
+	{
+		var queryParts = new List<string>();
+		if (PersonId.HasValue)
+		{
+			queryParts.Add($"personId={PersonId.Value}");
+		}
+
+		if (ShowArchived)
+		{
+			queryParts.Add("showArchived=true");
+		}
+
+		if (!string.IsNullOrWhiteSpace(Status))
+		{
+			queryParts.Add($"status={Uri.EscapeDataString(Status)}");
+		}
+
+		if (PersonId.HasValue)
+		{
+			return queryParts.Count == 0
+				? $"app/assignments/{assignmentId}"
+				: $"app/assignments/{assignmentId}?{string.Join("&", queryParts)}";
+		}
+
+		return queryParts.Count == 0
+			? $"app/assignments/{assignmentId}"
+			: $"app/assignments/{assignmentId}?{string.Join("&", queryParts)}";
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = Id.HasValue
+			? TenantPermissionKeys.AssignmentsEdit
+			: TenantPermissionKeys.AssignmentsCreate;
+		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
+	}
+}

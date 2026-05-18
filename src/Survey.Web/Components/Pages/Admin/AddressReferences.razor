@@ -1,6 +1,7 @@
 @page "/admin/addresses/{Id:int}/references"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyView)]
+@inject IPlatformAdministrationService AdministrationService
+@inject ITenantContextAccessor TenantContextAccessor
 
 <PageTitle>Address References</PageTitle>
 
@@ -22,7 +23,11 @@
 			<a class="btn btn-outline-primary" href="/admin/addresses">Back to Addresses</a>
 			@if (_model is not null)
 			{
-				<a class="btn btn-primary" href="/admin/addresses/@_model.Id/edit">Edit Address</a>
+				<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+					<Authorized>
+						<a class="btn btn-primary" href="/admin/addresses/@_model.Id/edit">Edit Address</a>
+					</Authorized>
+				</AuthorizeView>
 			}
 		</div>
 	</div>
@@ -74,6 +79,7 @@
 							<th>Name</th>
 							<th>Email</th>
 							<th>Phone</th>
+							<th>Tenant</th>
 							<th></th>
 						</tr>
 					</thead>
@@ -84,9 +90,17 @@
 								<td>@item.FullName</td>
 								<td>@item.Email</td>
 								<td>@item.PhoneNumber</td>
+								<td>@DisplayOrDash(item.TenantName)</td>
 								<td>
 									<div class="table-actions">
-										<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.Id/edit">View Person</a>
+										@if (CanOpenTenantRoute(item.TenantId))
+										{
+											<a class="btn btn-sm btn-outline-primary" href="/app/people/@item.Id/edit">View Person</a>
+										}
+										else
+										{
+											<span class="btn btn-sm btn-muted-disabled" aria-disabled="true">Tenant Context Required</span>
+										}
 									</div>
 								</td>
 							</tr>
@@ -117,6 +131,7 @@
 							<th>Location</th>
 							<th>Email</th>
 							<th>Phone</th>
+							<th>Tenant</th>
 							<th></th>
 						</tr>
 					</thead>
@@ -128,9 +143,17 @@
 								<td>@item.Nickname</td>
 								<td>@item.Email</td>
 								<td>@item.PhoneNumber</td>
+								<td>@DisplayOrDash(item.TenantName)</td>
 								<td>
 									<div class="table-actions">
-										<a class="btn btn-sm btn-outline-primary" href="/admin/people/@item.PersonId/locations/@item.Id/edit">View Location</a>
+										@if (CanOpenTenantRoute(item.TenantId))
+										{
+											<a class="btn btn-sm btn-outline-primary" href="/app/people/@item.PersonId/locations/@item.Id/edit">View Location</a>
+										}
+										else
+										{
+											<span class="btn btn-sm btn-muted-disabled" aria-disabled="true">Tenant Context Required</span>
+										}
 									</div>
 								</td>
 							</tr>
@@ -158,6 +181,7 @@
 					<thead>
 						<tr>
 							<th>Respondent</th>
+							<th>Tenant</th>
 							<th>Survey</th>
 							<th>Submitted</th>
 							<th></th>
@@ -168,11 +192,19 @@
 						{
 							<tr>
 								<td>@item.RespondentName</td>
+								<td>@DisplayOrDash(item.TenantName)</td>
 								<td>@item.SurveyName<br /><small>@item.VersionName</small></td>
 								<td>@item.SubmittedUtc.LocalDateTime.ToString("g")</td>
 								<td>
 									<div class="table-actions">
-										<a class="btn btn-sm btn-outline-primary" href="/admin/responses/@item.Id">View Response</a>
+										@if (CanOpenTenantRoute(item.TenantId))
+										{
+											<a class="btn btn-sm btn-outline-primary" href="/app/responses/@item.Id">View Response</a>
+										}
+										else
+										{
+											<span class="btn btn-sm btn-muted-disabled" aria-disabled="true">Tenant Context Required</span>
+										}
 									</div>
 								</td>
 							</tr>
@@ -189,9 +221,21 @@
 	public int Id { get; set; }
 
 	private PostalAddressReferenceViewModel? _model;
+	private CurrentAccessContext _accessContext = new();
 
 	protected override async Task OnParametersSetAsync()
 	{
+		_accessContext = await TenantContextAccessor.GetCurrentAsync();
 		_model = await AdministrationService.GetPostalAddressReferencesAsync(Id);
+	}
+
+	private bool CanOpenTenantRoute(int tenantId)
+	{
+		return _accessContext.HasTenantAccess && _accessContext.TenantId == tenantId;
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
 	}
 }

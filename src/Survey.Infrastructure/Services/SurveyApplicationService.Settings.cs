@@ -8,9 +8,11 @@ public sealed partial class SurveyApplicationService
 {
 	public async Task<SiteSettingsEditModel> GetSiteSettingsAsync(CancellationToken cancellationToken = default)
 	{
-		var entity = await _dbContext.SiteSettings
+		var context = await RequireTenantOwnerAsync(cancellationToken);
+
+		var entity = await _dbContext.TenantSettings
 			.AsNoTracking()
-			.FirstOrDefaultAsync(setting => setting.Id == SiteSetting.DefaultId, cancellationToken);
+			.FirstOrDefaultAsync(setting => setting.TenantId == context.TenantId, cancellationToken);
 		var presetKey = entity?.ThemePresetKey ?? SiteThemePresetCatalog.DefaultPresetKey;
 
 		return new SiteSettingsEditModel
@@ -23,18 +25,20 @@ public sealed partial class SurveyApplicationService
 
 	public async Task SaveSiteSettingsAsync(SiteSettingsEditModel model, CancellationToken cancellationToken = default)
 	{
+		var context = await RequireTenantOwnerAsync(cancellationToken);
+
 		if (!SiteThemePresetCatalog.IsValidPresetKey(model.ThemePresetKey))
 		{
 			throw new InvalidOperationException("The selected theme preset is not valid.");
 		}
 
-		var entity = await _dbContext.SiteSettings
-			.FirstOrDefaultAsync(setting => setting.Id == SiteSetting.DefaultId, cancellationToken);
+		var entity = await _dbContext.TenantSettings
+			.FirstOrDefaultAsync(setting => setting.TenantId == context.TenantId, cancellationToken);
 
 		if (entity is null)
 		{
-			entity = new SiteSetting(model.ThemePresetKey);
-			_dbContext.SiteSettings.Add(entity);
+			entity = new TenantSetting(context.TenantId!.Value, model.ThemePresetKey);
+			_dbContext.TenantSettings.Add(entity);
 		}
 		else
 		{
@@ -42,16 +46,26 @@ public sealed partial class SurveyApplicationService
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await _auditWriter.WriteAsync("tenant", "tenant.settings.changed", nameof(TenantSetting), context.TenantId!.Value.ToString(), $"Theme preset changed to '{model.ThemePresetKey}'.", true, cancellationToken);
 	}
 
 	public async Task<SiteAppearanceModel> GetSiteAppearanceAsync(CancellationToken cancellationToken = default)
 	{
-		var presetKey = await _dbContext.SiteSettings
+		var context = await _tenantContextAccessor.GetCurrentAsync(cancellationToken);
+		var presetKey = context.TenantId.HasValue
+			? await _dbContext.TenantSettings
+				.AsNoTracking()
+				.Where(setting => setting.TenantId == context.TenantId.Value)
+				.Select(setting => setting.ThemePresetKey)
+				.FirstOrDefaultAsync(cancellationToken)
+			: null;
+
+		presetKey ??= await _dbContext.SiteSettings
 			.AsNoTracking()
 			.Where(setting => setting.Id == SiteSetting.DefaultId)
 			.Select(setting => setting.ThemePresetKey)
-			.FirstOrDefaultAsync(cancellationToken)
-			?? SiteThemePresetCatalog.DefaultPresetKey;
+			.FirstOrDefaultAsync(cancellationToken);
+		presetKey ??= SiteThemePresetCatalog.DefaultPresetKey;
 
 		return new SiteAppearanceModel
 		{

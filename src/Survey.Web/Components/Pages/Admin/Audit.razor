@@ -1,0 +1,203 @@
+@page "/admin/audit"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.AuditView)]
+@inject IPlatformAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Audit</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Platform Oversight</p>
+			<h1>Audit</h1>
+			<p>Review platform and tenant security-sensitive activity, including denied access attempts.</p>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Filters</h2>
+				<p>Narrow audit rows by plane, tenant, result, or search text.</p>
+			</div>
+		</div>
+
+		<div class="form-grid">
+			<div class="field-stack">
+				<label>Plane</label>
+				<SearchableSelect class="form-control"
+								  @bind-Value="_plane"
+								  Options="_planeOptions"
+								  IncludeEmptyOption="true"
+								  EmptyOptionLabel="All planes" />
+			</div>
+			<div class="field-stack">
+				<label>Tenant</label>
+				<SearchableSelect class="form-control"
+								  @bind-Value="_tenantId"
+								  Options="_tenantOptions"
+								  IncludeEmptyOption="true"
+								  EmptyOptionLabel="All tenants" />
+			</div>
+			<div class="field-stack">
+				<label>Result</label>
+				<SearchableSelect class="form-control"
+								  @bind-Value="_succeeded"
+								  Options="_resultOptions"
+								  IncludeEmptyOption="true"
+								  EmptyOptionLabel="All results" />
+			</div>
+			<div class="field-stack">
+				<label>Search</label>
+				<input class="form-control" placeholder="Action, target, details, or actor" @bind="_searchText" />
+			</div>
+		</div>
+
+		<div class="form-footer">
+			<button class="btn btn-primary" type="button" @onclick="ApplyFilters">Apply Filters</button>
+			<button class="btn btn-outline-primary" type="button" @onclick="ClearFilters">Clear</button>
+		</div>
+	</div>
+
+	<div class="list-card">
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No audit rows matched the current filters.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>When</th>
+						<th>Plane</th>
+						<th>Tenant</th>
+						<th>Actor</th>
+						<th>Action</th>
+						<th>Target</th>
+						<th>Result</th>
+						<th>Details</th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.CreatedUtc.LocalDateTime.ToString("g")</td>
+							<td>@item.Plane</td>
+							<td>@(string.IsNullOrWhiteSpace(item.TenantName) ? "-" : item.TenantName)</td>
+							<td>@item.ActorDisplayName</td>
+							<td>@item.ActionType</td>
+							<td>@GetTargetLabel(item)</td>
+							<td>
+								<span class="status-pill @(item.Succeeded ? null : "status-pill--danger")">@GetResultLabel(item.Succeeded)</span>
+							</td>
+							<td>@DisplayOrDash(item.Details)</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Plane { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? TenantId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public bool? Succeeded { get; set; }
+
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	private IReadOnlyList<AuditLogListItem> _items = Array.Empty<AuditLogListItem>();
+	private IReadOnlyList<SelectOption> _tenantOptions = Array.Empty<SelectOption>();
+	private string? _plane;
+	private int? _tenantId;
+	private bool? _succeeded;
+	private string _searchText = string.Empty;
+
+	private static readonly IReadOnlyList<SelectOption> _planeOptions =
+	[
+		new() { Value = "tenant", Label = "Tenant" },
+		new() { Value = "platform", Label = "Platform" }
+	];
+
+	private static readonly IReadOnlyList<SelectOption> _resultOptions =
+	[
+		new() { Value = "true", Label = "Succeeded" },
+		new() { Value = "false", Label = "Denied / Failed" }
+	];
+
+	protected override async Task OnParametersSetAsync()
+	{
+		var tenants = await AdministrationService.GetPlatformTenantsAsync();
+		_tenantOptions = tenants
+			.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
+			.ToArray();
+
+		_plane = Plane;
+		_tenantId = TenantId;
+		_succeeded = Succeeded;
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetAuditLogsAsync(Plane, TenantId, Succeeded, Search);
+	}
+
+	private void ApplyFilters()
+	{
+		var queryParts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(_plane))
+		{
+			queryParts.Add($"plane={Uri.EscapeDataString(_plane)}");
+		}
+
+		if (_tenantId.HasValue)
+		{
+			queryParts.Add($"tenantId={_tenantId.Value}");
+		}
+
+		if (_succeeded.HasValue)
+		{
+			queryParts.Add($"succeeded={_succeeded.Value.ToString().ToLowerInvariant()}");
+		}
+
+		if (!string.IsNullOrWhiteSpace(_searchText))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(_searchText)}");
+		}
+
+		NavigationManager.NavigateTo(queryParts.Count == 0
+			? "/admin/audit"
+			: $"/admin/audit?{string.Join("&", queryParts)}");
+	}
+
+	private void ClearFilters()
+	{
+		_plane = null;
+		_tenantId = null;
+		_succeeded = null;
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo("/admin/audit");
+	}
+
+	private static string GetTargetLabel(AuditLogListItem item)
+	{
+		return string.IsNullOrWhiteSpace(item.TargetId)
+			? item.TargetType
+			: $"{item.TargetType} {item.TargetId}";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string GetResultLabel(bool succeeded)
+	{
+		return succeeded ? "Succeeded" : "Denied";
+	}
+}

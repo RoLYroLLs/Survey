@@ -10,6 +10,7 @@ public class County
 	public DateTimeOffset UpdatedUtc { get; private set; }
 	public StateProvince StateProvince { get; private set; } = default!;
 	public ICollection<PostalAddress> PostalAddresses { get; } = new List<PostalAddress>();
+	public ICollection<TenantVisibleCounty> TenantVisibility { get; } = new List<TenantVisibleCounty>();
 
 	private County()
 	{

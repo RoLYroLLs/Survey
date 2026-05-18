@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class LocationPhone
+public class LocationPhone : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public int LocationId { get; private set; }
 	public string Label { get; private set; } = string.Empty;
 	public string PhoneNumber { get; private set; } = string.Empty;

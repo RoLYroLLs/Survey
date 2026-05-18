@@ -8,6 +8,8 @@ public sealed partial class SurveyApplicationService
 {
 	public async Task<IReadOnlyList<LocationListItem>> GetLocationsAsync(int? personId = null, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.LocationsView, cancellationToken);
+
 		var query = _dbContext.Locations
 			.AsNoTracking()
 			.Include(location => location.Person)
@@ -39,6 +41,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<LocationEditModel> GetLocationAsync(int? id, int? personId, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.LocationsView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			var personOptions = await GetPersonSelectOptionsAsync(cancellationToken, personId);
@@ -69,6 +73,9 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<int> SaveLocationAsync(LocationEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.LocationsEdit : TenantPermissionKeys.LocationsCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		await EnsurePersonExistsAsync(model.PersonId, cancellationToken);
 
 		var normalizedPhones = NormalizePhoneContacts(model.Phones);
@@ -152,11 +159,19 @@ public sealed partial class SurveyApplicationService
 		await SyncLocationEmailsAsync(entity, normalizedEmails, cancellationToken);
 		entity.UpdatePrimaryContactSnapshot(primaryPhone?.PhoneNumber, primaryEmail?.EmailAddress);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isNew ? "tenant.location.created" : "tenant.location.updated",
+			nameof(Location),
+			entity.Id,
+			$"Location '{entity.Nickname}' was {(isNew ? "created" : "saved")}.",
+			cancellationToken);
 		return entity.Id;
 	}
 
 	public async Task DeleteLocationAsync(int id, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.LocationsDelete, cancellationToken);
+
 		var entity = await _dbContext.Locations
 			.Include(location => location.Assignments)
 			.FirstOrDefaultAsync(location => location.Id == id, cancellationToken)
@@ -169,6 +184,7 @@ public sealed partial class SurveyApplicationService
 
 		_dbContext.Locations.Remove(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync("tenant.location.deleted", nameof(Location), id, $"Location '{entity.Nickname}' was removed.", cancellationToken);
 	}
 
 	private async Task<LocationEditModel> BuildLocationEditModelAsync(
@@ -280,12 +296,12 @@ public sealed partial class SurveyApplicationService
 		var stateProvinceId = address?.StateProvinceId
 			?? (countryId > 0 ? await TryResolveLegacyStateProvinceIdAsync(legacyState, countryId, cancellationToken) : null)
 			?? 0;
-		var countryOptions = await GetCountrySelectOptionsAsync(cancellationToken);
+		var countryOptions = await GetTenantCountrySelectOptionsAsync(countryId > 0 ? countryId : null, cancellationToken);
 		var stateProvinceOptions = countryId > 0
-			? await GetStateProvinceSelectOptionsAsync(countryId, cancellationToken)
+			? await GetTenantStateProvinceSelectOptionsAsync(countryId, stateProvinceId > 0 ? stateProvinceId : null, cancellationToken)
 			: Array.Empty<SelectOption>();
 		var countyOptions = stateProvinceId > 0
-			? await GetCountySelectOptionsAsync(stateProvinceId, cancellationToken)
+			? await GetTenantCountySelectOptionsAsync(stateProvinceId, address?.CountyId, cancellationToken)
 			: Array.Empty<SelectOption>();
 
 		return new AddressInputModel
@@ -305,6 +321,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<IReadOnlyList<SelectOption>> GetLocationSelectOptionsAsync(int? personId, int? includeLocationId = null, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.LocationsView, cancellationToken);
+
 		var query = _dbContext.Locations
 			.AsNoTracking()
 			.AsQueryable();
@@ -334,6 +352,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<IReadOnlyList<SelectOption>> GetLocationPhoneSelectOptionsAsync(int? locationId, int? includePhoneId = null, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.LocationsView, cancellationToken);
+
 		var query = _dbContext.LocationPhones
 			.AsNoTracking()
 			.AsQueryable();
@@ -364,6 +384,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<IReadOnlyList<SelectOption>> GetLocationEmailSelectOptionsAsync(int? locationId, int? includeEmailId = null, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.LocationsView, cancellationToken);
+
 		var query = _dbContext.LocationEmails
 			.AsNoTracking()
 			.AsQueryable();

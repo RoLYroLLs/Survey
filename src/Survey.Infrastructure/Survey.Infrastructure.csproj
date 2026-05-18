@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Persistence\SeedData\FloridaZipCountySeed.csv" />
+    <EmbeddedResource Include="Persistence\SeedData\UsStateCountySeed.txt" />
   </ItemGroup>
   
   <ItemGroup>

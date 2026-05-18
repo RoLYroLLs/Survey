@@ -1,9 +1,174 @@
 @page "/Account/Register"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject SurveyDbContext DbContext
+@inject TenantExecutionContext TenantExecutionContext
+@inject NavigationManager NavigationManager
 
-<PageTitle>Registration Disabled</PageTitle>
+<PageTitle>Create Tenant</PageTitle>
 
 <div class="status-card narrow-card">
-	<p class="eyebrow">Account Creation</p>
-	<h1>Self-registration is disabled.</h1>
-	<p class="mb-0">Employee accounts are created by an administrator from the Employees section of the admin area.</p>
+	<p class="eyebrow">Get Started</p>
+	<h1>Create your tenant</h1>
+	<p class="mb-4">Create your organization and the first owner account. This account becomes the initial tenant owner and administrator.</p>
+
+	@if (!string.IsNullOrWhiteSpace(_errorMessage))
+	{
+		<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+	}
+
+	<EditForm Model="_model" OnValidSubmit="RegisterAsync">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+
+		<div class="form-grid">
+			<div class="field-stack">
+				<FieldLabel Text="Tenant Name" Required />
+				<InputText class="form-control" @bind-Value="_model.TenantName" />
+				<ValidationMessage For="@(() => _model.TenantName)" />
+			</div>
+			<div class="field-stack">
+				<FieldLabel Text="First Name" Required />
+				<InputText class="form-control" @bind-Value="_model.FirstName" />
+				<ValidationMessage For="@(() => _model.FirstName)" />
+			</div>
+			<div class="field-stack">
+				<FieldLabel Text="Last Name" Required />
+				<InputText class="form-control" @bind-Value="_model.LastName" />
+				<ValidationMessage For="@(() => _model.LastName)" />
+			</div>
+			<div class="field-stack">
+				<FieldLabel Text="Email" Required />
+				<InputText class="form-control" @bind-Value="_model.Email" />
+				<ValidationMessage For="@(() => _model.Email)" />
+			</div>
+			<div class="field-stack">
+				<FieldLabel Text="Password" Required />
+				<SecretInput class="form-control" @bind-Value="_model.Password" />
+				<ValidationMessage For="@(() => _model.Password)" />
+			</div>
+			<div class="field-stack">
+				<FieldLabel Text="Confirm Password" Required />
+				<SecretInput class="form-control" @bind-Value="_model.ConfirmPassword" />
+				<ValidationMessage For="@(() => _model.ConfirmPassword)" />
+			</div>
+		</div>
+
+		<div class="form-footer">
+			<button class="btn btn-primary" type="submit" disabled="@_isSaving">Create Tenant</button>
+			<a class="btn btn-outline-primary" href="Account/Login">Back to Login</a>
+		</div>
+	</EditForm>
 </div>
+
+@code {
+	private readonly RegisterTenantModel _model = new();
+	private bool _isSaving;
+	private string? _errorMessage;
+
+	private async Task RegisterAsync()
+	{
+		if (_isSaving)
+		{
+			return;
+		}
+
+		_isSaving = true;
+		_errorMessage = null;
+
+		await using var transaction = await DbContext.Database.BeginTransactionAsync();
+
+		try
+		{
+			var trimmedEmail = _model.Email.Trim();
+			var existingUser = await UserManager.FindByEmailAsync(trimmedEmail);
+			if (existingUser is not null)
+			{
+				throw new InvalidOperationException("An account with that email already exists.");
+			}
+
+			var tenant = new Tenant(_model.TenantName);
+			DbContext.Tenants.Add(tenant);
+			await DbContext.SaveChangesAsync();
+
+			var user = new ApplicationUser
+			{
+				UserName = trimmedEmail,
+				Email = trimmedEmail,
+				EmailConfirmed = true,
+				FirstName = _model.FirstName.Trim(),
+				LastName = _model.LastName.Trim(),
+				IsPlatformSuperAdmin = false,
+				IsPlatformUserEnabled = false
+			};
+
+			var createResult = await UserManager.CreateAsync(user, _model.Password);
+			if (!createResult.Succeeded)
+			{
+				throw new InvalidOperationException(string.Join("; ", createResult.Errors.Select(static error => error.Description)));
+			}
+
+			var membership = new TenantMembership(tenant.Id, user.Id, TenantRole.Owner);
+			DbContext.TenantMemberships.Add(membership);
+			await DbContext.SaveChangesAsync();
+
+			user.ActiveTenantMembershipId = membership.Id;
+			var updateResult = await UserManager.UpdateAsync(user);
+			if (!updateResult.Succeeded)
+			{
+				throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
+			}
+
+			TenantExecutionContext.UseTenant(tenant.Id);
+			DbContext.TenantSettings.Add(new TenantSetting(tenant.Id, SiteThemePresetCatalog.DefaultPresetKey));
+			await DbContext.SaveChangesAsync();
+			await transaction.CommitAsync();
+			await SignInManager.SignInAsync(user, isPersistent: false);
+			NavigationManager.NavigateTo("/app", forceLoad: true);
+		}
+		catch (Exception ex)
+		{
+			await transaction.RollbackAsync();
+			_errorMessage = ex.Message;
+		}
+		finally
+		{
+			TenantExecutionContext.Clear();
+			_isSaving = false;
+		}
+	}
+
+	private sealed class RegisterTenantModel
+	{
+		[Required]
+		[StringLength(200)]
+		public string TenantName { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(100)]
+		public string FirstName { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(100)]
+		public string LastName { get; set; } = string.Empty;
+
+		[Required]
+		[EmailAddress]
+		[StringLength(256)]
+		public string Email { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(100)]
+		[DataType(DataType.Password)]
+		public string Password { get; set; } = string.Empty;
+
+		[Required]
+		[StringLength(100)]
+		[DataType(DataType.Password)]
+		[Compare(nameof(Password))]
+		public string ConfirmPassword { get; set; } = string.Empty;
+	}
+}

@@ -1,0 +1,73 @@
+@page "/admin"
+@attribute [PlatformAuthorize]
+
+<PageTitle>Platform</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Platform</p>
+			<h1>Platform administration</h1>
+			<p>Manage platform users, tenant oversight, audit trails, and shared reference data.</p>
+		</div>
+	</div>
+
+	<div class="card-grid">
+		<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersView)">
+			<Authorized>
+				<section class="content-card">
+					<h2>Users</h2>
+					<p>Manage platform-level user access and administration.</p>
+					<a class="btn btn-outline-primary" href="/admin/users">Open Users</a>
+				</section>
+			</Authorized>
+		</AuthorizeView>
+		<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsView)">
+			<Authorized>
+				<section class="content-card">
+					<h2>Tenants</h2>
+					<p>Review tenant directories, membership counts, and tenant-wide usage.</p>
+					<a class="btn btn-outline-primary" href="/admin/tenants">Open Tenants</a>
+				</section>
+			</Authorized>
+		</AuthorizeView>
+		<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.AuditView)">
+			<Authorized>
+				<section class="content-card">
+					<h2>Audit</h2>
+					<p>Review platform and tenant security-sensitive activity and denied access attempts.</p>
+					<a class="btn btn-outline-primary" href="/admin/audit">Open Audit</a>
+				</section>
+			</Authorized>
+		</AuthorizeView>
+		<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyView)">
+			<Authorized>
+				<section class="content-card">
+					<h2>Countries</h2>
+					<p>Maintain the global geography reference catalog.</p>
+					<a class="btn btn-outline-primary" href="/admin/countries">Open Countries</a>
+				</section>
+				<section class="content-card">
+					<h2>States / Territories</h2>
+					<p>Review and manage state and territory reference records.</p>
+					<a class="btn btn-outline-primary" href="/admin/state-provinces">Open States / Territories</a>
+				</section>
+				<section class="content-card">
+					<h2>Counties</h2>
+					<p>Manage county reference records and their platform imports.</p>
+					<a class="btn btn-outline-primary" href="/admin/counties">Open Counties</a>
+				</section>
+				<section class="content-card">
+					<h2>Addresses</h2>
+					<p>Review shared address records and cross-reference usage.</p>
+					<a class="btn btn-outline-primary" href="/admin/addresses">Open Addresses</a>
+				</section>
+				<section class="content-card">
+					<h2>ZIP Mappings</h2>
+					<p>Maintain ZIP-to-county mapping data used by reporting and area grouping.</p>
+					<a class="btn btn-outline-primary" href="/admin/zip-mappings">Open ZIP Mappings</a>
+				</section>
+			</Authorized>
+		</AuthorizeView>
+	</div>
+</div>

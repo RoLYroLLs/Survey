@@ -1,6 +1,6 @@
 @page "/admin/addresses/import"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyManage)]
+@inject IPlatformAdministrationService AdministrationService
 
 <PageTitle>Import Addresses</PageTitle>
 

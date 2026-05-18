@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class AreaCounty
+public class AreaCounty : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public int AreaId { get; private set; }
 	public string CountyFips { get; private set; } = string.Empty;
 	public string CountyName { get; private set; } = string.Empty;

@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class PostalAddress
+public class PostalAddress : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public int CountryId { get; private set; }
 	public int? StateProvinceId { get; private set; }
 	public int? CountyId { get; private set; }

@@ -1,0 +1,109 @@
+@page "/app/users"
+@attribute [TenantAuthorize(TenantPermissionKeys.UsersView)]
+@inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Users</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Access</p>
+			<h1>Users</h1>
+			<p>Manage the users, tenant roles, and membership access for this tenant.</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="/app/users/invitations">Invitations</a>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.UsersInvite)">
+				<Authorized>
+					<a class="btn btn-primary" href="/app/users/invite">Invite User</a>
+				</Authorized>
+			</AuthorizeView>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Tenant Users</h2>
+				<p>Search by name, email, or tenant role.</p>
+			</div>
+			<div class="toolbar">
+				<input class="form-control" placeholder="Search users" @bind="_searchText" />
+				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
+				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No tenant users matched the current search.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Email</th>
+						<th>Role</th>
+						<th>Status</th>
+						<th>Permissions</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>
+								<div>@item.FullName</div>
+								@if (item.IsCurrentUser)
+								{
+									<div class="text-muted">Current user</div>
+								}
+							</td>
+							<td>@item.Email</td>
+							<td>@item.Role</td>
+							<td>@(item.IsEnabled ? "Enabled" : "Disabled")</td>
+							<td>@item.EffectivePermissionCount effective</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="/app/users/@item.MembershipId">View</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	private IReadOnlyList<TenantUserListItem> _items = Array.Empty<TenantUserListItem>();
+	private string _searchText = string.Empty;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetTenantUsersAsync(Search);
+	}
+
+	private void ApplySearch()
+	{
+		var url = string.IsNullOrWhiteSpace(_searchText)
+			? "/app/users"
+			: $"/app/users?search={Uri.EscapeDataString(_searchText)}";
+		NavigationManager.NavigateTo(url);
+	}
+
+	private void ClearSearch()
+	{
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo("/app/users");
+	}
+}

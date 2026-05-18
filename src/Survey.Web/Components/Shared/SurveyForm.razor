@@ -1,5 +1,5 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject ISurveyAdministrationService AdministrationService
+@inject ITenantAdministrationService AdministrationService
 @inject ISurveyExperienceService SurveyExperienceService
 @inject ToastService ToastService
 
@@ -526,7 +526,7 @@ else
 		address.StateProvinceId = 0;
 		address.CountyId = null;
 		address.StateProvinceOptions = address.CountryId > 0
-			? await AdministrationService.GetStateProvinceSelectOptionsAsync(address.CountryId)
+			? await AdministrationService.GetTenantStateProvinceSelectOptionsAsync(address.CountryId)
 			: Array.Empty<SelectOption>();
 		address.CountyOptions = Array.Empty<SelectOption>();
 	}
@@ -535,7 +535,7 @@ else
 	{
 		address.CountyId = null;
 		address.CountyOptions = address.StateProvinceId > 0
-			? await AdministrationService.GetCountySelectOptionsAsync(address.StateProvinceId)
+			? await AdministrationService.GetTenantCountySelectOptionsAsync(address.StateProvinceId)
 			: Array.Empty<SelectOption>();
 	}
 

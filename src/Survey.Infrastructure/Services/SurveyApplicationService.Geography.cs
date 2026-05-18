@@ -595,6 +595,7 @@ public sealed partial class SurveyApplicationService
 			.Select(person => new
 			{
 				Id = person.Id,
+				person.TenantId,
 				person.FirstName,
 				person.MiddleName,
 				person.LastName,
@@ -606,6 +607,7 @@ public sealed partial class SurveyApplicationService
 			.Select(person => new PostalAddressPersonReferenceItem
 			{
 				Id = person.Id,
+				TenantId = person.TenantId,
 				FullName = string.Join(" ", new[] { person.FirstName, person.MiddleName, person.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))),
 				Email = person.Email,
 				PhoneNumber = person.PhoneNumber
@@ -622,6 +624,7 @@ public sealed partial class SurveyApplicationService
 			.Select(location => new
 			{
 				location.Id,
+				location.TenantId,
 				location.PersonId,
 				location.Nickname,
 				location.Email,
@@ -635,6 +638,7 @@ public sealed partial class SurveyApplicationService
 			.Select(location => new PostalAddressLocationReferenceItem
 			{
 				Id = location.Id,
+				TenantId = location.TenantId,
 				PersonId = location.PersonId,
 				PersonName = string.Join(" ", new[] { location.FirstName, location.MiddleName, location.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))),
 				Nickname = location.Nickname,
@@ -649,6 +653,7 @@ public sealed partial class SurveyApplicationService
 			.Select(response => new
 			{
 				Id = response.Id,
+				response.TenantId,
 				response.RespondentFirstName,
 				response.RespondentMiddleName,
 				response.RespondentLastName,
@@ -661,6 +666,7 @@ public sealed partial class SurveyApplicationService
 			.Select(response => new PostalAddressResponseReferenceItem
 			{
 				Id = response.Id,
+				TenantId = response.TenantId,
 				RespondentName = string.Join(" ", new[] { response.RespondentFirstName, response.RespondentMiddleName, response.RespondentLastName }.Where(part => !string.IsNullOrWhiteSpace(part))),
 				SurveyName = response.SurveyName,
 				VersionName = response.VersionName,
@@ -669,6 +675,32 @@ public sealed partial class SurveyApplicationService
 			.OrderByDescending(response => response.SubmittedUtc)
 			.ThenBy(response => response.RespondentName)
 			.ToList();
+
+		var tenantIds = people.Select(item => item.TenantId)
+			.Concat(locations.Select(item => item.TenantId))
+			.Concat(responses.Select(item => item.TenantId))
+			.Distinct()
+			.ToArray();
+		var tenantNames = tenantIds.Length == 0
+			? new Dictionary<int, string>()
+			: await _dbContext.Tenants
+				.AsNoTracking()
+				.Where(tenant => tenantIds.Contains(tenant.Id))
+				.ToDictionaryAsync(tenant => tenant.Id, tenant => tenant.Name, cancellationToken);
+		foreach (var person in people)
+		{
+			person.TenantName = tenantNames.GetValueOrDefault(person.TenantId, string.Empty);
+		}
+
+		foreach (var location in locations)
+		{
+			location.TenantName = tenantNames.GetValueOrDefault(location.TenantId, string.Empty);
+		}
+
+		foreach (var response in responses)
+		{
+			response.TenantName = tenantNames.GetValueOrDefault(response.TenantId, string.Empty);
+		}
 
 		return new PostalAddressReferenceViewModel
 		{
@@ -905,10 +937,12 @@ public sealed partial class SurveyApplicationService
 			.AsNoTracking()
 			.FirstOrDefaultAsync(entity => entity.Id == countryId, cancellationToken)
 			?? throw new InvalidOperationException("The selected country was not found.");
+		await EnsureTenantCountryVisibleAsync(countryId, cancellationToken);
 		var stateProvince = await _dbContext.StateProvinces
 			.AsNoTracking()
 			.FirstOrDefaultAsync(entity => entity.Id == stateProvinceId && entity.CountryId == countryId, cancellationToken)
 			?? throw new InvalidOperationException("The selected state or territory was not found.");
+		await EnsureTenantStateProvinceVisibleAsync(countryId, stateProvinceId, cancellationToken);
 		var county = await ResolveCountyAsync(stateProvince, countyId, postalCode, cancellationToken);
 
 		return await ResolveOrCreatePostalAddressAsync(
@@ -981,6 +1015,7 @@ public sealed partial class SurveyApplicationService
 				.AsNoTracking()
 				.FirstOrDefaultAsync(entity => entity.Id == countyId.Value && entity.StateProvinceId == stateProvince.Id, cancellationToken)
 				?? throw new InvalidOperationException("The selected county was not found.");
+			await EnsureTenantCountyVisibleAsync(stateProvince.Id, countyId.Value, cancellationToken);
 
 			await ValidateCountyMatchesPostalCodeAsync(stateProvince, county, postalCode, cancellationToken);
 			return county;
@@ -1011,15 +1046,31 @@ public sealed partial class SurveyApplicationService
 			.OrderByDescending(mapping => mapping.ResidentialRatio)
 			.ThenBy(mapping => mapping.CountyName)
 			.Select(mapping => mapping.CountyFips)
-			.FirstOrDefault();
-		if (string.IsNullOrWhiteSpace(countyFips))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToList();
+		if (countyFips.Count == 0)
 		{
 			return null;
 		}
 
-		return await _dbContext.Counties
-			.AsNoTracking()
-			.FirstOrDefaultAsync(county => county.StateProvinceId == stateProvince.Id && county.FipsCode == countyFips, cancellationToken);
+		var scope = await GetTenantGeographyScopeAsync(cancellationToken);
+		var visibleCounties = await ApplyTenantCountyVisibility(
+				_dbContext.Counties
+					.AsNoTracking()
+					.Where(county => county.StateProvinceId == stateProvince.Id && countyFips.Contains(county.FipsCode)),
+				scope,
+				null)
+			.ToDictionaryAsync(county => county.FipsCode, StringComparer.OrdinalIgnoreCase, cancellationToken);
+
+		foreach (var fipsCode in countyFips)
+		{
+			if (visibleCounties.TryGetValue(fipsCode, out var county))
+			{
+				return county;
+			}
+		}
+
+		return null;
 	}
 
 	private async Task ValidateCountyMatchesPostalCodeAsync(StateProvince stateProvince, County county, string? postalCode, CancellationToken cancellationToken)

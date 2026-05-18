@@ -11,7 +11,7 @@ internal sealed class IdentityDataSeeder(
 	IConfiguration configuration,
 	ILogger<IdentityDataSeeder> logger)
 {
-	private readonly string[] _roles = [RoleNames.Admin, RoleNames.Employee];
+	private readonly string[] _roles = [RoleNames.Admin, RoleNames.Employee, RoleNames.PlatformSuperAdmin];
 
 	public async Task SeedAsync(CancellationToken cancellationToken = default)
 	{
@@ -62,5 +62,18 @@ internal sealed class IdentityDataSeeder(
 				throw new InvalidOperationException($"Unable to assign the admin role to '{email}': {string.Join("; ", roleResult.Errors.Select(static error => error.Description))}");
 			}
 		}
+
+		if (!await userManager.IsInRoleAsync(user, RoleNames.PlatformSuperAdmin))
+		{
+			var platformRoleResult = await userManager.AddToRoleAsync(user, RoleNames.PlatformSuperAdmin);
+			if (!platformRoleResult.Succeeded)
+			{
+				throw new InvalidOperationException($"Unable to assign the platform super admin role to '{email}': {string.Join("; ", platformRoleResult.Errors.Select(static error => error.Description))}");
+			}
+		}
+
+		user.IsPlatformSuperAdmin = true;
+		user.IsPlatformUserEnabled = true;
+		await userManager.UpdateAsync(user);
 	}
 }

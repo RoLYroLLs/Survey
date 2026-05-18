@@ -1,0 +1,261 @@
+@page "/app/geography"
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+@inject ITenantContextAccessor TenantContextAccessor
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>Geography</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Settings</p>
+			<h1>Geography</h1>
+			<p>Choose which countries, states, and counties this tenant can see and use. Leave everything unchecked to allow all available geography.</p>
+		</div>
+	</div>
+
+	<div class="form-card">
+		<div class="inline-banner">
+			Selections combine. Choosing a country allows all of its states and counties. Choosing a state allows all of its counties. Choosing only counties keeps the tenant limited to those counties.
+		</div>
+
+		<div class="form-footer mt-3">
+			<button class="btn btn-primary" type="button" @onclick="SaveAsync" disabled="@_isSaving">Save Geography Access</button>
+			<button class="btn btn-outline-primary" type="button" @onclick="ClearSelections" disabled="@_isSaving">Clear All Restrictions</button>
+		</div>
+
+		<div class="card-grid mt-4">
+			<section class="content-card">
+				<div class="page-header">
+					<div>
+						<h2>Countries</h2>
+						<p>@_selectedCountryIds.Count selected</p>
+					</div>
+				</div>
+				<div class="option-stack">
+					@foreach (var option in _model.CountryOptions)
+					{
+						<label class="option-row">
+							<input type="checkbox" checked="@IsCountrySelected(option)" @onchange="args => ToggleCountry(option, args)" />
+							<span>@option.Label</span>
+						</label>
+					}
+				</div>
+			</section>
+
+			<section class="content-card">
+				<div class="page-header">
+					<div>
+						<h2>States / Territories</h2>
+						<p>@_selectedStateProvinceIds.Count selected</p>
+					</div>
+				</div>
+				<div class="field-stack">
+					<label>Search States / Territories</label>
+					<input class="form-control" @bind="_stateSearch" @bind:event="oninput" />
+				</div>
+				<div class="option-stack mt-3 geography-option-list">
+					@foreach (var option in FilteredStateOptions)
+					{
+						<label class="option-row">
+							<input type="checkbox" checked="@IsStateProvinceSelected(option)" @onchange="args => ToggleStateProvince(option, args)" />
+							<span>@option.Label</span>
+						</label>
+					}
+				</div>
+			</section>
+		</div>
+
+		<section class="content-card mt-4">
+			<div class="page-header">
+				<div>
+					<h2>Counties</h2>
+					<p>@_selectedCountyIds.Count selected</p>
+				</div>
+			</div>
+			<div class="form-grid">
+				<div class="field-stack">
+					<label>Filter by State / Territory</label>
+					<SearchableSelect class="form-control"
+									  @bind-Value="_countyStateFilter"
+									  Options="_model.StateProvinceOptions"
+									  IncludeEmptyOption="true"
+									  EmptyOptionLabel="All states / territories"
+									  EmptyOptionValue="0" />
+				</div>
+				<div class="field-stack form-grid--single">
+					<label>Search Counties</label>
+					<input class="form-control" @bind="_countySearch" @bind:event="oninput" />
+				</div>
+			</div>
+
+			@if (_countyStateFilter <= 0 && string.IsNullOrWhiteSpace(_countySearch))
+			{
+				<p class="empty-state mt-3">Choose a state or enter a county search to browse county-level restrictions.</p>
+			}
+			else
+			{
+				<div class="option-stack mt-3 geography-option-list">
+					@foreach (var option in FilteredCountyOptions)
+					{
+						<label class="option-row">
+							<input type="checkbox" checked="@IsCountySelected(option)" @onchange="args => ToggleCounty(option, args)" />
+							<span>@option.Label</span>
+						</label>
+					}
+				</div>
+			}
+		</section>
+	</div>
+</div>
+
+@code {
+	private TenantGeographyVisibilityEditModel _model = new();
+	private HashSet<int> _selectedCountryIds = [];
+	private HashSet<int> _selectedStateProvinceIds = [];
+	private HashSet<int> _selectedCountyIds = [];
+	private string _stateSearch = string.Empty;
+	private string _countySearch = string.Empty;
+	private int _countyStateFilter;
+	private bool _isSaving;
+
+	private IEnumerable<SelectOption> FilteredStateOptions =>
+		_model.StateProvinceOptions.Where(option =>
+			string.IsNullOrWhiteSpace(_stateSearch)
+			|| option.Label.Contains(_stateSearch, StringComparison.OrdinalIgnoreCase));
+
+	private IEnumerable<SelectOption> FilteredCountyOptions =>
+		_model.CountyOptions.Where(option =>
+		{
+			if (_countyStateFilter > 0)
+			{
+				var prefix = _model.StateProvinceOptions.FirstOrDefault(state => state.Value == _countyStateFilter.ToString())?.Label;
+				var stateCode = ExtractStateCode(prefix);
+				if (!string.IsNullOrWhiteSpace(stateCode) && !option.Label.StartsWith($"{stateCode} - ", StringComparison.OrdinalIgnoreCase))
+				{
+					return false;
+				}
+			}
+
+			return string.IsNullOrWhiteSpace(_countySearch)
+				|| option.Label.Contains(_countySearch, StringComparison.OrdinalIgnoreCase);
+		});
+
+	protected override async Task OnParametersSetAsync()
+	{
+		var accessContext = await TenantContextAccessor.GetCurrentAsync();
+		if (accessContext.TenantRole != TenantRole.Owner)
+		{
+			NavigationManager.NavigateTo("/Account/AccessDenied", true);
+			return;
+		}
+
+		_model = await AdministrationService.GetTenantGeographyVisibilityAsync();
+		_selectedCountryIds = _model.VisibleCountryIds.ToHashSet();
+		_selectedStateProvinceIds = _model.VisibleStateProvinceIds.ToHashSet();
+		_selectedCountyIds = _model.VisibleCountyIds.ToHashSet();
+	}
+
+	private bool IsCountrySelected(SelectOption option)
+	{
+		return TryParseOptionValue(option, out var id) && _selectedCountryIds.Contains(id);
+	}
+
+	private bool IsStateProvinceSelected(SelectOption option)
+	{
+		return TryParseOptionValue(option, out var id) && _selectedStateProvinceIds.Contains(id);
+	}
+
+	private bool IsCountySelected(SelectOption option)
+	{
+		return TryParseOptionValue(option, out var id) && _selectedCountyIds.Contains(id);
+	}
+
+	private void ToggleCountry(SelectOption option, ChangeEventArgs args)
+	{
+		ToggleSelection(_selectedCountryIds, option, args);
+	}
+
+	private void ToggleStateProvince(SelectOption option, ChangeEventArgs args)
+	{
+		ToggleSelection(_selectedStateProvinceIds, option, args);
+	}
+
+	private void ToggleCounty(SelectOption option, ChangeEventArgs args)
+	{
+		ToggleSelection(_selectedCountyIds, option, args);
+	}
+
+	private static void ToggleSelection(HashSet<int> selectedIds, SelectOption option, ChangeEventArgs args)
+	{
+		if (!TryParseOptionValue(option, out var id))
+		{
+			return;
+		}
+
+		if (args.Value is bool isChecked && isChecked)
+		{
+			selectedIds.Add(id);
+			return;
+		}
+
+		selectedIds.Remove(id);
+	}
+
+	private async Task SaveAsync()
+	{
+		if (_isSaving)
+		{
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+			_model.VisibleCountryIds = _selectedCountryIds.OrderBy(static id => id).ToList();
+			_model.VisibleStateProvinceIds = _selectedStateProvinceIds.OrderBy(static id => id).ToList();
+			_model.VisibleCountyIds = _selectedCountyIds.OrderBy(static id => id).ToList();
+			await AdministrationService.SaveTenantGeographyVisibilityAsync(_model);
+			ToastService.ShowSuccess("Tenant geography access was updated.", "Saved");
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void ClearSelections()
+	{
+		_selectedCountryIds.Clear();
+		_selectedStateProvinceIds.Clear();
+		_selectedCountyIds.Clear();
+	}
+
+	private static bool TryParseOptionValue(SelectOption option, out int id)
+	{
+		return int.TryParse(option.Value, out id);
+	}
+
+	private static string? ExtractStateCode(string? stateLabel)
+	{
+		if (string.IsNullOrWhiteSpace(stateLabel))
+		{
+			return null;
+		}
+
+		var openParenIndex = stateLabel.LastIndexOf('(');
+		var closeParenIndex = stateLabel.LastIndexOf(')');
+		if (openParenIndex >= 0 && closeParenIndex > openParenIndex)
+		{
+			return stateLabel.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
+		}
+
+		return null;
+	}
+}

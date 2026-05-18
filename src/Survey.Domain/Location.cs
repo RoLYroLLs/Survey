@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class Location
+public class Location : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public int PersonId { get; private set; }
 	public string Nickname { get; private set; } = string.Empty;
 	public int? PostalAddressId { get; private set; }

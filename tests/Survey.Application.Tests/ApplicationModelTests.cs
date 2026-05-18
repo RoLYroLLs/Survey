@@ -6,11 +6,11 @@ namespace Survey.Application.Tests;
 public class ApplicationModelTests
 {
 	[Fact]
-	public void EmployeeEditModel_IsNew_Is_True_Only_When_Id_Is_Missing()
+	public void PlatformUserEditModel_IsNew_Is_True_Only_When_Id_Is_Missing()
 	{
-		Assert.True(new EmployeeEditModel().IsNew);
-		Assert.True(new EmployeeEditModel { Id = " " }.IsNew);
-		Assert.False(new EmployeeEditModel { Id = "employee-1" }.IsNew);
+		Assert.True(new PlatformUserEditModel().IsNew);
+		Assert.True(new PlatformUserEditModel { Id = " " }.IsNew);
+		Assert.False(new PlatformUserEditModel { Id = "user-1" }.IsNew);
 	}
 
 	[Fact]
@@ -29,5 +29,23 @@ public class ApplicationModelTests
 		Assert.False(isValid);
 		Assert.Contains(validationResults, result => result.MemberNames.Contains(nameof(SurveyVersionEditModel.SurveyDefinitionId)));
 		Assert.Contains(validationResults, result => result.MemberNames.Contains(nameof(SurveyVersionEditModel.VersionNumber)));
+	}
+
+	[Fact]
+	public void TenantUserPermissionOverrideEditModel_Computes_Effective_Grant_From_Default_Mode()
+	{
+		var model = new TenantUserPermissionOverrideEditModel
+		{
+			DefaultGranted = true,
+			OverrideMode = TenantPermissionOverrideModes.Default
+		};
+
+		Assert.True(model.EffectiveGranted);
+
+		model.OverrideMode = TenantPermissionOverrideModes.Deny;
+		Assert.False(model.EffectiveGranted);
+
+		model.OverrideMode = TenantPermissionOverrideModes.Allow;
+		Assert.True(model.EffectiveGranted);
 	}
 }

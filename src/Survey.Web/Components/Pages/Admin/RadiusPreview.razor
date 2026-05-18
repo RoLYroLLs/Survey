@@ -1,5 +1,5 @@
 @page "/admin/theme/radius-preview"
-@attribute [Authorize(Roles = RoleNames.Admin)]
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyView)]
 
 <PageTitle>Radius Preview</PageTitle>
 
@@ -11,7 +11,7 @@
 			<p>View the shared UI pieces that currently use their own corner radius values.</p>
 		</div>
 		<div class="toolbar">
-			<a class="btn btn-outline-primary" href="/admin/theme">Back to Theme</a>
+			<a class="btn btn-outline-primary" href="/app/theme">Back to Theme</a>
 		</div>
 	</div>
 

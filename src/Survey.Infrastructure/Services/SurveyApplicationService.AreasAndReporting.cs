@@ -11,6 +11,8 @@ public sealed partial class SurveyApplicationService
 {
 	public async Task<IReadOnlyList<AreaListItem>> GetAreasAsync(int? countyId = null, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.AreasView, cancellationToken);
+
 		var query = _dbContext.Areas
 			.AsNoTracking()
 			.Include(area => area.Counties)
@@ -20,9 +22,15 @@ public sealed partial class SurveyApplicationService
 		string? countyNameFilter = null;
 		if (countyId.HasValue)
 		{
-			var county = await _dbContext.Counties
-				.AsNoTracking()
-				.FirstOrDefaultAsync(entity => entity.Id == countyId.Value, cancellationToken)
+			var scope = await GetTenantGeographyScopeAsync(cancellationToken);
+			var county = await ApplyTenantCountyVisibility(
+					_dbContext.Counties
+						.AsNoTracking()
+						.Include(entity => entity.StateProvince)
+						.Where(entity => entity.Id == countyId.Value),
+					scope,
+					null)
+				.FirstOrDefaultAsync(cancellationToken)
 				?? throw new InvalidOperationException("The selected county was not found.");
 			countyNameFilter = county.Name;
 			query = query.Where(area => area.Counties.Any(areaCounty => areaCounty.CountyFips == county.FipsCode));
@@ -45,6 +53,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<AreaEditModel> GetAreaAsync(int? id, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.AreasView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			return new AreaEditModel
@@ -75,6 +85,9 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<int> SaveAreaAsync(AreaEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.AreasEdit : TenantPermissionKeys.AreasCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		var selectedCountyFips = model.SelectedCountyFips
 			.Where(static countyFips => !string.IsNullOrWhiteSpace(countyFips))
 			.Select(static countyFips => countyFips.Trim())
@@ -120,7 +133,7 @@ public sealed partial class SurveyApplicationService
 			await _dbContext.SaveChangesAsync(cancellationToken);
 		}
 
-		var countyMetadata = await GetCountyMetadataLookupAsync(cancellationToken);
+		var countyMetadata = await GetCountyMetadataLookupAsync(model.Id, cancellationToken);
 		foreach (var countyFips in selectedCountyFips)
 		{
 			if (!countyMetadata.TryGetValue(countyFips, out var metadata) && !existingCountyMetadata.TryGetValue(countyFips, out metadata))
@@ -132,11 +145,19 @@ public sealed partial class SurveyApplicationService
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isNew ? "tenant.area.created" : "tenant.area.updated",
+			nameof(Area),
+			area.Id,
+			$"Area '{area.Name}' was {(isNew ? "created" : "saved")} with {selectedCountyFips.Count} county assignments.",
+			cancellationToken);
 		return area.Id;
 	}
 
 	public async Task<IReadOnlyList<ZipCountyMappingListItem>> GetZipCountyMappingsAsync(string? search = null, CancellationToken cancellationToken = default)
 	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.GeographyView, cancellationToken);
+
 		var query = _dbContext.ZipCountyLookups
 			.AsNoTracking()
 			.AsQueryable();
@@ -173,6 +194,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<ZipCountyMappingEditModel> GetZipCountyMappingAsync(int? id, CancellationToken cancellationToken = default)
 	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.GeographyView, cancellationToken);
+
 		if (!id.HasValue)
 		{
 			return new ZipCountyMappingEditModel
@@ -200,6 +223,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<int> SaveZipCountyMappingAsync(ZipCountyMappingEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.GeographyManage, cancellationToken);
+
 		ZipCountyLookup entity;
 		if (model.Id.HasValue)
 		{
@@ -219,6 +244,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<ZipCountyImportResultModel> ImportZipCountyMappingsAsync(ZipCountyImportModel model, CancellationToken cancellationToken = default)
 	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.GeographyManage, cancellationToken);
+
 		if (string.IsNullOrWhiteSpace(model.CsvContent))
 		{
 			throw new InvalidOperationException("Upload or paste a CSV file before importing.");
@@ -278,6 +305,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<IReadOnlyList<GoalListItem>> GetGoalsAsync(string? userId = null, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.GoalsView, cancellationToken);
+
 		var goals = await _dbContext.Goals
 			.AsNoTracking()
 			.Include(goal => goal.Area)
@@ -287,7 +316,7 @@ public sealed partial class SurveyApplicationService
 			.ToListAsync(cancellationToken);
 
 		var progressLookup = await BuildGoalProgressLookupAsync(goals, cancellationToken);
-		var favoriteGoalIds = await GetFavoriteGoalIdSetAsync(userId, cancellationToken);
+		var favoriteGoalIds = await GetFavoriteGoalIdSetAsync(await RequireCurrentUserIdAsync(cancellationToken), cancellationToken);
 
 		return goals
 			.Select(goal =>
@@ -313,7 +342,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<IReadOnlyList<DashboardFavoriteGoalItem>> GetDashboardFavoriteGoalsAsync(string userId, CancellationToken cancellationToken = default)
 	{
-		var favoriteGoalIds = await GetFavoriteGoalIdSetAsync(userId, cancellationToken);
+		await RequireTenantPermissionAsync(TenantPermissionKeys.DashboardView, cancellationToken);
+		var favoriteGoalIds = await GetFavoriteGoalIdSetAsync(await RequireCurrentUserIdAsync(cancellationToken), cancellationToken);
 		if (favoriteGoalIds.Count == 0)
 		{
 			return [];
@@ -351,10 +381,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task ToggleFavoriteGoalAsync(int goalId, string userId, CancellationToken cancellationToken = default)
 	{
-		if (string.IsNullOrWhiteSpace(userId))
-		{
-			throw new InvalidOperationException("A signed-in user is required to favorite a goal.");
-		}
+		await RequireTenantPermissionAsync(TenantPermissionKeys.DashboardView, cancellationToken);
+		var currentUserId = await RequireCurrentUserIdAsync(cancellationToken);
 
 		var goalExists = await _dbContext.Goals.AnyAsync(goal => goal.Id == goalId, cancellationToken);
 		if (!goalExists)
@@ -362,7 +390,7 @@ public sealed partial class SurveyApplicationService
 			throw new InvalidOperationException("The requested goal was not found.");
 		}
 
-		var user = await _userManager.FindByIdAsync(userId)
+		var user = await _userManager.FindByIdAsync(currentUserId)
 			?? throw new InvalidOperationException("The signed-in user could not be found.");
 
 		var favoriteGoalIds = user.GetFavoriteGoalIds();
@@ -383,6 +411,8 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<GoalEditModel> GetGoalAsync(int? id, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.GoalsView, cancellationToken);
+
 		var areaOptions = await GetAreaSelectOptionsAsync(cancellationToken);
 		var surveyOptions = await GetSurveyDefinitionOptionsAsync(null, cancellationToken);
 		if (!id.HasValue)
@@ -417,6 +447,9 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<int> SaveGoalAsync(GoalEditModel model, CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(model.Id.HasValue ? TenantPermissionKeys.GoalsEdit : TenantPermissionKeys.GoalsCreate, cancellationToken);
+		var isNew = !model.Id.HasValue;
+
 		if (model.AreaId.HasValue)
 		{
 			await EnsureAreaExistsAsync(model.AreaId.Value, cancellationToken);
@@ -440,11 +473,19 @@ public sealed partial class SurveyApplicationService
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isNew ? "tenant.goal.created" : "tenant.goal.updated",
+			nameof(Goal),
+			goal.Id,
+			$"Goal '{goal.Name}' was {(isNew ? "created" : "saved")}.",
+			cancellationToken);
 		return goal.Id;
 	}
 
 	public async Task<ReportingOverviewModel> GetReportingOverviewAsync(CancellationToken cancellationToken = default)
 	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.ReportsView, cancellationToken);
+
 		var areas = await _dbContext.Areas
 			.AsNoTracking()
 			.Include(area => area.Counties)
@@ -518,6 +559,7 @@ public sealed partial class SurveyApplicationService
 
 	private async Task<IReadOnlyList<CountyOptionItem>> GetCountyOptionsAsync(int? includeAreaId, CancellationToken cancellationToken)
 	{
+		var scope = await GetTenantGeographyScopeAsync(cancellationToken);
 		var zipCounts = await _dbContext.ZipCountyLookups
 			.AsNoTracking()
 			.GroupBy(mapping => mapping.CountyFips)
@@ -526,9 +568,13 @@ public sealed partial class SurveyApplicationService
 				group => group.Select(mapping => mapping.ZipCode).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
 				StringComparer.OrdinalIgnoreCase,
 				cancellationToken);
-		var importedCounties = await _dbContext.Counties
-			.AsNoTracking()
-			.Include(county => county.StateProvince)
+		var importedCounties = await ApplyTenantCountyVisibility(
+				_dbContext.Counties
+					.AsNoTracking()
+					.Include(county => county.StateProvince)
+					.AsQueryable(),
+				scope,
+				null)
 			.Select(county => new CountyOptionItem
 			{
 				CountyFips = county.FipsCode,
@@ -578,18 +624,40 @@ public sealed partial class SurveyApplicationService
 			.ToList();
 	}
 
-	private async Task<Dictionary<string, (string CountyName, string StateCode)>> GetCountyMetadataLookupAsync(CancellationToken cancellationToken)
+	private async Task<Dictionary<string, (string CountyName, string StateCode)>> GetCountyMetadataLookupAsync(int? includeAreaId, CancellationToken cancellationToken)
 	{
-		var counties = await _dbContext.Counties
-			.AsNoTracking()
-			.Include(county => county.StateProvince)
+		var scope = await GetTenantGeographyScopeAsync(cancellationToken);
+		var counties = await ApplyTenantCountyVisibility(
+				_dbContext.Counties
+					.AsNoTracking()
+					.Include(county => county.StateProvince)
+					.AsQueryable(),
+				scope,
+				null)
 			.ToListAsync(cancellationToken);
-
-		return counties
+		var lookup = counties
 			.ToDictionary(
 				county => county.FipsCode,
 				county => (county.Name, county.StateProvince.Code),
 				StringComparer.OrdinalIgnoreCase);
+		if (!includeAreaId.HasValue)
+		{
+			return lookup;
+		}
+
+		var existingCounties = await _dbContext.AreaCounties
+			.AsNoTracking()
+			.Where(county => county.AreaId == includeAreaId.Value)
+			.ToListAsync(cancellationToken);
+		foreach (var county in existingCounties)
+		{
+			if (!lookup.ContainsKey(county.CountyFips))
+			{
+				lookup[county.CountyFips] = (county.CountyName, county.StateCode);
+			}
+		}
+
+		return lookup;
 	}
 
 	private async Task<IReadOnlyList<SelectOption>> GetAreaSelectOptionsAsync(CancellationToken cancellationToken)

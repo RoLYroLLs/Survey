@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class Person
+public class Person : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public string FirstName { get; private set; } = string.Empty;
 	public string? MiddleName { get; private set; }
 	public string LastName { get; private set; } = string.Empty;

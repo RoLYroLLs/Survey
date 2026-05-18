@@ -1,6 +1,6 @@
 @page "/admin/counties"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyView)]
+@inject IPlatformAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Counties</PageTitle>
@@ -18,8 +18,12 @@
 				<a class="btn btn-outline-primary" href="admin/counties">View All</a>
 			}
 			<a class="btn btn-outline-primary" href="/admin/import-samples/counties">Download Sample Excel</a>
-			<a class="btn btn-outline-primary" href="admin/counties/import">Import CSV</a>
-			<a class="btn btn-primary" href="admin/counties/new">Add County</a>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+				<Authorized>
+					<a class="btn btn-outline-primary" href="admin/counties/import">Import CSV</a>
+					<a class="btn btn-primary" href="admin/counties/new">Add County</a>
+				</Authorized>
+			</AuthorizeView>
 		</div>
 	</div>
 
@@ -67,7 +71,7 @@
 							<td>
 								<div class="table-actions">
 									<a class="btn btn-sm btn-outline-primary" href="admin/addresses?countyId=@item.Id">Addresses</a>
-									<a class="btn btn-sm btn-outline-primary" href="admin/areas?countyId=@item.Id">Areas</a>
+									<a class="btn btn-sm btn-outline-primary" href="app/areas?countyId=@item.Id">Areas</a>
 								<a class="btn btn-sm btn-outline-primary" href="admin/counties/@item.Id">View</a>
 								</div>
 							</td>

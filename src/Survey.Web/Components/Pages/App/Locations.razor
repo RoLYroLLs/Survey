@@ -1,0 +1,101 @@
+@page "/app/people/{PersonId:int}/locations"
+@attribute [TenantAuthorize(TenantPermissionKeys.LocationsView)]
+@inject ITenantAdministrationService AdministrationService
+@inject ToastService ToastService
+
+<PageTitle>Locations</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Recipient Locations</p>
+			<h1>Locations</h1>
+			<p>View the locations saved for this person.</p>
+		</div>
+		<div class="toolbar">
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.LocationsCreate)">
+				<Authorized>
+					<a class="btn btn-primary" href="/app/people/@PersonId/locations/new">Add Location</a>
+				</Authorized>
+			</AuthorizeView>
+			<a class="btn btn-outline-primary" href="/app/people/@PersonId">Back to Person</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No locations have been added for this person yet.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Nickname</th>
+						<th>ZIP</th>
+						<th>Email</th>
+						<th>Phone</th>
+						<th>Assignments</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.Nickname</td>
+							<td>@item.PostalCode</td>
+							<td>@item.Email</td>
+							<td>@item.PhoneNumber</td>
+							<td>@item.AssignmentCount</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="/app/people/@PersonId/locations/@item.Id">View</a>
+									<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.LocationsDelete)">
+										<Authorized>
+											@if (item.AssignmentCount == 0)
+											{
+												<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => RemoveLocationAsync(item.Id)">Remove</button>
+											}
+											else
+											{
+												<button class="btn btn-sm btn-muted-disabled" type="button" disabled>Remove</button>
+											}
+										</Authorized>
+									</AuthorizeView>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int PersonId { get; set; }
+
+	private IReadOnlyList<LocationListItem> _items = Array.Empty<LocationListItem>();
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_items = await AdministrationService.GetLocationsAsync(PersonId);
+	}
+
+	private async Task RemoveLocationAsync(int locationId)
+	{
+		try
+		{
+			await AdministrationService.DeleteLocationAsync(locationId);
+			_items = await AdministrationService.GetLocationsAsync(PersonId);
+			ToastService.ShowSuccess("Location removed successfully.", "Removed");
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Remove failed");
+		}
+	}
+}

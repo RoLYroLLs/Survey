@@ -1,0 +1,174 @@
+@page "/app/users/invitations"
+@attribute [TenantAuthorize(TenantPermissionKeys.UsersView)]
+@inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>Invitations</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Access</p>
+			<h1>Invitations</h1>
+			<p>Review pending and historical invitations for this tenant.</p>
+		</div>
+		<div class="toolbar">
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.UsersInvite)">
+				<Authorized>
+					<a class="btn btn-primary" href="/app/users/invite">Invite User</a>
+				</Authorized>
+			</AuthorizeView>
+			<a class="btn btn-outline-primary" href="/app/users">Back to Users</a>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Invitation History</h2>
+				<p>Pending invitations can be reissued or revoked. Accepted and historical rows remain read-only.</p>
+			</div>
+			<div class="toolbar">
+				<label class="form-check mb-0">
+					<InputCheckbox class="form-check-input" @bind-Value="_includeHistory" />
+					<span>Include history</span>
+				</label>
+				<button class="btn btn-outline-primary" type="button" @onclick="LoadAsync">Refresh</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No invitations matched the current filter.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Email</th>
+						<th>Role</th>
+						<th>Status</th>
+						<th>Created By</th>
+						<th>Created</th>
+						<th>Expires</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.Email</td>
+							<td>@item.Role</td>
+							<td>@GetStatusLabel(item)</td>
+							<td>@item.CreatedByDisplayName</td>
+							<td>@item.CreatedUtc.LocalDateTime.ToString("g")</td>
+							<td>@item.ExpiresAtUtc.LocalDateTime.ToString("g")</td>
+							<td>
+								<div class="table-actions">
+									<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.UsersInvite)">
+										<Authorized>
+											@if (item.IsPending)
+											{
+												<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ReissueAsync(item.Id)">Reissue</button>
+												<button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => RevokeAsync(item.Id)">Revoke</button>
+											}
+										</Authorized>
+									</AuthorizeView>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+
+	@if (!string.IsNullOrWhiteSpace(_inviteUrl))
+	{
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Latest Invitation Link</h2>
+					<p>Copy the regenerated secure link below.</p>
+				</div>
+			</div>
+			<textarea class="form-control" rows="3" readonly>@_inviteUrl</textarea>
+			<p class="text-muted mb-0">Expires @_expiresAtLabel.</p>
+		</div>
+	}
+</div>
+
+@code {
+	private IReadOnlyList<TenantInvitationListItem> _items = Array.Empty<TenantInvitationListItem>();
+	private bool _includeHistory = true;
+	private string? _inviteUrl;
+	private string? _expiresAtLabel;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadAsync();
+	}
+
+	protected override async Task OnParametersSetAsync()
+	{
+		await LoadAsync();
+	}
+
+	private async Task LoadAsync()
+	{
+		_items = await AdministrationService.GetTenantInvitationsAsync(_includeHistory);
+	}
+
+	private async Task ReissueAsync(int invitationId)
+	{
+		try
+		{
+			var result = await AdministrationService.ReissueTenantInvitationAsync(invitationId);
+			_inviteUrl = NavigationManager.ToAbsoluteUri($"/Account/AcceptInvite?token={Uri.EscapeDataString(result.Token)}").ToString();
+			_expiresAtLabel = result.ExpiresAtUtc.ToLocalTime().ToString("f");
+			ToastService.ShowSuccess("Invitation reissued successfully.", "Invitation reissued");
+			await LoadAsync();
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Reissue failed");
+		}
+	}
+
+	private async Task RevokeAsync(int invitationId)
+	{
+		try
+		{
+			await AdministrationService.RevokeTenantInvitationAsync(invitationId);
+			ToastService.ShowSuccess("Invitation revoked successfully.", "Invitation revoked");
+			await LoadAsync();
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Revoke failed");
+		}
+	}
+
+	private static string GetStatusLabel(TenantInvitationListItem item)
+	{
+		if (item.AcceptedUtc.HasValue)
+		{
+			return $"Accepted {item.AcceptedUtc.Value.LocalDateTime:g}";
+		}
+
+		if (item.RevokedUtc.HasValue)
+		{
+			return $"Revoked {item.RevokedUtc.Value.LocalDateTime:g}";
+		}
+
+		if (item.IsExpired)
+		{
+			return "Expired";
+		}
+
+		return "Pending";
+	}
+}

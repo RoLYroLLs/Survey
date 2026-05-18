@@ -1,0 +1,189 @@
+@page "/app/reports"
+@attribute [TenantAuthorize(TenantPermissionKeys.ReportsView)]
+@inject ITenantAdministrationService AdministrationService
+
+<PageTitle>Reports</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Reporting</p>
+			<h1>Area Reports</h1>
+			<p>View response totals, goal progress, and unmapped ZIP activity.</p>
+		</div>
+		<div class="toolbar">
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+				<Authorized>
+					<a class="btn btn-outline-primary" href="admin/zip-mappings/import">Import ZIP Mappings</a>
+				</Authorized>
+			</AuthorizeView>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AreasView)">
+				<Authorized>
+					<a class="btn btn-outline-primary" href="app/areas">Manage Areas</a>
+				</Authorized>
+			</AuthorizeView>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.GoalsView)">
+				<Authorized>
+					<a class="btn btn-primary" href="app/goals">Manage Goals</a>
+				</Authorized>
+			</AuthorizeView>
+		</div>
+	</div>
+
+	@if (_report is null)
+	{
+		<div class="list-card">
+			<p class="empty-state">Loading reporting data...</p>
+		</div>
+	}
+	else
+	{
+		<div class="dashboard-grid">
+			<div class="metric-card">
+				<p class="metric-card__label">Responses</p>
+				<p class="metric-card__value">@_report.TotalResponses</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Mapped Responses</p>
+				<p class="metric-card__value">@_report.MappedResponses</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">Unmapped Responses</p>
+				<p class="metric-card__value">@_report.UnmappedResponses</p>
+			</div>
+			<div class="metric-card">
+				<p class="metric-card__label">ZIP Mapping Rows</p>
+				<p class="metric-card__value">@_report.ZipMappingCount</p>
+			</div>
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Area Counts</h2>
+					<p>View response totals grouped by area.</p>
+				</div>
+			</div>
+
+			@if (_report.AreaResponses.Count == 0)
+			{
+				<p class="empty-state">No areas are available yet.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Area</th>
+							<th>Responses</th>
+							<th>Goals</th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _report.AreaResponses)
+						{
+							<tr>
+								<td>@item.AreaName</td>
+								<td>@item.ResponseCount</td>
+								<td>@item.GoalCount</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Goal Progress</h2>
+					<p>Goals count submitted responses within their date window, optionally filtered to one survey.</p>
+				</div>
+			</div>
+
+			@if (_report.GoalProgress.Count == 0)
+			{
+				<p class="empty-state">No goals have been created yet.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Goal</th>
+							<th>Area</th>
+							<th>Survey</th>
+							<th>Window</th>
+							<th>Progress</th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _report.GoalProgress)
+						{
+							<tr>
+								<td>@item.GoalName</td>
+								<td>@(string.IsNullOrWhiteSpace(item.AreaName) ? "All Areas" : item.AreaName)</td>
+								<td>@(string.IsNullOrWhiteSpace(item.SurveyName) ? "All Surveys" : item.SurveyName)</td>
+								<td>@item.StartDate.ToString("d") - @item.EndDate.ToString("d")</td>
+								<td>@item.CompletedResponses / @item.TargetResponseCount (@item.ProgressPercent.ToString("0.0")%)</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2>Unmapped ZIPs</h2>
+					<p>View responses that could not be grouped into an area.</p>
+				</div>
+			</div>
+
+			@if (_report.UnmappedPostalCodes.Count == 0)
+			{
+				<p class="empty-state">All current responses map cleanly into a county.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>ZIP</th>
+							<th>Responses</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _report.UnmappedPostalCodes)
+						{
+							<tr>
+								<td>
+									<a href="app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">@item.PostalCode</a>
+								</td>
+								<td>
+									<a href="app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">@item.ResponseCount</a>
+								</td>
+								<td>
+									<div class="table-actions">
+										<a class="btn btn-sm btn-outline-primary" href="app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">View Responses</a>
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	}
+</div>
+
+@code {
+	private ReportingOverviewModel? _report;
+
+	protected override async Task OnInitializedAsync()
+	{
+		_report = await AdministrationService.GetReportingOverviewAsync();
+	}
+}

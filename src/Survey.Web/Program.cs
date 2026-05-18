@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Survey.Domain;
 using Survey.Infrastructure;
 using Survey.Infrastructure.Identity;
+using Survey.Infrastructure.Security;
 using Survey.ServiceDefaults;
 using Survey.Web.Components;
 using Survey.Web.Components.Account;
@@ -66,10 +67,7 @@ app.MapGet("/admin/import-samples/{entity}", (string entity) =>
 		var bytes = ImportSampleWorkbookBuilder.BuildWorkbook(definition);
 		return Results.File(bytes, ImportSampleWorkbookBuilder.ContentType, definition.FileName);
 	})
-	.RequireAuthorization(new AuthorizeAttribute
-	{
-		Roles = RoleNames.Admin
-	});
+	.RequireAuthorization(SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyView));
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();
 app.MapAdditionalIdentityEndpoints();

@@ -2,6 +2,7 @@
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JSRuntime
+@inject ITenantContextAccessor TenantContextAccessor
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 <div class="nav-shell">
@@ -10,29 +11,41 @@
 	</div>
 
 	<nav class="nav-shell__links">
-		<AuthorizeView Roles="@StaffRoles">
-			<Authorized Context="staffContext">
-				@if (IsSettingsSection)
-				{
-					<p class="nav-shell__caption">Settings</p>
-					<a class="nav-shell__back-link" href="admin">
-						<span class="nav-shell__icon" aria-hidden="true">&#x2B05;&#xFE0F;</span>
-						<span>Back</span>
-					</a>
-					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/account">
-						<span class="nav-shell__icon" aria-hidden="true">&#x1F464;</span>
-						<span>Account</span>
+		@if (IsPlatformSection)
+		{
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformAccess">
+				<Authorized Context="platformAccess">
+					<p class="nav-shell__caption">Platform</p>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin" Match="NavLinkMatch.All">
+						<span class="nav-shell__icon" aria-hidden="true">&#x1F3E2;</span>
+						<span>Home</span>
 					</NavLink>
-					<AuthorizeView Roles="@RoleNames.Admin">
-						<Authorized Context="settingsAdminContext">
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/theme" Match="NavLinkMatch.All">
-								<span class="nav-shell__icon" aria-hidden="true">&#x1F3A8;</span>
-								<span>Theme</span>
-							</NavLink>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/employees">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/users">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F6E1;&#xFE0F;</span>
-								<span>Employees</span>
+								<span>Users</span>
 							</NavLink>
+						</Authorized>
+					</AuthorizeView>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/tenants">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F3E0;</span>
+								<span>Tenants</span>
+							</NavLink>
+						</Authorized>
+					</AuthorizeView>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.AuditView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/audit">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F4DC;</span>
+								<span>Audit</span>
+							</NavLink>
+						</Authorized>
+					</AuthorizeView>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyView)">
+						<Authorized>
 							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/countries">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F30D;</span>
 								<span>Countries</span>
@@ -55,62 +68,132 @@
 							</NavLink>
 						</Authorized>
 					</AuthorizeView>
-				}
-				else
-				{
-					<AuthorizeView Roles="@RoleNames.Admin">
-						<Authorized Context="mainAdminContext">
-							<p class="nav-shell__caption">Overview</p>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin" Match="NavLinkMatch.All">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantAccess">
+						<Authorized>
+							<a class="nav-shell__back-link" href="app">
+								<span class="nav-shell__icon" aria-hidden="true">&#x2B05;&#xFE0F;</span>
+								<span>Back to Tenant</span>
+							</a>
+						</Authorized>
+					</AuthorizeView>
+				</Authorized>
+			</AuthorizeView>
+		}
+		else
+		{
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantAccess">
+				<Authorized Context="tenantAccess">
+					<p class="nav-shell__caption">Overview</p>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.DashboardView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app" Match="NavLinkMatch.All">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F4CA;</span>
 								<span>Dashboard</span>
 							</NavLink>
 						</Authorized>
 					</AuthorizeView>
+
 					<p class="nav-shell__caption">Survey Operations</p>
-					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/assignments">
-						<span class="nav-shell__icon" aria-hidden="true">&#x1F517;</span>
-						<span>Assignments</span>
-					</NavLink>
-					<AuthorizeView Roles="@RoleNames.Admin">
-						<Authorized Context="operationsAdminContext">
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/people">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/assignments">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F517;</span>
+								<span>Assignments</span>
+							</NavLink>
+						</Authorized>
+					</AuthorizeView>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.PeopleView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/people">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F465;</span>
 								<span>People</span>
 							</NavLink>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/responses">
+						</Authorized>
+					</AuthorizeView>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.ResponsesView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/responses">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F4DD;</span>
 								<span>Responses</span>
 							</NavLink>
+						</Authorized>
+					</AuthorizeView>
 
-							<p class="nav-shell__caption">Survey Builder</p>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/surveys">
+					<p class="nav-shell__caption">Survey Builder</p>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/surveys">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F9FE;</span>
 								<span>Surveys</span>
 							</NavLink>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/versions">
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/versions">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F9EC;</span>
 								<span>Versions</span>
 							</NavLink>
+						</Authorized>
+					</AuthorizeView>
 
-							<p class="nav-shell__caption">Reporting</p>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/reports">
+					<p class="nav-shell__caption">Reporting</p>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.ReportsView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/reports">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F4C8;</span>
 								<span>Reports</span>
 							</NavLink>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/goals">
+						</Authorized>
+					</AuthorizeView>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.GoalsView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/goals">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F3AF;</span>
 								<span>Goals</span>
 							</NavLink>
-							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/areas">
+						</Authorized>
+					</AuthorizeView>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AreasView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/areas">
 								<span class="nav-shell__icon" aria-hidden="true">&#x1F5FA;&#xFE0F;</span>
 								<span>Areas</span>
 							</NavLink>
 						</Authorized>
 					</AuthorizeView>
-				}
-			</Authorized>
-		</AuthorizeView>
+
+					<p class="nav-shell__caption">Admin</p>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.UsersView)">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/users">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F464;</span>
+								<span>Users</span>
+							</NavLink>
+						</Authorized>
+					</AuthorizeView>
+					@if (_accessContext.TenantRole == TenantRole.Owner)
+					{
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/geography">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F30E;</span>
+								<span>Geography</span>
+							</NavLink>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/theme">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F3A8;</span>
+								<span>Theme</span>
+							</NavLink>
+					}
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformAccess">
+						<Authorized>
+							<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin">
+								<span class="nav-shell__icon" aria-hidden="true">&#x1F6E1;&#xFE0F;</span>
+								<span>Platform Admin</span>
+							</NavLink>
+						</Authorized>
+					</AuthorizeView>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/tenants/select">
+						<span class="nav-shell__icon" aria-hidden="true">&#x1F3E2;</span>
+						<span>Switch Tenant</span>
+					</NavLink>
+				</Authorized>
+			</AuthorizeView>
+		}
 
 	</nav>
 
@@ -149,9 +232,9 @@
 					{
 						<div class="nav-shell__account-popover">
 							<p class="nav-shell__account-email">@GetAccountEmail(userContext.User)</p>
-							<AuthorizeView Roles="@StaffRoles">
+							<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantAccess">
 								<Authorized>
-									<a class="nav-shell__popover-item" href="admin/account">
+									<a class="nav-shell__popover-item" href="app/account">
 										<span class="nav-shell__icon" aria-hidden="true">&#x2699;&#xFE0F;</span>
 										<span>Settings</span>
 									</a>
@@ -180,21 +263,10 @@
 </div>
 
 @code {
-	private const string StaffRoles = $"{RoleNames.Admin},{RoleNames.Employee}";
-	private static readonly string[] AdminSettingsPrefixes =
-	[
-		"admin/account",
-		"admin/theme",
-		"admin/employees",
-		"admin/countries",
-		"admin/state-provinces",
-		"admin/counties",
-		"admin/addresses",
-		"admin/zip-mappings"
-	];
 	private string? currentUrl;
 	private bool _isAccountMenuOpen;
 	private ApplicationUser? _currentUser;
+	private CurrentAccessContext _accessContext = new();
 	private string? _accountAvatarUrl;
 	private ElementReference _accountCardElement;
 	private IJSObjectReference? _navMenuModule;
@@ -202,9 +274,9 @@
 	private bool _isOutsideClickHandlerRegistered;
 	private bool _shouldSyncOutsideClickHandler;
 
-	private bool IsSettingsSection =>
+	private bool IsPlatformSection =>
 		!string.IsNullOrWhiteSpace(currentUrl)
-		&& AdminSettingsPrefixes.Any(prefix => currentUrl.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+		&& currentUrl.StartsWith("admin", StringComparison.OrdinalIgnoreCase);
 
 	private bool HasAccountName =>
 		!string.IsNullOrWhiteSpace(_currentUser?.FirstName)
@@ -246,9 +318,13 @@
 
 	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
 	{
-		currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-		CloseAccountMenu();
-		StateHasChanged();
+		_ = InvokeAsync(async () =>
+		{
+			currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+			await LoadCurrentUserAsync();
+			CloseAccountMenu();
+			StateHasChanged();
+		});
 	}
 
 	private void ToggleAccountMenu()
@@ -294,10 +370,14 @@
 		var principal = authenticationState.User;
 		if (principal?.Identity?.IsAuthenticated != true)
 		{
+			_currentUser = null;
+			_accessContext = new();
+			_accountAvatarUrl = null;
 			return;
 		}
 
 		_currentUser = await UserManager.GetUserAsync(principal);
+		_accessContext = await TenantContextAccessor.GetCurrentAsync();
 		_accountAvatarUrl = principal.FindFirst("picture")?.Value
 			?? principal.FindFirst("avatar_url")?.Value;
 	}

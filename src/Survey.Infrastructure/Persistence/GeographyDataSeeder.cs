@@ -5,11 +5,11 @@ using System.Reflection;
 
 namespace Survey.Infrastructure.Persistence;
 
-internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
+public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 {
 	private readonly SurveyDbContext _dbContext = dbContext;
 	private const string GeographySeedKey = "geography.reference-data";
-	private const int GeographySeedVersion = 1;
+	private const int GeographySeedVersion = 2;
 
 	public async Task SeedAsync(bool forceRun = false, CancellationToken cancellationToken = default)
 	{
@@ -23,10 +23,10 @@ internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 
 		var unitedStates = await UpsertCountryAsync("United States of America", "US", "USA", cancellationToken);
 		var stateLookup = await UpsertStateProvincesAsync(unitedStates.Id, cancellationToken);
+		await UpsertUnitedStatesCountiesAsync(stateLookup, cancellationToken);
 
 		if (stateLookup.TryGetValue("FL", out var floridaId))
 		{
-			await UpsertFloridaCountiesAsync(floridaId, cancellationToken);
 			await UpsertFloridaZipCountyMappingsAsync(floridaId, cancellationToken);
 		}
 
@@ -71,11 +71,11 @@ internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		{
 			if (existingLookup.TryGetValue(definition.Code, out var existing))
 			{
-				existing.Update(countryId, definition.Name, definition.Code, "State");
+				existing.Update(countryId, definition.Name, definition.Code, definition.SubdivisionType);
 				continue;
 			}
 
-			var entity = new StateProvince(countryId, definition.Name, definition.Code, "State");
+			var entity = new StateProvince(countryId, definition.Name, definition.Code, definition.SubdivisionType);
 			_dbContext.StateProvinces.Add(entity);
 			existingLookup[definition.Code] = entity;
 		}
@@ -88,23 +88,34 @@ internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 			.ToDictionaryAsync(stateProvince => stateProvince.Code, stateProvince => stateProvince.Id, StringComparer.OrdinalIgnoreCase, cancellationToken);
 	}
 
-	private async Task UpsertFloridaCountiesAsync(int floridaStateProvinceId, CancellationToken cancellationToken)
+	private async Task UpsertUnitedStatesCountiesAsync(IReadOnlyDictionary<string, int> stateLookup, CancellationToken cancellationToken)
 	{
 		var existingLookup = await _dbContext.Counties
-			.Where(county => county.StateProvinceId == floridaStateProvinceId)
-			.ToDictionaryAsync(county => county.FipsCode, StringComparer.OrdinalIgnoreCase, cancellationToken);
+			.ToDictionaryAsync(
+				county => BuildCountyKey(county.StateProvinceId, county.FipsCode),
+				StringComparer.OrdinalIgnoreCase,
+				cancellationToken);
+		var stateNameLookup = UnitedStatesStates
+			.ToDictionary(definition => definition.Name, definition => definition.Code, StringComparer.OrdinalIgnoreCase);
 
-		foreach (var definition in FloridaCounties)
+		foreach (var definition in LoadUnitedStatesCountySeed())
 		{
-			if (existingLookup.TryGetValue(definition.FipsCode, out var existing))
+			if (!stateNameLookup.TryGetValue(definition.StateName, out var stateCode)
+				|| !stateLookup.TryGetValue(stateCode, out var stateProvinceId))
 			{
-				existing.Update(floridaStateProvinceId, definition.Name, definition.FipsCode);
+				throw new InvalidOperationException($"The state '{definition.StateName}' was not found while seeding United States counties.");
+			}
+
+			var key = BuildCountyKey(stateProvinceId, definition.FipsCode);
+			if (existingLookup.TryGetValue(key, out var existing))
+			{
+				existing.Update(stateProvinceId, definition.CountyName, definition.FipsCode);
 				continue;
 			}
 
-			var entity = new County(floridaStateProvinceId, definition.Name, definition.FipsCode);
+			var entity = new County(stateProvinceId, definition.CountyName, definition.FipsCode);
 			_dbContext.Counties.Add(entity);
-			existingLookup[definition.FipsCode] = entity;
+			existingLookup[key] = entity;
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
@@ -189,134 +200,115 @@ internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		return rows;
 	}
 
+	private static IReadOnlyList<UsCountySeedRow> LoadUnitedStatesCountySeed()
+	{
+		const string resourceName = "Survey.Infrastructure.Persistence.SeedData.UsStateCountySeed.txt";
+		using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
+			?? throw new InvalidOperationException($"The embedded seed resource '{resourceName}' was not found.");
+		using var reader = new StreamReader(stream);
+
+		var rows = new List<UsCountySeedRow>();
+		var lineIndex = 0;
+		while (!reader.EndOfStream)
+		{
+			var line = reader.ReadLine();
+			lineIndex++;
+			if (lineIndex <= 4 || string.IsNullOrWhiteSpace(line))
+			{
+				continue;
+			}
+
+			var fields = line.Split('\t', StringSplitOptions.None);
+			if (fields.Length < 4)
+			{
+				throw new InvalidOperationException($"The United States county seed row '{line}' is invalid.");
+			}
+
+			var stateFips = fields[0].Trim();
+			var countyFips = fields[1].Trim();
+			var stateName = fields[2].Trim();
+			var countyName = fields[3].Trim();
+			if (string.IsNullOrWhiteSpace(stateFips)
+				|| string.IsNullOrWhiteSpace(countyFips)
+				|| string.IsNullOrWhiteSpace(stateName)
+				|| string.IsNullOrWhiteSpace(countyName)
+				|| string.Equals(countyFips, "999", StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+
+			rows.Add(new UsCountySeedRow(
+				stateName,
+				$"{stateFips}{countyFips}",
+				countyName));
+		}
+
+		return rows;
+	}
+
 	private static string BuildZipCountyKey(string zipCode, string countyFips)
 	{
 		return $"{zipCode.Trim().ToUpperInvariant()}|{countyFips.Trim().ToUpperInvariant()}";
 	}
 
-	private static readonly IReadOnlyList<(string Code, string Name)> UnitedStatesStates =
-	[
-		("AL", "Alabama"),
-		("AK", "Alaska"),
-		("AZ", "Arizona"),
-		("AR", "Arkansas"),
-		("CA", "California"),
-		("CO", "Colorado"),
-		("CT", "Connecticut"),
-		("DE", "Delaware"),
-		("FL", "Florida"),
-		("GA", "Georgia"),
-		("HI", "Hawaii"),
-		("ID", "Idaho"),
-		("IL", "Illinois"),
-		("IN", "Indiana"),
-		("IA", "Iowa"),
-		("KS", "Kansas"),
-		("KY", "Kentucky"),
-		("LA", "Louisiana"),
-		("ME", "Maine"),
-		("MD", "Maryland"),
-		("MA", "Massachusetts"),
-		("MI", "Michigan"),
-		("MN", "Minnesota"),
-		("MS", "Mississippi"),
-		("MO", "Missouri"),
-		("MT", "Montana"),
-		("NE", "Nebraska"),
-		("NV", "Nevada"),
-		("NH", "New Hampshire"),
-		("NJ", "New Jersey"),
-		("NM", "New Mexico"),
-		("NY", "New York"),
-		("NC", "North Carolina"),
-		("ND", "North Dakota"),
-		("OH", "Ohio"),
-		("OK", "Oklahoma"),
-		("OR", "Oregon"),
-		("PA", "Pennsylvania"),
-		("RI", "Rhode Island"),
-		("SC", "South Carolina"),
-		("SD", "South Dakota"),
-		("TN", "Tennessee"),
-		("TX", "Texas"),
-		("UT", "Utah"),
-		("VT", "Vermont"),
-		("VA", "Virginia"),
-		("WA", "Washington"),
-		("WV", "West Virginia"),
-		("WI", "Wisconsin"),
-		("WY", "Wyoming")
-	];
+	private static string BuildCountyKey(int stateProvinceId, string countyFips)
+	{
+		return $"{stateProvinceId}|{countyFips.Trim().ToUpperInvariant()}";
+	}
 
-	private static readonly IReadOnlyList<(string FipsCode, string Name)> FloridaCounties =
+	private static readonly IReadOnlyList<(string Code, string Name, string SubdivisionType)> UnitedStatesStates =
 	[
-		("12001", "Alachua County"),
-		("12003", "Baker County"),
-		("12005", "Bay County"),
-		("12007", "Bradford County"),
-		("12009", "Brevard County"),
-		("12011", "Broward County"),
-		("12013", "Calhoun County"),
-		("12015", "Charlotte County"),
-		("12017", "Citrus County"),
-		("12019", "Clay County"),
-		("12021", "Collier County"),
-		("12023", "Columbia County"),
-		("12027", "DeSoto County"),
-		("12029", "Dixie County"),
-		("12031", "Duval County"),
-		("12033", "Escambia County"),
-		("12035", "Flagler County"),
-		("12037", "Franklin County"),
-		("12039", "Gadsden County"),
-		("12041", "Gilchrist County"),
-		("12043", "Glades County"),
-		("12045", "Gulf County"),
-		("12047", "Hamilton County"),
-		("12049", "Hardee County"),
-		("12051", "Hendry County"),
-		("12053", "Hernando County"),
-		("12055", "Highlands County"),
-		("12057", "Hillsborough County"),
-		("12059", "Holmes County"),
-		("12061", "Indian River County"),
-		("12063", "Jackson County"),
-		("12065", "Jefferson County"),
-		("12067", "Lafayette County"),
-		("12069", "Lake County"),
-		("12071", "Lee County"),
-		("12073", "Leon County"),
-		("12075", "Levy County"),
-		("12077", "Liberty County"),
-		("12079", "Madison County"),
-		("12081", "Manatee County"),
-		("12083", "Marion County"),
-		("12085", "Martin County"),
-		("12086", "Miami-Dade County"),
-		("12087", "Monroe County"),
-		("12089", "Nassau County"),
-		("12091", "Okaloosa County"),
-		("12093", "Okeechobee County"),
-		("12095", "Orange County"),
-		("12097", "Osceola County"),
-		("12099", "Palm Beach County"),
-		("12101", "Pasco County"),
-		("12103", "Pinellas County"),
-		("12105", "Polk County"),
-		("12107", "Putnam County"),
-		("12109", "St. Johns County"),
-		("12111", "St. Lucie County"),
-		("12113", "Santa Rosa County"),
-		("12115", "Sarasota County"),
-		("12117", "Seminole County"),
-		("12119", "Sumter County"),
-		("12121", "Suwannee County"),
-		("12123", "Taylor County"),
-		("12125", "Union County"),
-		("12127", "Volusia County"),
-		("12129", "Wakulla County"),
-		("12131", "Walton County"),
-		("12133", "Washington County")
+		("AL", "Alabama", "State"),
+		("AK", "Alaska", "State"),
+		("AZ", "Arizona", "State"),
+		("AR", "Arkansas", "State"),
+		("CA", "California", "State"),
+		("CO", "Colorado", "State"),
+		("CT", "Connecticut", "State"),
+		("DE", "Delaware", "State"),
+		("DC", "District of Columbia", "District"),
+		("FL", "Florida", "State"),
+		("GA", "Georgia", "State"),
+		("HI", "Hawaii", "State"),
+		("ID", "Idaho", "State"),
+		("IL", "Illinois", "State"),
+		("IN", "Indiana", "State"),
+		("IA", "Iowa", "State"),
+		("KS", "Kansas", "State"),
+		("KY", "Kentucky", "State"),
+		("LA", "Louisiana", "State"),
+		("ME", "Maine", "State"),
+		("MD", "Maryland", "State"),
+		("MA", "Massachusetts", "State"),
+		("MI", "Michigan", "State"),
+		("MN", "Minnesota", "State"),
+		("MS", "Mississippi", "State"),
+		("MO", "Missouri", "State"),
+		("MT", "Montana", "State"),
+		("NE", "Nebraska", "State"),
+		("NV", "Nevada", "State"),
+		("NH", "New Hampshire", "State"),
+		("NJ", "New Jersey", "State"),
+		("NM", "New Mexico", "State"),
+		("NY", "New York", "State"),
+		("NC", "North Carolina", "State"),
+		("ND", "North Dakota", "State"),
+		("OH", "Ohio", "State"),
+		("OK", "Oklahoma", "State"),
+		("OR", "Oregon", "State"),
+		("PA", "Pennsylvania", "State"),
+		("RI", "Rhode Island", "State"),
+		("SC", "South Carolina", "State"),
+		("SD", "South Dakota", "State"),
+		("TN", "Tennessee", "State"),
+		("TX", "Texas", "State"),
+		("UT", "Utah", "State"),
+		("VT", "Vermont", "State"),
+		("VA", "Virginia", "State"),
+		("WA", "Washington", "State"),
+		("WV", "West Virginia", "State"),
+		("WI", "Wisconsin", "State"),
+		("WY", "Wyoming", "State")
 	];
 
 	private sealed record FloridaZipCountySeedRow(
@@ -324,4 +316,9 @@ internal sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		string CountyFips,
 		string CountyName,
 		decimal ResidentialRatio);
+
+	private sealed record UsCountySeedRow(
+		string StateName,
+		string FipsCode,
+		string CountyName);
 }

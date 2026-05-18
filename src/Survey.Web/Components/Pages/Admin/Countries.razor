@@ -1,6 +1,6 @@
 @page "/admin/countries"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyView)]
+@inject IPlatformAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Countries</PageTitle>
@@ -14,8 +14,12 @@
 		</div>
 		<div class="toolbar">
 			<a class="btn btn-outline-primary" href="/admin/import-samples/countries">Download Sample Excel</a>
-			<a class="btn btn-outline-primary" href="admin/countries/import">Import CSV</a>
-			<a class="btn btn-primary" href="admin/countries/new">Add Country</a>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+				<Authorized>
+					<a class="btn btn-outline-primary" href="admin/countries/import">Import CSV</a>
+					<a class="btn btn-primary" href="admin/countries/new">Add Country</a>
+				</Authorized>
+			</AuthorizeView>
 		</div>
 	</div>
 

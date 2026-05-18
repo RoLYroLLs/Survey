@@ -1,0 +1,70 @@
+@page "/app/tenants/select"
+@attribute [Authorize]
+@inject ITenantContextAccessor TenantContextAccessor
+@inject NavigationManager NavigationManager
+
+<PageTitle>Select Tenant</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Access</p>
+			<h1>Select a tenant</h1>
+			<p>Choose which tenant you want to work in for this session.</p>
+		</div>
+	</div>
+
+	<div class="list-card">
+		@if (_options.Count == 0)
+		{
+			<p class="empty-state">No tenant memberships are available for this account.</p>
+		}
+		else
+		{
+			<div class="page-stack">
+				@foreach (var option in _options)
+				{
+					<div class="assignment-detail-row">
+						<div>
+							<strong>@option.TenantName</strong>
+							<div>@option.Role</div>
+						</div>
+						<div class="table-actions">
+							@if (option.IsActive)
+							{
+								<span class="btn btn-outline-primary disabled">Current</span>
+							}
+							else if (!option.IsEnabled)
+							{
+								<span class="btn btn-outline-secondary disabled">Disabled</span>
+							}
+							else
+							{
+								<button class="btn btn-primary" type="button" @onclick="() => SwitchAsync(option.MembershipId)">Use Tenant</button>
+							}
+						</div>
+					</div>
+				}
+			</div>
+		}
+	</div>
+</div>
+
+@code {
+	private IReadOnlyList<TenantMembershipOption> _options = Array.Empty<TenantMembershipOption>();
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_options = await TenantContextAccessor.GetMembershipOptionsAsync();
+		if (_options.Count == 1 && _options[0].IsEnabled && !_options[0].IsActive)
+		{
+			await SwitchAsync(_options[0].MembershipId);
+		}
+	}
+
+	private async Task SwitchAsync(int membershipId)
+	{
+		await TenantContextAccessor.SwitchActiveTenantAsync(membershipId);
+		NavigationManager.NavigateTo("/app", forceLoad: true);
+	}
+}

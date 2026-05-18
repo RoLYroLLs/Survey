@@ -1,6 +1,6 @@
 @page "/admin/state-provinces/import"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyManage)]
+@inject IPlatformAdministrationService AdministrationService
 
 <PageTitle>Import States / Territories</PageTitle>
 

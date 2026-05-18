@@ -12,6 +12,7 @@ public class StateProvince
 	public Country Country { get; private set; } = default!;
 	public ICollection<County> Counties { get; } = new List<County>();
 	public ICollection<PostalAddress> PostalAddresses { get; } = new List<PostalAddress>();
+	public ICollection<TenantVisibleStateProvince> TenantVisibility { get; } = new List<TenantVisibleStateProvince>();
 
 	private StateProvince()
 	{

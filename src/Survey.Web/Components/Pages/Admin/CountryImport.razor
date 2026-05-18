@@ -1,6 +1,6 @@
 @page "/admin/countries/import"
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize(PlatformPermissionKeys.GeographyManage)]
+@inject IPlatformAdministrationService AdministrationService
 
 <PageTitle>Import Countries</PageTitle>
 

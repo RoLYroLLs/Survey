@@ -1,0 +1,147 @@
+@page "/app/versions"
+@attribute [TenantAuthorize(TenantPermissionKeys.SurveysView)]
+@inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Versions</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Version Management</p>
+			<h1>@(ShowArchived ? "Archived Versions" : "Survey Versions")</h1>
+			<p>@(ShowArchived
+				? "Archived versions remain available for review and can be restored."
+				: "Used versions lock automatically once assignments exist. Clone an existing version to continue editing.")</p>
+		</div>
+		<div class="toolbar">
+			<a class="btn btn-outline-primary" href="@GetActiveUrl()">Active Versions</a>
+			<a class="btn btn-outline-primary" href="@GetArchivedUrl()">Archived Versions</a>
+			@if (!ShowArchived)
+			{
+				<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysCreate)">
+					<Authorized>
+						<a class="btn btn-primary" href="@GetAddUrl()">Add Version</a>
+					</Authorized>
+				</AuthorizeView>
+			}
+		</div>
+	</div>
+
+	@if (!string.IsNullOrWhiteSpace(_errorMessage))
+	{
+		<div class="inline-banner inline-banner--danger">@_errorMessage</div>
+	}
+
+	<div class="list-card">
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No versions match the current filter.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Survey</th>
+						<th>Version</th>
+						<th>Published</th>
+						<th>Archived</th>
+						<th>Locked</th>
+						<th>Sections</th>
+						<th>Assignments</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@item.SurveyName</td>
+							<td>@item.DisplayName</td>
+							<td>@(item.IsPublished ? "Yes" : "No")</td>
+							<td>@(item.IsArchived ? "Yes" : "No")</td>
+							<td>@(item.IsLocked ? "Yes" : "No")</td>
+							<td>@item.SectionCount</td>
+							<td>@item.AssignmentCount</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="@GetViewUrl(item.Id, item.SurveyDefinitionId)">View</a>
+									<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysCreate)">
+										<Authorized>
+											<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => CloneAsync(item.Id)">Clone</button>
+										</Authorized>
+									</AuthorizeView>
+									<a class="btn btn-sm btn-outline-primary" href="@($"app/sections?surveyVersionId={item.Id}&surveyDefinitionId={item.SurveyDefinitionId}")">Sections</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public int? SurveyDefinitionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public bool ShowArchived { get; set; }
+
+	private IReadOnlyList<SurveyVersionListItem> _items = Array.Empty<SurveyVersionListItem>();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_items = await AdministrationService.GetSurveyVersionsAsync(SurveyDefinitionId, ShowArchived);
+		_errorMessage = null;
+	}
+
+	private string GetAddUrl()
+	{
+		return SurveyDefinitionId.HasValue
+			? $"app/versions/new?surveyDefinitionId={SurveyDefinitionId.Value}"
+			: "app/versions/new";
+	}
+
+	private string GetActiveUrl()
+	{
+		return SurveyDefinitionId.HasValue
+			? $"app/versions?surveyDefinitionId={SurveyDefinitionId.Value}"
+			: "app/versions";
+	}
+
+	private string GetArchivedUrl()
+	{
+		return SurveyDefinitionId.HasValue
+			? $"app/versions?surveyDefinitionId={SurveyDefinitionId.Value}&showArchived=true"
+			: "app/versions?showArchived=true";
+	}
+
+	private string GetEditUrl(int versionId, int surveyDefinitionId)
+	{
+		var archived = ShowArchived.ToString().ToLowerInvariant();
+		return $"app/versions/{versionId}/edit?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}";
+	}
+
+	private string GetViewUrl(int versionId, int surveyDefinitionId)
+	{
+		var archived = ShowArchived.ToString().ToLowerInvariant();
+		return $"app/versions/{versionId}?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}";
+	}
+
+	private async Task CloneAsync(int versionId)
+	{
+		try
+		{
+			var newId = await AdministrationService.CloneSurveyVersionAsync(versionId);
+			NavigationManager.NavigateTo($"app/versions/{newId}/edit");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+}

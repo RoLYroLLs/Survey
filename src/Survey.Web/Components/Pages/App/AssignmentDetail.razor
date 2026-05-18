@@ -1,0 +1,210 @@
+@page "/app/assignments/{Id:int}"
+@attribute [TenantAuthorize(TenantPermissionKeys.AssignmentsView)]
+@inject ITenantAdministrationService AdministrationService
+@inject ToastService ToastService
+@using Microsoft.AspNetCore.Components
+
+<PageTitle>View Assignment</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Survey Assignment</p>
+			<h1>View Assignment</h1>
+			<p>View the details and current status of this assignment.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		<div class="assignment-detail-list">
+			<div class="assignment-detail-row">
+				<strong>Person</strong>
+				<span>@GetSelectedLabel(_model.PersonOptions, _model.PersonId)</span>
+			</div>
+			<div class="assignment-detail-row">
+				<strong>Location</strong>
+				<span>@GetSelectedLabel(_model.LocationOptions, _model.LocationId)</span>
+			</div>
+			<div class="assignment-detail-row">
+				<strong>Location Phone</strong>
+				<span>@GetSelectedLabel(_model.LocationPhoneOptions, _model.LocationPhoneId)</span>
+			</div>
+			<div class="assignment-detail-row">
+				<strong>Location Email</strong>
+				<span>@GetSelectedLabel(_model.LocationEmailOptions, _model.LocationEmailId)</span>
+			</div>
+			<div class="assignment-detail-row">
+				<strong>Published Survey Version</strong>
+				<span>@GetSelectedLabel(_model.SurveyVersionOptions, _model.SurveyVersionId)</span>
+			</div>
+			<div class="assignment-detail-row assignment-detail-row--token">
+				<strong>Public Token</strong>
+				<SecretInput class="form-control assignment-detail-row__secret" @bind-Value="_model.PublicToken" readonly />
+			</div>
+			<div class="assignment-detail-row">
+				<strong>Expires (UTC)</strong>
+				<span>@(_model.ExpiresAtUtc?.UtcDateTime.ToString("g") ?? "Never")</span>
+			</div>
+			<div class="assignment-detail-row">
+				<strong>Archived</strong>
+				<span>@(_model.IsArchived ? "Yes" : "No")</span>
+			</div>
+			<div class="assignment-detail-row">
+				<strong>Status</strong>
+				<span>
+					@if (_model.IsCompleted)
+					{
+						<span class="status-pill status-pill--muted">Completed</span>
+					}
+					else if (_model.IsArchived)
+					{
+						<span class="status-pill status-pill--muted">Archived</span>
+					}
+					else if (_model.IsExpired)
+					{
+						<span class="status-pill status-pill--danger">Expired</span>
+					}
+					else
+					{
+						<span class="status-pill">Editable</span>
+					}
+				</span>
+			</div>
+		</div>
+
+		<div class="form-footer">
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsEdit)">
+				<Authorized>
+					@if (_model.IsEditable)
+					{
+						<a class="btn btn-primary" href="@GetEditUrl()">Edit Assignment</a>
+					}
+					else
+					{
+						<button class="btn btn-primary" type="button" disabled>Edit Assignment</button>
+					}
+				</Authorized>
+			</AuthorizeView>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsArchive)">
+				<Authorized>
+					<button class="btn btn-outline-primary" type="button" @onclick="ToggleArchiveAsync">
+						@(_model.IsArchived ? "Unarchive" : "Archive")
+					</button>
+				</Authorized>
+			</AuthorizeView>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsFill)">
+				<Authorized>
+					@if (_model.IsFillable)
+					{
+						<a class="btn btn-outline-primary" href="/app/assignments/@Id/fill">Fill</a>
+					}
+					else
+					{
+						<button class="btn btn-muted-disabled" type="button" disabled>Fill</button>
+					}
+				</Authorized>
+			</AuthorizeView>
+			<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to Assignments</a>
+		</div>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? PersonId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public bool ShowArchived { get; set; }
+
+	[SupplyParameterFromQuery(Name = "status")]
+	public string? Status { get; set; }
+
+	private SurveyAssignmentEditModel _model = new();
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetAssignmentAsync(Id);
+	}
+
+	private static string GetSelectedLabel(IReadOnlyList<SelectOption> options, int? value)
+	{
+		return value.HasValue
+			? options.FirstOrDefault(option => int.TryParse(option.Value, out var parsed) && parsed == value.Value)?.Label ?? "-"
+			: "-";
+	}
+
+	private string GetBackUrl()
+	{
+		var queryParts = new List<string>();
+		if (ShowArchived)
+		{
+			queryParts.Add("showArchived=true");
+		}
+
+		if (!string.IsNullOrWhiteSpace(Status))
+		{
+			queryParts.Add($"status={Uri.EscapeDataString(Status)}");
+		}
+
+		if (PersonId.HasValue)
+		{
+			return queryParts.Count == 0
+				? $"/app/people/{PersonId.Value}/assignments"
+				: $"/app/people/{PersonId.Value}/assignments?{string.Join("&", queryParts)}";
+		}
+
+		return queryParts.Count == 0
+			? "/app/assignments"
+			: $"/app/assignments?{string.Join("&", queryParts)}";
+	}
+
+	private string GetEditUrl()
+	{
+		var queryParts = new List<string>();
+		if (PersonId.HasValue)
+		{
+			queryParts.Add($"personId={PersonId.Value}");
+		}
+
+		if (ShowArchived)
+		{
+			queryParts.Add("showArchived=true");
+		}
+
+		if (!string.IsNullOrWhiteSpace(Status))
+		{
+			queryParts.Add($"status={Uri.EscapeDataString(Status)}");
+		}
+
+		if (PersonId.HasValue)
+		{
+			return queryParts.Count == 0
+				? $"/app/assignments/{Id}/edit"
+				: $"/app/assignments/{Id}/edit?{string.Join("&", queryParts)}";
+		}
+
+		return queryParts.Count == 0
+			? $"/app/assignments/{Id}/edit"
+			: $"/app/assignments/{Id}/edit?{string.Join("&", queryParts)}";
+	}
+
+	private async Task ToggleArchiveAsync()
+	{
+		try
+		{
+			var isArchived = !_model.IsArchived;
+			await AdministrationService.SetAssignmentArchivedAsync(Id, isArchived);
+			_model.IsArchived = isArchived;
+			ToastService.ShowSuccess(
+				isArchived ? "Assignment archived successfully." : "Assignment restored successfully.",
+				isArchived ? "Archived" : "Restored");
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Archive failed");
+		}
+	}
+}

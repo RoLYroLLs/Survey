@@ -14,6 +14,9 @@
 
 ## Functional Boundaries
 
+- The platform now distinguishes between platform administration and tenant operations; platform/global administration lives under `/admin`, while tenant-facing operations live under `/app`.
+- Tenant-facing pages now live physically under `Components/Pages/App`, while platform/global pages live under `Components/Pages/Admin`.
+- Legacy tenant `/admin` route aliases have been removed as part of the hard cut; tenant workflows should be reachable only through `/app`.
 - Survey authoring follows `Survey -> Version -> Section -> Question -> Option`.
 - Once a survey version has an assignment, that version becomes locked for editing.
 - Public survey links identify a single assignment and can expire.
@@ -21,6 +24,20 @@
 - Archived assignments remain available for reference in admin views but are not fillable through public or staff survey flows.
 - Staff can submit on behalf of a respondent, and the saved response records both the acting employee context and the final contact snapshot used at submission time.
 - Survey responses support yes/no, single-choice, multi-select, and long-text answers.
+
+## Multi-Tenant Security Model
+
+- Multi-tenancy is treated as a backend security boundary, not a UI-only grouping.
+- Every tenant-owned record resolves against a server-side active tenant context; client-supplied tenant identifiers must not be trusted for reads or writes.
+- Users authenticate globally through `ApplicationUser`, then access tenants through `TenantMembership`.
+- Tenant membership roles are `Owner`, `Admin`, and `User`.
+- Tenant access is permission-based. Roles provide defaults, and membership-level allow/deny overrides fine-tune effective permissions.
+- Platform access is separate from tenant access. Platform administration uses platform permissions and must not imply automatic tenant access.
+- A user may belong to multiple tenants. One active tenant membership is selected server-side for the current session, and the UI provides a tenant switcher when needed.
+- Self-serve onboarding creates a tenant plus its first user atomically. The first membership becomes the initial `Owner`.
+- Tenant admins can invite users into their tenant with secure invitation tokens. Existing accounts can accept an invite after signing in, and new accounts can be created directly from the invitation flow.
+- Tenant membership management must prevent privilege escalation, disallow changing one’s own tenant role/status/permissions through normal tenant-admin flows, and block removal, disablement, or demotion of the final enabled `Owner` or the final enabled admin-capable membership.
+- Sensitive authorization denials and tenant-admin security changes should be audit logged.
 
 ## Contact And Location Model
 
@@ -56,6 +73,8 @@
 - Existing free-text best-time and contact-type values normalize into the closest supported dropdown value during save/update flows, while unchanged historical snapshots remain readable.
 - Existing response records stay readable and keep their saved contact snapshots.
 - Schema migrations must preserve older assignments while allowing nullable assignment phone/email references and the new assignment archive flag.
+- Existing single-tenant tenant-owned data must migrate into one imported default tenant so legacy records stay usable after tenant scoping is enforced.
+- Existing administrators should become platform-capable users and owner/admin members of the imported tenant; legacy staff accounts should become tenant members with safe default permissions.
 
 ## Infrastructure Choices
 
@@ -65,6 +84,9 @@
 - Database provider is selected per deployment with `Database:Provider` and `ConnectionStrings:Default`.
 - `Sqlite` is the default provider for local development and lightweight deployments.
 - `SqlServer` is supported through a separate migration assembly for production-style deployments.
+- Tenant-owned entities use server-enforced tenant scoping in the EF Core layer through tenant context, query filtering, and save-time tenant stamping/cross-tenant write rejection.
+- Multi-tenant schema support adds `Tenant`, `TenantMembership`, `TenantInvitation`, `TenantSetting`, `PlatformUserPermission`, and `AuditLog` as first-class persistence types.
+- SQLite startup repair remains part of the deployment strategy so older local databases can be brought forward safely when schema drift exists.
 - Expensive reference-data seeding should use version-tracked seed state instead of replaying the full seed pipeline on every boot.
 - Seed routines may be forced manually by configuration for one-off rebuilds, but normal reseeding should happen by incrementing the seed version for the affected routine.
 
@@ -73,6 +95,9 @@
 - The web host is structured for Azure hosting and Aspire-managed local orchestration.
 - Production should use a durable shared database and external secret storage.
 - Seed-admin settings are read from configuration so the first administrator can be bootstrapped without self-registration.
+- Tenant bootstrap should remain self-serve, while invitation delivery can use copied secure links until outbound email delivery is introduced.
+- Platform administration now exposes dedicated `/admin/users`, `/admin/tenants`, and `/admin/audit` surfaces for platform-user management, tenant oversight, and audit review.
+- Application service dependencies should stay split between `ITenantAdministrationService` and `IPlatformAdministrationService`; callers should not depend on a combined admin service contract.
 
 ## UX Notes
 
@@ -91,3 +116,17 @@
 - Forward `Tab` on a focused dropdown should preserve the current selection unless the user has actually started interacting with the option list by typing or using arrow navigation; simple tabbing through a form must not clear or replace existing dropdown values.
 - Shared searchable dropdowns should show a single chevron indicator only; component markup and Bootstrap/select styling must not combine to render duplicate chevrons.
 - Searchable dropdown menus should render as floating overlays, preserve the trigger width as a minimum, grow only as needed for visible content, track the trigger on scroll and resize, and flip above the field when there is not enough viewport space below.
+- Tenant administration should expose a `/app/users` flow for viewing users, creating invitation links, changing tenant role/status, reviewing effective permissions, and editing membership-level permission overrides.
+- Tenant administration now also exposes `/app/users/invitations` for reviewing pending/history invitation links and reissuing or revoking them safely inside the current tenant.
+- Invitation acceptance should support both existing users and newly created users, with the invited tenant becoming the active tenant after acceptance.
+- The tenant navigation should expose a visible `Platform Admin` entry point for users who also hold platform access, so platform-capable users do not have to discover `/admin` manually.
+- Tenant owners should have an `/app/geography` settings surface where they can choose which countries, states / territories, and counties their tenant can see and use.
+- Tenant geography visibility must be backend-enforced, not UI-only. Address dropdowns, area county assignment, ZIP-to-county inference, and other tenant-facing geography lookups must all respect the owner-managed visibility scope.
+- Tenant theme management is tenant-scoped and owner-only; non-owner memberships should neither see the theme action in `/app` navigation nor pass backend theme-update authorization.
+- Tenant pages may still deep-link into platform maintenance tools where no tenant-safe equivalent exists yet, but those controls should only be shown to users who also hold the required platform permission.
+- Platform reference pages that surface tenant-owned records must only offer tenant navigation when the operator's active tenant context matches the referenced tenant; otherwise, cross-tenant navigation should stay blocked in the UI and the backend.
+
+## Geography Seed Data
+
+- The platform should seed the full United States county list, including county equivalents such as the District of Columbia, Alaska boroughs / census areas, independent cities, and Louisiana parishes.
+- Florida ZIP-to-county seed data remains a separate reference dataset and should continue to load after the full county reference list is in place.

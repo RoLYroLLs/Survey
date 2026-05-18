@@ -1,5 +1,5 @@
 @page "/"
-@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITenantContextAccessor TenantContextAccessor
 @inject NavigationManager NavigationManager
 
 <PageTitle>Survey</PageTitle>
@@ -16,15 +16,16 @@
 			return;
 		}
 
-		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-		var user = authenticationState.User;
 		var target = "Account/Login";
 
-		if (user.Identity?.IsAuthenticated == true)
+		var context = await TenantContextAccessor.GetCurrentAsync();
+		if (context.IsAuthenticated)
 		{
-			target = user.IsInRole(RoleNames.Admin)
-				? "admin"
-				: "admin/assignments";
+			target = context.HasTenantAccess
+				? "app"
+				: context.PlatformPermissions.Count > 0
+					? "admin"
+					: "app/tenants/select";
 		}
 
 		NavigationManager.NavigateTo(target, forceLoad: true);

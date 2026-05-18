@@ -1,8 +1,9 @@
 namespace Survey.Domain;
 
-public class SurveyAssignment
+public class SurveyAssignment : ITenantOwned
 {
 	public int Id { get; private set; }
+	public int TenantId { get; private set; }
 	public int LocationId { get; private set; }
 	public int? LocationPhoneId { get; private set; }
 	public int? LocationEmailId { get; private set; }

@@ -1,0 +1,167 @@
+@page "/app/options/new"
+@page "/app/options/{Id:int}/edit"
+@attribute [TenantAuthorize]
+@inject ITenantAdministrationService AdministrationService
+@inject ITenantPermissionEvaluator TenantPermissionEvaluator
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>@(Id.HasValue ? "Edit Option" : "Add Option")</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Question Option</p>
+			<h1>@(Id.HasValue ? "Edit Option" : "Add Option")</h1>
+			<p>@GetHeaderDescription()</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (_model.IsLocked)
+		{
+			<div class="inline-banner mb-3">This option belongs to a locked survey version.</div>
+		}
+
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (!_model.SupportsOptions)
+		{
+			<div class="inline-banner">Options are only available for single-choice and multi-select questions.</div>
+			<div class="form-footer">
+				<a class="btn btn-outline-primary" href="@GetQuestionEditUrl()">Back to Question</a>
+				<a class="btn btn-outline-primary" href="@GetOptionsUrl()">Back to Options</a>
+			</div>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<FieldLabel Text="Question" Required />
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.SurveyQuestionId"
+										  Options="_model.SurveyQuestionOptions"
+										  Disabled="@_model.Id.HasValue" />
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Label" Required />
+						<InputText class="form-control" @bind-Value="_model.Label" disabled="@_model.IsLocked" />
+						<ValidationMessage For="@(() => _model.Label)" />
+					</div>
+					<div class="field-stack">
+						<label>Sort Order</label>
+						<InputNumber class="form-control" @bind-Value="_model.SortOrder" disabled="@_model.IsLocked" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit" disabled="@_model.IsLocked">Save Option</button>
+					<a class="btn btn-outline-primary" href="@GetQuestionEditUrl()">Back to Question</a>
+					<a class="btn btn-outline-primary" href="@GetOptionsUrl()">Back to Options</a>
+				</div>
+			</EditForm>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyQuestionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveySectionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyVersionId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? SurveyDefinitionId { get; set; }
+
+	private QuestionOptionEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
+		_model = await AdministrationService.GetQuestionOptionAsync(Id, SurveyQuestionId);
+		SurveyQuestionId ??= _model.SurveyQuestionId;
+		SurveySectionId ??= _model.SurveySectionId;
+		SurveyVersionId ??= _model.SurveyVersionId;
+		SurveyDefinitionId ??= _model.SurveyDefinitionId;
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SaveQuestionOptionAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Option saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"app/options/{savedId}?surveyQuestionId={_model.SurveyQuestionId}&surveySectionId={_model.SurveySectionId}&surveyVersionId={_model.SurveyVersionId}&surveyDefinitionId={_model.SurveyDefinitionId}");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = null;
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+
+	private string GetHeaderDescription()
+	{
+		if (string.IsNullOrWhiteSpace(_model.QuestionPrompt))
+		{
+			return "View or update an option for the selected question.";
+		}
+
+		return $"View or update an answer choice for '{_model.QuestionPrompt}'.";
+	}
+
+	private string GetOptionsUrl()
+	{
+		var surveyQuestionId = _model.SurveyQuestionId > 0 ? _model.SurveyQuestionId : SurveyQuestionId ?? 0;
+		var surveySectionId = _model.SurveySectionId > 0 ? _model.SurveySectionId : SurveySectionId ?? 0;
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetQuestionEditUrl()
+	{
+		var surveyQuestionId = _model.SurveyQuestionId > 0 ? _model.SurveyQuestionId : SurveyQuestionId ?? 0;
+		var surveySectionId = _model.SurveySectionId > 0 ? _model.SurveySectionId : SurveySectionId ?? 0;
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = Id.HasValue
+			? TenantPermissionKeys.SurveysEdit
+			: TenantPermissionKeys.SurveysCreate;
+		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
+	}
+}

@@ -2,8 +2,9 @@
 @page "/admin/addresses/{Id:int}"
 @page "/admin/addresses/{Id:int}/edit"
 @implements IDisposable
-@attribute [Authorize(Roles = RoleNames.Admin)]
-@inject ISurveyAdministrationService AdministrationService
+@attribute [PlatformAuthorize]
+@inject IPlatformAdministrationService AdministrationService
+@inject IPlatformPermissionEvaluator PlatformPermissionEvaluator
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
@@ -62,7 +63,11 @@
 				</section>
 
 				<div class="form-footer">
-					<a class="btn btn-primary" href="/admin/addresses/@Id/edit">Edit Address</a>
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
+						<Authorized>
+							<a class="btn btn-primary" href="/admin/addresses/@Id/edit">Edit Address</a>
+						</Authorized>
+					</AuthorizeView>
 					<a class="btn btn-outline-primary" href="admin/addresses">Back to Addresses</a>
 				</div>
 			</div>
@@ -155,6 +160,11 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
+		if (!await EnsurePageAccessAsync())
+		{
+			return;
+		}
+
 		_model = await AdministrationService.GetPostalAddressAsync(Id);
 		_selectedCountyId = _model.CountyId?.ToString();
 		_errorMessage = null;
@@ -314,6 +324,20 @@
 		}
 
 		return countryLabel;
+	}
+
+	private async Task<bool> EnsurePageAccessAsync()
+	{
+		var permissionKey = IsViewMode
+			? PlatformPermissionKeys.GeographyView
+			: PlatformPermissionKeys.GeographyManage;
+		if (await PlatformPermissionEvaluator.HasPermissionAsync(permissionKey))
+		{
+			return true;
+		}
+
+		NavigationManager.NavigateTo("/Account/AccessDenied", true);
+		return false;
 	}
 
 	public void Dispose()

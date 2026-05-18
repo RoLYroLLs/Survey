@@ -1,0 +1,53 @@
+@page "/app/account"
+@attribute [TenantAuthorize]
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+
+<PageTitle>Account</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Settings</p>
+			<h1>Account</h1>
+			<p>Review the signed-in account that is currently using the survey platform.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (_user is null)
+		{
+			<div class="inline-banner inline-banner--danger">The signed-in account could not be loaded.</div>
+		}
+		else
+		{
+			<div class="page-stack">
+				<div>
+					<h2>@_user.DisplayName</h2>
+					<p class="helper-copy">This settings area will eventually include broader account-management tools.</p>
+				</div>
+				<div class="field-stack">
+					<label>Email Address</label>
+					<div class="form-control">@(_user.Email ?? "No email address found.")</div>
+				</div>
+				<div class="field-stack">
+					<label>User Name</label>
+					<div class="form-control">@(_user.UserName ?? "No user name found.")</div>
+				</div>
+				<div class="form-footer">
+					<a class="btn btn-outline-primary" href="Account/Manage">Open Full Account Management</a>
+				</div>
+			</div>
+		}
+	</div>
+</div>
+
+@code {
+	private ApplicationUser? _user;
+
+	protected override async Task OnInitializedAsync()
+	{
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		_user = await UserManager.GetUserAsync(authenticationState.User);
+	}
+}

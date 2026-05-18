@@ -1,0 +1,104 @@
+@page "/admin/tenants"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.TenantsView)]
+@inject IPlatformAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Tenants</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Platform Oversight</p>
+			<h1>Tenants</h1>
+			<p>Review tenant membership health, pending invitations, and overall usage.</p>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Tenant Directory</h2>
+				<p>Search by tenant name or slug.</p>
+			</div>
+			<div class="toolbar">
+				<input class="form-control" placeholder="Search tenants" @bind="_searchText" />
+				<button class="btn btn-outline-primary" type="button" @onclick="ApplySearch">Search</button>
+				<button class="btn btn-outline-primary" type="button" @onclick="ClearSearch">Clear</button>
+			</div>
+		</div>
+
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No tenants matched the current search.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Tenant</th>
+						<th>Members</th>
+						<th>Enabled</th>
+						<th>Owners</th>
+						<th>Pending Invites</th>
+						<th>Updated</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>
+								<div>@item.Name</div>
+								<div class="text-muted">@item.Slug</div>
+							</td>
+							<td>@item.MembershipCount</td>
+							<td>@item.EnabledMembershipCount</td>
+							<td>@item.OwnerCount</td>
+							<td>@item.PendingInvitationCount</td>
+							<td>@item.UpdatedUtc.LocalDateTime.ToString("g")</td>
+							<td>
+								<div class="table-actions">
+									<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsOversight)">
+										<Authorized>
+											<a class="btn btn-sm btn-outline-primary" href="/admin/tenants/@item.Id">View</a>
+										</Authorized>
+									</AuthorizeView>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	private IReadOnlyList<PlatformTenantListItem> _items = Array.Empty<PlatformTenantListItem>();
+	private string _searchText = string.Empty;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_searchText = Search ?? string.Empty;
+		_items = await AdministrationService.GetPlatformTenantsAsync(Search);
+	}
+
+	private void ApplySearch()
+	{
+		var url = string.IsNullOrWhiteSpace(_searchText)
+			? "/admin/tenants"
+			: $"/admin/tenants?search={Uri.EscapeDataString(_searchText)}";
+		NavigationManager.NavigateTo(url);
+	}
+
+	private void ClearSearch()
+	{
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo("/admin/tenants");
+	}
+}
