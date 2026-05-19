@@ -183,11 +183,7 @@ public sealed partial class SurveyApplicationService
 				mapping.StateCode.ToUpper().Contains(term));
 		}
 
-		var itemsQuery = query
-			.OrderBy(mapping => mapping.ZipCode)
-			.ThenByDescending(mapping => mapping.ResidentialRatio)
-			.ThenBy(mapping => mapping.CountyName)
-			.ThenBy(mapping => mapping.Id)
+		var items = await query
 			.Select(mapping => new ZipCountyMappingListItem
 			{
 				Id = mapping.Id,
@@ -196,7 +192,8 @@ public sealed partial class SurveyApplicationService
 				CountyName = mapping.CountyName,
 				StateCode = mapping.StateCode,
 				ResidentialRatio = mapping.ResidentialRatio
-			});
+			})
+			.ToListAsync(cancellationToken);
 
 		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
 		{
@@ -206,8 +203,20 @@ public sealed partial class SurveyApplicationService
 			["state"] = [nameof(ZipCountyMappingListItem.StateCode)],
 			["ratio"] = [nameof(ZipCountyMappingListItem.ResidentialRatio)]
 		};
+		var orderedItems = items
+			.OrderBy(item => item.ZipCode)
+			.ThenByDescending(item => item.ResidentialRatio)
+			.ThenBy(item => item.CountyName)
+			.ThenBy(item => item.Id)
+			.AsQueryable();
+		var normalizedRequest = NormalizePagedQuery(request);
+		var sortedItems = ApplyRequestedSorts(orderedItems, request, sortMap, nameof(ZipCountyMappingListItem.Id)).ToList();
+		var pagedItems = sortedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
 
-		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(ZipCountyMappingListItem.Id), cancellationToken);
+		return CreatePagedResult(pagedItems, sortedItems.Count, normalizedRequest.Offset);
 	}
 
 	public async Task<ZipCountyMappingEditModel> GetZipCountyMappingAsync(int? id, CancellationToken cancellationToken = default)
