@@ -1,4 +1,5 @@
 @page "/"
+@layout Layout.PublicLayout
 @using Microsoft.EntityFrameworkCore
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ITenantContextAccessor TenantContextAccessor
@@ -7,11 +8,209 @@
 
 <PageTitle>Survey</PageTitle>
 
-<div class="list-card">
-	<p class="empty-state">Redirecting...</p>
-</div>
+@if (_isLoading)
+{
+	<div class="marketing-loading">
+		<p class="eyebrow">Survey</p>
+		<h1>Loading...</h1>
+	</div>
+}
+else
+{
+	<div class="marketing-page">
+		<section class="marketing-hero">
+			<div class="marketing-hero__content">
+				<p class="marketing-kicker">Survey outreach, assignment, and reporting in one tenant-safe workspace</p>
+				<h1>Launch surveys faster, follow every response, and keep each tenant isolated by design.</h1>
+				<p class="marketing-copy">
+					Survey helps teams organize people, assign survey links, review submissions, and measure goals without mixing customer data.
+					Platform admins control global themes and shared configuration, while tenant owners manage their own workspace.
+				</p>
+				<div class="marketing-actions">
+					<a class="btn btn-primary btn-lg" href="/Account/Register">Create Account</a>
+					<a class="btn btn-outline-primary btn-lg" href="/pricing">View Pricing</a>
+				</div>
+				<div class="marketing-proof">
+					<span>Multi-tenant security model</span>
+					<span>Invite-based collaboration</span>
+					<span>Response reporting and goals</span>
+				</div>
+			</div>
+			<div class="marketing-mockup">
+				<div class="marketing-window">
+					<div class="marketing-window__topbar">
+						<div class="marketing-window__brand">
+							<OutlineIcon Name="surveys" CssClass="marketing-window__brand-icon" />
+							<span>Survey operations</span>
+						</div>
+						<div class="marketing-window__status">Tenant: Northshore Outreach</div>
+					</div>
+					<div class="marketing-window__body">
+						<div class="marketing-stats">
+							<article class="marketing-stat">
+								<span>People</span>
+								<strong>2,148</strong>
+							</article>
+							<article class="marketing-stat">
+								<span>Active assignments</span>
+								<strong>684</strong>
+							</article>
+							<article class="marketing-stat">
+								<span>Responses</span>
+								<strong>1,109</strong>
+							</article>
+						</div>
+						<div class="marketing-board">
+							<section class="marketing-panel">
+								<header>
+									<h2>Assignment queue</h2>
+									<span>Ready to send</span>
+								</header>
+								<ul class="marketing-list">
+									<li>
+										<div>
+											<strong>Spring community pulse</strong>
+											<span>Maria Hernandez</span>
+										</div>
+										<em>Queued</em>
+									</li>
+									<li>
+										<div>
+											<strong>Family resource follow-up</strong>
+											<span>James Carter</span>
+										</div>
+										<em>Sent</em>
+									</li>
+									<li>
+										<div>
+											<strong>Volunteer retention check-in</strong>
+											<span>Ava Morgan</span>
+										</div>
+										<em>Responded</em>
+									</li>
+								</ul>
+							</section>
+							<section class="marketing-panel marketing-panel--accent">
+								<header>
+									<h2>Goal progress</h2>
+									<span>Quarter to date</span>
+								</header>
+								<div class="marketing-progress">
+									<div class="marketing-progress__row">
+										<span>North region completions</span>
+										<strong>72%</strong>
+									</div>
+									<div class="marketing-progress__bar">
+										<span style="width:72%"></span>
+									</div>
+									<div class="marketing-progress__row">
+										<span>Spanish-language responses</span>
+										<strong>58%</strong>
+									</div>
+									<div class="marketing-progress__bar">
+										<span style="width:58%"></span>
+									</div>
+								</div>
+							</section>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="marketing-section">
+			<div class="marketing-section__intro">
+				<p class="eyebrow">What the app does</p>
+				<h2>Built for the full survey lifecycle</h2>
+				<p>Everything centers around getting the right survey to the right person, then making the response easy to act on.</p>
+			</div>
+			<div class="marketing-feature-grid">
+				<article class="marketing-feature-card">
+					<OutlineIcon Name="people" CssClass="marketing-feature-card__icon" />
+					<h3>Organize people and locations</h3>
+					<p>Track the people you serve, their contact details, and the locations tied to each outreach effort.</p>
+				</article>
+				<article class="marketing-feature-card">
+					<OutlineIcon Name="assignments" CssClass="marketing-feature-card__icon" />
+					<h3>Send assignments with confidence</h3>
+					<p>Create secure survey links, control expiry, and follow assignment status without leaving the workspace.</p>
+				</article>
+				<article class="marketing-feature-card">
+					<OutlineIcon Name="responses" CssClass="marketing-feature-card__icon" />
+					<h3>Review submissions quickly</h3>
+					<p>See who responded, what changed, and where follow-up is needed before reporting deadlines arrive.</p>
+				</article>
+				<article class="marketing-feature-card">
+					<OutlineIcon Name="reports" CssClass="marketing-feature-card__icon" />
+					<h3>Report against areas and goals</h3>
+					<p>Group results by geography, compare progress, and keep tenant-specific reporting separated from everyone else.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="marketing-section marketing-section--workflow">
+			<div class="marketing-section__intro">
+				<p class="eyebrow">How teams use it</p>
+				<h2>A practical flow from setup to action</h2>
+			</div>
+			<div class="marketing-steps">
+				<article class="marketing-step">
+					<span class="marketing-step__number">1</span>
+					<h3>Build a survey once</h3>
+					<p>Create a survey and version structure that can be reused across outreach campaigns.</p>
+				</article>
+				<article class="marketing-step">
+					<span class="marketing-step__number">2</span>
+					<h3>Prepare people to contact</h3>
+					<p>Load or manage the people, locations, and areas your tenant cares about.</p>
+				</article>
+				<article class="marketing-step">
+					<span class="marketing-step__number">3</span>
+					<h3>Assign and send</h3>
+					<p>Issue links, track expiry, and manage outreach from one assignment queue.</p>
+				</article>
+				<article class="marketing-step">
+					<span class="marketing-step__number">4</span>
+					<h3>Measure response and progress</h3>
+					<p>Review submissions, compare against goals, and report on the areas that matter.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="marketing-section marketing-section--pricing">
+			<div class="marketing-section__intro">
+				<p class="eyebrow">Pricing preview</p>
+				<h2>Choose the tier that fits your rollout</h2>
+				<p>This sample pricing model gives platform admins a simple way to position the product for small teams, growing departments, and enterprise programs.</p>
+			</div>
+			<div class="marketing-pricing-preview">
+				<article class="marketing-price-card">
+					<h3>Starter</h3>
+					<strong>$79<span>/month</span></strong>
+					<p>One tenant, lightweight survey operations, and the essentials to start sending surveys fast.</p>
+				</article>
+				<article class="marketing-price-card marketing-price-card--featured">
+					<div class="marketing-price-card__badge">Most popular</div>
+					<h3>Growth</h3>
+					<strong>$249<span>/month</span></strong>
+					<p>Multiple admins, reporting workflows, and room to scale assignments across larger teams.</p>
+				</article>
+				<article class="marketing-price-card">
+					<h3>Enterprise</h3>
+					<strong>Custom</strong>
+					<p>Platform oversight, advanced rollout support, and room for complex tenant and governance needs.</p>
+				</article>
+			</div>
+			<div class="marketing-actions">
+				<a class="btn btn-outline-primary btn-lg" href="/pricing">Open Full Pricing Mockup</a>
+			</div>
+		</section>
+	</div>
+}
 
 @code {
+	private bool _isLoading = true;
+
 	protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
 		if (!firstRender)
@@ -25,11 +224,10 @@
 			return;
 		}
 
-		var target = "Account/Login";
-
 		var context = await TenantContextAccessor.GetCurrentAsync();
 		if (context.IsAuthenticated)
 		{
+			var target = "Account/Login";
 			if (context.HasTenantAccess)
 			{
 				target = "app";
@@ -54,8 +252,12 @@
 						: "Account/CreateTenant";
 				}
 			}
+
+			NavigationManager.NavigateTo(target, forceLoad: true);
+			return;
 		}
 
-		NavigationManager.NavigateTo(target, forceLoad: true);
+		_isLoading = false;
+		StateHasChanged();
 	}
 }
