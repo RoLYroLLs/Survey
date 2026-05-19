@@ -1,4 +1,5 @@
 @page "/Account/CreateTenant"
+@page "/admin/tenants/new"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Components.Authorization
@@ -15,9 +16,11 @@
 <PageTitle>Create Tenant</PageTitle>
 
 <div class="status-card narrow-card">
-	<p class="eyebrow">Step 4 of 4</p>
-	<h1>Name your tenant</h1>
-	<p class="mb-4">Your first tenant is where you’ll manage people, assignments, responses, and reporting.</p>
+	<p class="eyebrow">@(_hasExistingTenantMembership ? "Tenant Setup" : "Step 4 of 4")</p>
+	<h1>@(_hasExistingTenantMembership ? "Create another tenant" : "Name your tenant")</h1>
+	<p class="mb-4">@(_hasExistingTenantMembership
+		? "Create another tenant for yourself and you'll become its owner automatically."
+		: "Your first tenant is where you'll manage people, assignments, responses, and reporting.")</p>
 
 	@if (!string.IsNullOrWhiteSpace(_errorMessage))
 	{
@@ -52,7 +55,7 @@
 	private bool _isSaving;
 	private string? _errorMessage;
 	private ApplicationUser? _user;
-	private bool _canCreateAdditionalTenants;
+	private bool _hasExistingTenantMembership;
 
 	[SupplyParameterFromForm]
 	private CreateTenantModel Input { get; set; } = default!;
@@ -72,16 +75,11 @@
 			return;
 		}
 
-		_canCreateAdditionalTenants = _user.IsPlatformSuperAdmin
-			|| (_user.IsPlatformUserEnabled && await DbContext.PlatformUserPermissions.AsNoTracking().AnyAsync(permission => permission.UserId == _user.Id));
+		_hasExistingTenantMembership = await DbContext.TenantMemberships
+			.AsNoTracking()
+			.AnyAsync(membership => membership.UserId == _user.Id);
 
-		if (_user.ActiveTenantMembershipId.HasValue && !_canCreateAdditionalTenants)
-		{
-			RedirectManager.RedirectTo(GetPostCreateUrl());
-			return;
-		}
-
-		if (!_user.HasCompletedSelfSignupProfile())
+		if (!_hasExistingTenantMembership && !_user.HasCompletedSelfSignupProfile())
 		{
 			RedirectManager.RedirectTo(BuildProfileUrl());
 			return;
@@ -89,7 +87,7 @@
 
 		if (string.IsNullOrWhiteSpace(Input.TenantName))
 		{
-			Input.TenantName = "My First Tenant";
+			Input.TenantName = _hasExistingTenantMembership ? "My New Tenant" : "Default Tenant";
 		}
 
 		_isReady = true;
@@ -110,15 +108,18 @@
 
 		try
 		{
-			var membershipCount = await DbContext.TenantMemberships
+			var tenant = new Tenant(Input.TenantName);
+			var duplicateOwnedTenantExists = await DbContext.TenantMemberships
 				.AsNoTracking()
-				.CountAsync(membership => membership.UserId == _user.Id);
-			if (membershipCount > 0 && !_canCreateAdditionalTenants)
+				.AnyAsync(
+					membership => membership.UserId == _user.Id
+						&& membership.Role == TenantRole.Owner
+						&& membership.Tenant.Slug == tenant.Slug);
+			if (duplicateOwnedTenantExists)
 			{
-				throw new InvalidOperationException("This account already belongs to a tenant.");
+				throw new InvalidOperationException("You already own a tenant with that name. Please choose a different tenant name.");
 			}
 
-			var tenant = new Tenant(Input.TenantName);
 			DbContext.Tenants.Add(tenant);
 			await DbContext.SaveChangesAsync();
 
@@ -181,6 +182,6 @@
 	{
 		[Required]
 		[StringLength(200)]
-		public string TenantName { get; set; } = "My First Tenant";
+		public string TenantName { get; set; } = "Default Tenant";
 	}
 }

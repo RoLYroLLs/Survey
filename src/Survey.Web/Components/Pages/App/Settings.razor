@@ -1,0 +1,108 @@
+@page "/app/tenant-details"
+@attribute [TenantAuthorize]
+@using System.ComponentModel.DataAnnotations
+@inject ITenantAdministrationService AdministrationService
+@inject ITenantContextAccessor TenantContextAccessor
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>Tenant Details</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tenant Settings</p>
+			<h1>Tenant Details</h1>
+			<p>Update the tenant record. Additional tenant-level details can be added here over time.</p>
+		</div>
+	</div>
+
+	<div class="form-card">
+		<div class="page-header">
+			<div>
+				<h2>Tenant Details</h2>
+				<p>Owners and admins can rename the tenant here. Future tier and billing-related tenant fields can live in this section later.</p>
+			</div>
+			@if (_model.UpdatedUtc.HasValue)
+			{
+				<span class="status-pill status-pill--muted">Updated @_model.UpdatedUtc.Value.LocalDateTime.ToString("g")</span>
+			}
+		</div>
+
+		<EditForm Model="_form" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+			<ValidationSummary class="text-danger" />
+			<div class="field-stack">
+				<label for="tenant-name">Tenant name</label>
+				<InputText id="tenant-name" class="form-control form-control-lg" @bind-Value="_form.TenantName" />
+			</div>
+
+			<div class="form-footer mt-4">
+				<button class="btn btn-primary" type="submit" disabled="@_isSaving">Save Tenant Details</button>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	private SiteSettingsEditModel _model = new();
+	private SettingsFormModel _form = new();
+	private bool _isSaving;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		var accessContext = await TenantContextAccessor.GetCurrentAsync();
+		if (accessContext.TenantRole is not TenantRole.Owner and not TenantRole.Admin)
+		{
+			NavigationManager.NavigateTo("/Account/AccessDenied", true);
+			return;
+		}
+
+		_model = await AdministrationService.GetSiteSettingsAsync();
+		_form = new SettingsFormModel
+		{
+			TenantName = _model.TenantName,
+			ThemePresetKey = _model.ThemePresetKey
+		};
+	}
+
+	private async Task SaveAsync()
+	{
+		if (_isSaving)
+		{
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+			_model.TenantName = _form.TenantName;
+			_model.ThemePresetKey = _form.ThemePresetKey;
+			await AdministrationService.SaveSiteSettingsAsync(_model);
+			ToastService.ShowSuccess("Tenant settings were updated.", "Saved");
+			_model = await AdministrationService.GetSiteSettingsAsync();
+			_form = new SettingsFormModel
+			{
+				TenantName = _model.TenantName,
+				ThemePresetKey = _model.ThemePresetKey
+			};
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private sealed class SettingsFormModel
+	{
+		[Required]
+		[StringLength(200)]
+		public string TenantName { get; set; } = string.Empty;
+
+		public string ThemePresetKey { get; set; } = SiteThemePresetCatalog.DefaultPresetKey;
+	}
+}

@@ -1,17 +1,15 @@
 ﻿@inherits LayoutComponentBase
 @layout Survey.Web.Components.Layout.MainLayout
 
-<h1>Manage your account</h1>
+<div class="page-stack account-manage">
+	<div class="page-header">
+		<div>
+			<h1>Account settings</h1>
+			<p>Manage your profile, sign-in methods, security preferences, and personal data from one place.</p>
+		</div>
+	</div>
 
-<div>
-    <h2>Change your account settings</h2>
-    <hr />
-    <div class="row">
-        <div class="col-lg-3">
-            <ManageNavMenu />
-        </div>
-        <div class="col-lg-9">
-            @Body
-        </div>
-    </div>
+	<section class="form-card account-manage__body">
+		@Body
+	</section>
 </div>

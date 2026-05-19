@@ -43,5 +43,7 @@ public interface IPlatformAdministrationService
 	Task DeletePlatformThemeAsync(int id, CancellationToken cancellationToken = default);
 	Task<PagedResult<PlatformTenantListItem>> GetPlatformTenantsAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default);
 	Task<PlatformTenantDetailModel> GetPlatformTenantAsync(int tenantId, CancellationToken cancellationToken = default);
+	Task<PlatformTenantEditModel> GetPlatformTenantEditAsync(int tenantId, CancellationToken cancellationToken = default);
+	Task SavePlatformTenantAsync(PlatformTenantEditModel model, CancellationToken cancellationToken = default);
 	Task<PagedResult<AuditLogListItem>> GetAuditLogsAsync(PagedQuery request, string? plane = null, int? tenantId = null, bool? succeeded = null, string? search = null, CancellationToken cancellationToken = default);
 }

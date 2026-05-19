@@ -13,10 +13,15 @@ public class SiteAppearanceModel
 public class SiteSettingsEditModel
 {
 	[Required]
+	[StringLength(200)]
+	public string TenantName { get; set; } = string.Empty;
+
+	[Required]
 	public string ThemePresetKey { get; set; } = SiteThemePresetCatalog.DefaultPresetKey;
 
 	public DateTimeOffset? UpdatedUtc { get; set; }
 	public IReadOnlyList<ThemePresetOption> PresetOptions { get; set; } = Array.Empty<ThemePresetOption>();
+	public bool CanManageTheme { get; set; }
 }
 
 public class ThemePresetOption

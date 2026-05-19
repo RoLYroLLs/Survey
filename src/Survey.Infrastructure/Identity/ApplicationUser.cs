@@ -36,6 +36,8 @@ public class ApplicationUser : IdentityUser
 
 	public bool IsPlatformUserEnabled { get; set; }
 
+	public bool IsBootstrapPlatformOwner { get; set; }
+
 	[StringLength(16)]
 	public string? AvatarColorHex { get; set; }
 

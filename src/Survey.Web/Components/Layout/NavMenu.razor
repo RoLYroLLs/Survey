@@ -1,10 +1,53 @@
 @implements IDisposable
 @inject NavigationManager NavigationManager
 @inject ITenantContextAccessor TenantContextAccessor
+@inject Microsoft.AspNetCore.Identity.SignInManager<ApplicationUser> SignInManager
 
 <div class="nav-shell">
 	<nav class="nav-shell__links">
-		@if (IsPlatformSection)
+		@if (IsAccountManageSection)
+		{
+			<p class="nav-shell__caption">Account</p>
+			<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage" Match="NavLinkMatch.All">
+				<span class="nav-shell__icon"><OutlineIcon Name="settings" CssClass="nav-shell__icon-svg" /></span>
+				<span>Profile</span>
+			</NavLink>
+			<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage/Email">
+				<span class="nav-shell__icon"><OutlineIcon Name="email" CssClass="nav-shell__icon-svg" /></span>
+				<span>Email</span>
+			</NavLink>
+			<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage/ChangePassword">
+				<span class="nav-shell__icon"><OutlineIcon Name="password" CssClass="nav-shell__icon-svg" /></span>
+				<span>Password</span>
+			</NavLink>
+			@if (_hasExternalLogins)
+			{
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage/ExternalLogins">
+					<span class="nav-shell__icon"><OutlineIcon Name="platform" CssClass="nav-shell__icon-svg" /></span>
+					<span>External logins</span>
+				</NavLink>
+			}
+			<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage/TwoFactorAuthentication">
+				<span class="nav-shell__icon"><OutlineIcon Name="security" CssClass="nav-shell__icon-svg" /></span>
+				<span>Two-factor authentication</span>
+			</NavLink>
+			<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage/Passkeys">
+				<span class="nav-shell__icon"><OutlineIcon Name="passkey" CssClass="nav-shell__icon-svg" /></span>
+				<span>Passkeys</span>
+			</NavLink>
+			<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage/PersonalData">
+				<span class="nav-shell__icon"><OutlineIcon Name="profile" CssClass="nav-shell__icon-svg" /></span>
+				<span>Personal data</span>
+			</NavLink>
+			@if (CanSeeBackToTenant)
+			{
+				<a class="nav-shell__back-link" href="app">
+					<span class="nav-shell__icon"><OutlineIcon Name="back" CssClass="nav-shell__icon-svg" /></span>
+					<span>Back to Tenant</span>
+				</a>
+			}
+		}
+		else if (IsPlatformSection)
 		{
 			@if (CanSeePlatformSection)
 			{
@@ -169,12 +212,22 @@
 					<span>Users</span>
 				</NavLink>
 			}
-			@if (CanSeeOwnerSettings)
+			@if (CanSeeTenantSettings)
 			{
 				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/geography">
 					<span class="nav-shell__icon"><OutlineIcon Name="geography" CssClass="nav-shell__icon-svg" /></span>
 					<span>Geography</span>
 				</NavLink>
+			}
+			@if (CanSeeTenantSettings)
+			{
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/tenant-details">
+					<span class="nav-shell__icon"><OutlineIcon Name="tenant" CssClass="nav-shell__icon-svg" /></span>
+					<span>Tenant Details</span>
+				</NavLink>
+			}
+			@if (CanSeeTenantSettings)
+			{
 				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="app/theme">
 					<span class="nav-shell__icon"><OutlineIcon Name="theme" CssClass="nav-shell__icon-svg" /></span>
 					<span>Theme</span>
@@ -191,10 +244,15 @@
 @code {
 	private string _currentUrl = string.Empty;
 	private CurrentAccessContext _accessContext = new();
+	private bool _hasExternalLogins;
 
 	private bool IsPlatformSection =>
 		!string.IsNullOrWhiteSpace(_currentUrl)
 		&& _currentUrl.StartsWith("admin", StringComparison.OrdinalIgnoreCase);
+
+	private bool IsAccountManageSection =>
+		!string.IsNullOrWhiteSpace(_currentUrl)
+		&& _currentUrl.StartsWith("Account/Manage", StringComparison.OrdinalIgnoreCase);
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -216,6 +274,7 @@
 	private async Task LoadContextAsync()
 	{
 		_accessContext = await TenantContextAccessor.GetCurrentAsync();
+		_hasExternalLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync()).Any();
 	}
 
 	private bool CanSeePlatformHome => _accessContext.IsPlatformUserEnabled && _accessContext.PlatformPermissions.Count > 0;
@@ -237,12 +296,13 @@
 	private bool CanSeeAreas => HasTenantPermission(TenantPermissionKeys.AreasView);
 	private bool CanSeeUsers => HasTenantPermission(TenantPermissionKeys.UsersView);
 	private bool CanSeeOwnerSettings => _accessContext.TenantRole == TenantRole.Owner;
+	private bool CanSeeTenantSettings => _accessContext.TenantRole is TenantRole.Owner or TenantRole.Admin;
 
 	private bool CanSeeOverviewSection => CanSeeDashboard;
 	private bool CanSeeSurveyOperationsSection => CanSeeAssignments || CanSeePeople || CanSeeResponses;
 	private bool CanSeeSurveyBuilderSection => CanSeeSurveyBuilder;
 	private bool CanSeeReportingSection => CanSeeReports || CanSeeGoals || CanSeeAreas;
-	private bool CanSeeAdminSection => CanSeeUsers || CanSeeOwnerSettings;
+	private bool CanSeeAdminSection => CanSeeUsers || CanSeeTenantSettings;
 
 	private bool HasTenantPermission(string permissionKey)
 	{

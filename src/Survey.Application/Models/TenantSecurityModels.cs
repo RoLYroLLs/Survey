@@ -25,6 +25,7 @@ public sealed class TenantMembershipOption
 	public int MembershipId { get; init; }
 	public int TenantId { get; init; }
 	public string TenantName { get; init; } = string.Empty;
+	public string OwnerDisplayName { get; init; } = string.Empty;
 	public TenantRole Role { get; init; }
 	public bool IsEnabled { get; init; }
 	public bool IsActive { get; init; }

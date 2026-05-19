@@ -31,7 +31,7 @@
 						<a class="btn btn-outline-primary" href="/admin/tenants">Open Tenants</a>
 						<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
 							<Authorized Context="tenantCreateAccess">
-								<a class="btn btn-outline-primary" href="/Account/CreateTenant?returnUrl=%2Fadmin">Create Tenant</a>
+								<a class="btn btn-outline-primary" href="/admin/tenants/new">Create Tenant</a>
 							</Authorized>
 						</AuthorizeView>
 					</div>

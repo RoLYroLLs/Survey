@@ -12,7 +12,7 @@
 		<div>
 			<p class="eyebrow">Tenant Settings</p>
 			<h1>Theme</h1>
-			<p>Choose from the global themes that platform administration has made available to this tenant.</p>
+			<p>Choose the global platform-managed theme used across this tenant.</p>
 		</div>
 	</div>
 
@@ -20,7 +20,7 @@
 		<div class="page-header">
 			<div>
 				<h2>Color System</h2>
-				<p>Select from the available platform-managed themes for this tenant.</p>
+				<p>Owners and admins can select the theme used by everyone in this tenant.</p>
 			</div>
 			@if (_model.UpdatedUtc.HasValue)
 			{
@@ -28,71 +28,84 @@
 			}
 		</div>
 
-		<div class="theme-preset-grid">
-			@foreach (var option in _model.PresetOptions)
-			{
-				var isSelected = string.Equals(_model.ThemePresetKey, option.Key, StringComparison.OrdinalIgnoreCase);
-				<button class="theme-preset-card @(isSelected ? "theme-preset-card--selected" : null)"
-						type="button"
-						disabled="@_isApplyingTheme"
-						aria-pressed="@isSelected"
-						@onclick="() => ApplyThemeAsync(option.Key)">
-					<div class="theme-preset-card__top">
-						<div>
-							<h3>@option.Name</h3>
-							<p>@option.Description</p>
+		@if (!_model.CanManageTheme)
+		{
+			<p class="empty-state">Theme management is not available for this tenant membership.</p>
+		}
+		else
+		{
+			<div class="theme-preset-grid">
+				@foreach (var option in _model.PresetOptions)
+				{
+					var isSelected = string.Equals(_model.ThemePresetKey, option.Key, StringComparison.OrdinalIgnoreCase);
+					<button class="theme-preset-card @(isSelected ? "theme-preset-card--selected" : null)"
+							type="button"
+							disabled="@_isSaving"
+							aria-pressed="@isSelected"
+							@onclick="() => SaveAsync(option.Key)">
+						<div class="theme-preset-card__top">
+							<div>
+								<h3>@option.Name</h3>
+								<p>@option.Description</p>
+							</div>
+							<span class="theme-preset-card__indicator" aria-hidden="true">@(isSelected ? "Live" : "Apply")</span>
 						</div>
-						<span class="theme-preset-card__indicator" aria-hidden="true">@(isSelected ? "Live" : "Apply")</span>
-					</div>
-					<span class="theme-preset-card__swatch" style="@option.PreviewStyle"></span>
-					<div class="theme-preset-card__chips">
-						<span class="theme-preset-card__chip">Primary @option.PrimaryColor</span>
-						<span class="theme-preset-card__chip">Accent @option.AccentColor</span>
-						<span class="theme-preset-card__chip">Background @option.BackgroundColor</span>
-					</div>
-				</button>
-			}
-		</div>
+						<span class="theme-preset-card__swatch" style="@option.PreviewStyle"></span>
+						<div class="theme-preset-card__chips">
+							<span class="theme-preset-card__chip">Primary @option.PrimaryColor</span>
+							<span class="theme-preset-card__chip">Accent @option.AccentColor</span>
+							<span class="theme-preset-card__chip">Background @option.BackgroundColor</span>
+						</div>
+					</button>
+				}
+			</div>
+		}
 	</div>
-
 </div>
 
 @code {
-	[SupplyParameterFromQuery(Name = "updated")]
-	public int? Updated { get; set; }
-
 	private SiteSettingsEditModel _model = new();
-	private bool _isApplyingTheme;
-	private bool _toastShownForUpdate;
+	private bool _isSaving;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		var accessContext = await TenantContextAccessor.GetCurrentAsync();
-		if (accessContext.TenantRole != TenantRole.Owner)
+		if (accessContext.TenantRole is not TenantRole.Owner and not TenantRole.Admin)
 		{
 			NavigationManager.NavigateTo("/Account/AccessDenied", true);
 			return;
 		}
 
 		_model = await AdministrationService.GetSiteSettingsAsync();
-		if (Updated == 1 && !_toastShownForUpdate)
-		{
-			_toastShownForUpdate = true;
-			ToastService.ShowSuccess("The tenant theme was updated and is now live for everyone in this tenant.", "Theme updated");
-			NavigationManager.NavigateTo("app/theme", replace: true);
-		}
 	}
 
-	private async Task ApplyThemeAsync(string themePresetKey)
+	private async Task SaveAsync(string themePresetKey)
 	{
-		if (_isApplyingTheme || string.Equals(_model.ThemePresetKey, themePresetKey, StringComparison.OrdinalIgnoreCase))
+		if (_isSaving || !_model.CanManageTheme || string.Equals(_model.ThemePresetKey, themePresetKey, StringComparison.OrdinalIgnoreCase))
 		{
 			return;
 		}
 
-		_isApplyingTheme = true;
-		_model.ThemePresetKey = themePresetKey;
-		await AdministrationService.SaveSiteSettingsAsync(_model);
-		NavigationManager.NavigateTo("app/theme?updated=1", true);
+		try
+		{
+			_isSaving = true;
+			var saveModel = new SiteSettingsEditModel
+			{
+				TenantName = _model.TenantName,
+				ThemePresetKey = themePresetKey
+			};
+			await AdministrationService.SaveSiteSettingsAsync(saveModel);
+			ToastService.ShowSuccess("Tenant theme was updated.", "Saved");
+			_model = await AdministrationService.GetSiteSettingsAsync();
+			NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+		finally
+		{
+			_isSaving = false;
+		}
 	}
 }

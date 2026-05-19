@@ -112,21 +112,65 @@ public sealed class TenantContextAccessor(
 			return [];
 		}
 
-		return await _dbContext.TenantMemberships
+		var memberships = await _dbContext.TenantMemberships
 			.AsNoTracking()
 			.Include(membership => membership.Tenant)
 			.Where(membership => membership.UserId == user.Id)
 			.OrderBy(membership => membership.Tenant.Name)
+			.ToListAsync(cancellationToken);
+		if (memberships.Count == 0)
+		{
+			return [];
+		}
+
+		var tenantIds = memberships
+			.Select(membership => membership.TenantId)
+			.Distinct()
+			.ToArray();
+		var ownerMemberships = await _dbContext.TenantMemberships
+			.AsNoTracking()
+			.Where(membership => tenantIds.Contains(membership.TenantId) && membership.Role == TenantRole.Owner)
+			.Select(membership => new
+			{
+				membership.TenantId,
+				membership.UserId
+			})
+			.ToListAsync(cancellationToken);
+		var ownerUserIds = ownerMemberships
+			.Select(membership => membership.UserId)
+			.Distinct(StringComparer.Ordinal)
+			.ToArray();
+		var ownerLookup = await _userManager.Users
+			.AsNoTracking()
+			.Where(item => ownerUserIds.Contains(item.Id))
+			.ToDictionaryAsync(
+				item => item.Id,
+				item => string.IsNullOrWhiteSpace(item.FirstName) && string.IsNullOrWhiteSpace(item.LastName)
+					? (item.Email ?? item.UserName ?? "Unknown user")
+					: string.Join(" ", new[] { item.FirstName, item.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))),
+				cancellationToken);
+		var tenantOwnerLookup = ownerMemberships
+			.GroupBy(membership => membership.TenantId)
+			.ToDictionary(
+				group => group.Key,
+				group =>
+				{
+					var ownerMembership = group.First();
+					return ownerLookup.GetValueOrDefault(ownerMembership.UserId, string.Empty);
+				});
+
+		return memberships
 			.Select(membership => new TenantMembershipOption
 			{
 				MembershipId = membership.Id,
 				TenantId = membership.TenantId,
 				TenantName = membership.Tenant.Name,
+				OwnerDisplayName = tenantOwnerLookup.GetValueOrDefault(membership.TenantId, string.Empty),
 				Role = membership.Role,
 				IsEnabled = membership.IsEnabled,
 				IsActive = membership.Id == user.ActiveTenantMembershipId
 			})
-			.ToListAsync(cancellationToken);
+			.ToList();
 	}
 
 	public async Task<CurrentAccessContext> RequireTenantContextAsync(CancellationToken cancellationToken = default)

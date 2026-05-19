@@ -364,6 +364,40 @@ public class SurveyApplicationServiceTests
 	}
 
 	[Fact]
+	public async Task SavePlatformUserAsync_Throws_When_Bootstrap_Platform_Owner_Would_Be_Disabled_Or_Demoted()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var bootstrapOwner = await harness.UserManager.Users.FirstAsync(user => user.Id == harness.PrimaryUserId);
+		bootstrapOwner.IsBootstrapPlatformOwner = true;
+		var updateResult = await harness.UserManager.UpdateAsync(bootstrapOwner);
+		Assert.True(updateResult.Succeeded, string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
+
+		var operatorUser = new ApplicationUser
+		{
+			UserName = "operator@example.com",
+			Email = "operator@example.com",
+			EmailConfirmed = true,
+			FirstName = "Platform",
+			LastName = "Operator",
+			IsPlatformSuperAdmin = true,
+			IsPlatformUserEnabled = true
+		};
+
+		var createResult = await harness.UserManager.CreateAsync(operatorUser, "TempPass123!");
+		Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(static error => error.Description)));
+
+		await harness.SetCurrentUserAsync(operatorUser);
+
+		var model = await harness.PlatformAdministrationService.GetPlatformUserAsync(harness.PrimaryUserId);
+		model.IsPlatformUserEnabled = false;
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => harness.PlatformAdministrationService.SavePlatformUserAsync(model));
+
+		Assert.Contains("bootstrap platform owner", exception.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
 	public async Task GetPeopleAsync_Isolated_To_The_Active_Tenant()
 	{
 		await using var harness = await TestHarness.CreateAsync();
@@ -618,6 +652,21 @@ public class SurveyApplicationServiceTests
 		Assert.Equal(TenantRole.Admin, membership.Role);
 		Assert.True(membership.IsEnabled);
 		Assert.Equal(membership.Id, user!.ActiveTenantMembershipId);
+	}
+
+	[Fact]
+	public async Task CreateTenantInvitationAsync_Throws_When_Inviting_A_Second_Owner()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
+			{
+				Email = "owner2@example.com",
+				Role = TenantRole.Owner
+			}));
+
+		Assert.Contains("only have one owner", exception.Message, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]

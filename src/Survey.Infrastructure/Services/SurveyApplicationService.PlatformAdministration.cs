@@ -178,6 +178,10 @@ public sealed partial class SurveyApplicationService
 			var accessStateChanged = existingEnabled != model.IsPlatformUserEnabled
 				|| existingSuperAdmin != model.IsPlatformSuperAdmin
 				|| !existingPermissions.SetEquals(desiredPermissionKeys);
+			if (user.IsBootstrapPlatformOwner && accessStateChanged)
+			{
+				throw new InvalidOperationException("The bootstrap platform owner cannot be disabled or have its platform role changed.");
+			}
 			if (string.Equals(user.Id, actor.UserId, StringComparison.Ordinal) && accessStateChanged)
 			{
 				throw new InvalidOperationException("You cannot change your own platform access, role, or permissions.");
@@ -711,10 +715,43 @@ public sealed partial class SurveyApplicationService
 			.Where(invitation => tenantIds.Contains(invitation.TenantId) && invitation.ExpiresAtUtc > nowUtc)
 			.GroupBy(invitation => invitation.TenantId)
 			.ToDictionary(group => group.Key, group => group.Count());
+		var ownerMemberships = await _dbContext.TenantMemberships
+			.AsNoTracking()
+			.Where(membership => tenantIds.Contains(membership.TenantId) && membership.Role == TenantRole.Owner)
+			.Select(membership => new
+			{
+				membership.TenantId,
+				membership.UserId
+			})
+			.ToListAsync(cancellationToken);
+		var ownerUserIds = ownerMemberships
+			.Select(membership => membership.UserId)
+			.Distinct(StringComparer.Ordinal)
+			.ToArray();
+		var ownerLookup = await _userManager.Users
+			.AsNoTracking()
+			.Where(user => ownerUserIds.Contains(user.Id))
+			.ToDictionaryAsync(user => user.Id, cancellationToken);
+		var tenantOwnerLookup = ownerMemberships
+			.GroupBy(membership => membership.TenantId)
+			.ToDictionary(
+				group => group.Key,
+				group =>
+				{
+					var ownerMembership = group.First();
+					return ownerLookup.TryGetValue(ownerMembership.UserId, out var user)
+						? user
+						: null;
+				});
 
 		foreach (var item in tenants)
 		{
 			item.PendingInvitationCount = pendingInvitationCounts.GetValueOrDefault(item.Id);
+			if (tenantOwnerLookup.TryGetValue(item.Id, out var owner) && owner is not null)
+			{
+				item.OwnerDisplayName = BuildDisplayName(owner.FirstName, owner.LastName, owner.Email);
+				item.OwnerEmail = owner.Email ?? string.Empty;
+			}
 		}
 
 		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
@@ -722,7 +759,7 @@ public sealed partial class SurveyApplicationService
 			["tenant"] = [nameof(PlatformTenantListItem.Name), nameof(PlatformTenantListItem.Slug)],
 			["members"] = [nameof(PlatformTenantListItem.MembershipCount)],
 			["enabled"] = [nameof(PlatformTenantListItem.EnabledMembershipCount)],
-			["owners"] = [nameof(PlatformTenantListItem.OwnerCount)],
+			["owner"] = [nameof(PlatformTenantListItem.OwnerDisplayName)],
 			["pendinginvites"] = [nameof(PlatformTenantListItem.PendingInvitationCount)],
 			["updated"] = [nameof(PlatformTenantListItem.UpdatedUtc)]
 		};
@@ -764,6 +801,14 @@ public sealed partial class SurveyApplicationService
 			MembershipCount = tenant.Memberships.Count,
 			EnabledMembershipCount = tenant.Memberships.Count(membership => membership.IsEnabled),
 			OwnerCount = tenant.Memberships.Count(membership => membership.IsEnabled && membership.Role == TenantRole.Owner),
+			OwnerDisplayName = tenant.Memberships
+				.Where(membership => membership.IsEnabled && membership.Role == TenantRole.Owner)
+				.Select(membership => users.TryGetValue(membership.UserId, out var user) ? BuildDisplayName(user.FirstName, user.LastName, user.Email) : string.Empty)
+				.FirstOrDefault() ?? string.Empty,
+			OwnerEmail = tenant.Memberships
+				.Where(membership => membership.IsEnabled && membership.Role == TenantRole.Owner)
+				.Select(membership => users.TryGetValue(membership.UserId, out var user) ? user.Email ?? string.Empty : string.Empty)
+				.FirstOrDefault() ?? string.Empty,
 			PendingInvitationCount = tenant.Invitations.Count(invitation => invitation.AcceptedUtc == null && invitation.RevokedUtc == null && invitation.ExpiresAtUtc > DateTimeOffset.UtcNow),
 			PeopleCount = await _dbContext.People.CountAsync(person => person.TenantId == tenantId, cancellationToken),
 			LocationCount = await _dbContext.Locations.CountAsync(location => location.TenantId == tenantId, cancellationToken),
@@ -795,6 +840,71 @@ public sealed partial class SurveyApplicationService
 				})
 				.ToList()
 		};
+	}
+
+	public async Task<PlatformTenantEditModel> GetPlatformTenantEditAsync(int tenantId, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.TenantsManage, cancellationToken);
+		await RequirePlatformAccessAsync(cancellationToken);
+
+		var tenant = await _dbContext.Tenants
+			.AsNoTracking()
+			.Include(item => item.Settings)
+			.FirstOrDefaultAsync(item => item.Id == tenantId, cancellationToken)
+			?? throw new InvalidOperationException("The requested tenant was not found.");
+
+		return new PlatformTenantEditModel
+		{
+			Id = tenant.Id,
+			Name = tenant.Name,
+			Slug = tenant.Slug,
+			ThemePresetKey = tenant.Settings.FirstOrDefault()?.ThemePresetKey ?? SiteThemePresetCatalog.DefaultPresetKey,
+			UpdatedUtc = tenant.UpdatedUtc
+		};
+	}
+
+	public async Task SavePlatformTenantAsync(PlatformTenantEditModel model, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.TenantsManage, cancellationToken);
+		await RequirePlatformAccessAsync(cancellationToken);
+
+		var tenant = await _dbContext.Tenants
+			.FirstOrDefaultAsync(item => item.Id == model.Id, cancellationToken)
+			?? throw new InvalidOperationException("The requested tenant was not found.");
+
+		var originalName = tenant.Name;
+		tenant.Update(model.Name);
+
+		var ownerUserId = await _dbContext.TenantMemberships
+			.AsNoTracking()
+			.Where(membership => membership.TenantId == tenant.Id && membership.Role == TenantRole.Owner)
+			.Select(membership => membership.UserId)
+			.FirstOrDefaultAsync(cancellationToken);
+		if (!string.IsNullOrWhiteSpace(ownerUserId)
+			&& await _dbContext.TenantMemberships
+				.AsNoTracking()
+				.AnyAsync(
+					membership => membership.UserId == ownerUserId
+						&& membership.Role == TenantRole.Owner
+						&& membership.TenantId != tenant.Id
+						&& membership.Tenant.Slug == tenant.Slug,
+					cancellationToken))
+		{
+			throw new InvalidOperationException("That tenant owner already owns another tenant with this name. Please choose a different tenant name.");
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		if (!string.Equals(originalName, tenant.Name, StringComparison.Ordinal))
+		{
+			await _auditWriter.WriteAsync(
+				"platform",
+				"platform.tenant.updated",
+				nameof(Tenant),
+				tenant.Id.ToString(),
+				$"Tenant renamed from '{originalName}' to '{tenant.Name}'.",
+				true,
+				cancellationToken);
+		}
 	}
 
 	public async Task<PagedResult<AuditLogListItem>> GetAuditLogsAsync(
@@ -915,6 +1025,7 @@ public sealed partial class SurveyApplicationService
 			Email = user?.Email ?? string.Empty,
 			IsPlatformUserEnabled = user?.IsPlatformUserEnabled ?? false,
 			IsPlatformSuperAdmin = user?.IsPlatformSuperAdmin ?? false,
+			IsBootstrapPlatformOwner = user?.IsBootstrapPlatformOwner ?? false,
 			IsCurrentUser = user is not null && string.Equals(user.Id, currentUserId, StringComparison.Ordinal),
 			Permissions = PlatformPermissionCatalog.All
 				.Select(definition => new PlatformUserPermissionEditModel

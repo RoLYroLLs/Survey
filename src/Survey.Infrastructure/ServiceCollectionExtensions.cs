@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
 			.AddEntityFrameworkStores<SurveyDbContext>()
 			.AddSignInManager()
 			.AddDefaultTokenProviders();
+		services.AddScoped<IUserStore<ApplicationUser>, SurveyUserStore>();
 
 		services.AddHttpContextAccessor();
 		services.AddScoped<TenantExecutionContext>();
@@ -295,6 +296,12 @@ public static class ServiceCollectionExtensions
 		await EnsureSqliteColumnExistsAsync(
 			connection,
 			"AspNetUsers",
+			"IsBootstrapPlatformOwner",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "IsBootstrapPlatformOwner" INTEGER NOT NULL DEFAULT 0;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
 			"AvatarColorHex",
 			"""ALTER TABLE "AspNetUsers" ADD COLUMN "AvatarColorHex" TEXT NULL;""",
 			cancellationToken);
@@ -497,7 +504,8 @@ public static class ServiceCollectionExtensions
 			""",
 			cancellationToken);
 
-		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_Tenants_Slug" ON "Tenants" ("Slug");""", cancellationToken);
+		await ExecuteSqliteNonQueryAsync(connection, """DROP INDEX IF EXISTS "IX_Tenants_Slug";""", cancellationToken);
+		await ExecuteSqliteNonQueryAsync(connection, """CREATE INDEX IF NOT EXISTS "IX_Tenants_Slug" ON "Tenants" ("Slug");""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_TenantMemberships_TenantId_UserId" ON "TenantMemberships" ("TenantId", "UserId");""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE INDEX IF NOT EXISTS "IX_TenantMemberships_UserId" ON "TenantMemberships" ("UserId");""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_TenantMembershipPermissions_TenantMembershipId_PermissionKey" ON "TenantMembershipPermissions" ("TenantMembershipId", "PermissionKey");""", cancellationToken);

@@ -53,6 +53,12 @@
 					Your own tenant role, status, and permissions cannot be changed from this page.
 				</div>
 			}
+			else if (_model.Role == TenantRole.Owner)
+			{
+				<div class="inline-banner inline-banner--info">
+					The tenant owner role is fixed and cannot be changed.
+				</div>
+			}
 
 			@if (_model.CanReviewEffectivePermissions && _model.Permissions.Count > 0)
 			{

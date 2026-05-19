@@ -12,7 +12,7 @@
 		<div>
 			<p class="eyebrow">Tenant Settings</p>
 			<h1>Geography</h1>
-			<p>Choose which countries, states, and counties this tenant can see and use. Leave everything unchecked to allow all available geography.</p>
+			<p>Choose which countries, states, and counties this tenant can see and use. Tenant owners and admins can manage these restrictions. Leave everything unchecked to allow all available geography.</p>
 		</div>
 	</div>
 
@@ -146,7 +146,7 @@
 	protected override async Task OnParametersSetAsync()
 	{
 		var accessContext = await TenantContextAccessor.GetCurrentAsync();
-		if (accessContext.TenantRole != TenantRole.Owner)
+		if (accessContext.TenantRole is not TenantRole.Owner and not TenantRole.Admin)
 		{
 			NavigationManager.NavigateTo("/Account/AccessDenied", true);
 			return;

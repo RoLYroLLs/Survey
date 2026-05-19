@@ -22,6 +22,11 @@ else
 				<p>@_item.Slug</p>
 			</div>
 			<div class="toolbar">
+				<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsManage)">
+					<Authorized>
+						<a class="btn btn-primary" href="/admin/tenants/@TenantId/edit">Edit Tenant</a>
+					</Authorized>
+				</AuthorizeView>
 				<a class="btn btn-outline-primary" href="/admin/tenants">Back to Tenants</a>
 			</div>
 		</div>
@@ -82,6 +87,17 @@ else
 			</div>
 
 			<div class="assignment-detail-list">
+				<div class="assignment-detail-row">
+					<strong>Owner</strong>
+					<span>@(string.IsNullOrWhiteSpace(_item.OwnerDisplayName) ? "-" : _item.OwnerDisplayName)</span>
+				</div>
+				@if (!string.IsNullOrWhiteSpace(_item.OwnerEmail))
+				{
+					<div class="assignment-detail-row">
+						<strong>Owner Email</strong>
+						<span>@_item.OwnerEmail</span>
+					</div>
+				}
 				<div class="assignment-detail-row">
 					<strong>Theme Preset</strong>
 					<span>@(string.IsNullOrWhiteSpace(_item.ThemePresetKey) ? "-" : _item.ThemePresetKey)</span>

@@ -114,10 +114,10 @@ public sealed partial class SurveyApplicationService
 			Role = membership.Role,
 			IsEnabled = membership.IsEnabled,
 			IsCurrentUser = string.Equals(membership.UserId, context.UserId, StringComparison.Ordinal),
-			CanChangeRole = canChangeRole,
+			CanChangeRole = canChangeRole && membership.Role != TenantRole.Owner,
 			CanManagePermissions = canManagePermissions,
-			CanEnableDisable = canEnableDisable,
-			CanRemove = canRemove,
+			CanEnableDisable = canEnableDisable && membership.Role != TenantRole.Owner,
+			CanRemove = canRemove && membership.Role != TenantRole.Owner,
 			CanReviewEffectivePermissions = canReviewEffectivePermissions,
 			Permissions = canReviewEffectivePermissions
 				? TenantPermissionCatalog.All
@@ -159,7 +159,12 @@ public sealed partial class SurveyApplicationService
 		if (roleChanged)
 		{
 			await RequireTenantPermissionAsync(TenantPermissionKeys.UsersChangeRole, cancellationToken);
+			if (membership.Role == TenantRole.Owner)
+			{
+				throw new InvalidOperationException("The tenant owner role cannot be changed.");
+			}
 			EnsureRoleManagementAllowed(context, membership.Role, model.Role);
+			await EnsureSingleOwnerConstraintAsync(membership.TenantId, membership.Id, model.Role, cancellationToken);
 		}
 
 		if (enabledChanged)
@@ -252,6 +257,8 @@ public sealed partial class SurveyApplicationService
 			{
 				throw new UnauthorizedAccessException("Only a tenant owner can invite another owner.");
 			}
+
+			await EnsureSingleOwnerConstraintAsync(context.TenantId ?? 0, null, model.Role, cancellationToken);
 		}
 
 		var normalizedEmail = model.Email.Trim().ToUpperInvariant();
@@ -367,6 +374,11 @@ public sealed partial class SurveyApplicationService
 		if (invitation.Role == TenantRole.Owner && context.TenantRole != TenantRole.Owner)
 		{
 			throw new UnauthorizedAccessException("Only a tenant owner can invite another owner.");
+		}
+
+		if (invitation.Role == TenantRole.Owner)
+		{
+			await EnsureSingleOwnerConstraintAsync(context.TenantId ?? 0, null, invitation.Role, cancellationToken);
 		}
 
 		return await CreateTenantInvitationCoreAsync(context, invitation.Email, invitation.Role, cancellationToken);
@@ -543,6 +555,8 @@ public sealed partial class SurveyApplicationService
 			throw new InvalidOperationException("This account is already a member of the tenant.");
 		}
 
+		await EnsureSingleOwnerConstraintAsync(invitation.TenantId, null, invitation.Role, cancellationToken);
+
 		var membership = new TenantMembership(invitation.TenantId, user.Id, invitation.Role);
 		_dbContext.TenantMemberships.Add(membership);
 		await _dbContext.SaveChangesAsync(cancellationToken);
@@ -610,6 +624,26 @@ public sealed partial class SurveyApplicationService
 		if (adminCapableCount <= 0)
 		{
 			throw new InvalidOperationException("The final owner or admin cannot be removed, disabled, or demoted.");
+		}
+	}
+
+	private async Task EnsureSingleOwnerConstraintAsync(int tenantId, int? membershipId, TenantRole desiredRole, CancellationToken cancellationToken)
+	{
+		if (desiredRole != TenantRole.Owner)
+		{
+			return;
+		}
+
+		var ownerExists = await _dbContext.TenantMemberships
+			.AsNoTracking()
+			.AnyAsync(item =>
+				item.TenantId == tenantId
+				&& item.Role == TenantRole.Owner
+				&& (!membershipId.HasValue || item.Id != membershipId.Value),
+				cancellationToken);
+		if (ownerExists)
+		{
+			throw new InvalidOperationException("A tenant can only have one owner.");
 		}
 	}
 
@@ -709,6 +743,11 @@ public sealed partial class SurveyApplicationService
 		if (currentRole == TenantRole.Owner && actor.TenantRole != TenantRole.Owner)
 		{
 			throw new UnauthorizedAccessException("Only a tenant owner can manage another owner.");
+		}
+
+		if (currentRole == TenantRole.Owner && desiredRole != TenantRole.Owner)
+		{
+			throw new InvalidOperationException("The tenant owner role cannot be changed.");
 		}
 
 		if (desiredRole == TenantRole.Owner && actor.TenantRole != TenantRole.Owner)

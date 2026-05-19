@@ -13,48 +13,54 @@
 
 <PageTitle>Log in</PageTitle>
 
-<h1>Log in</h1>
-<div class="row">
-    <div class="col-lg-6">
-        <section>
-            <StatusMessage Message="@errorMessage" />
-            <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
-                <DataAnnotationsValidator />
-                <h2>Use a local account to log in.</h2>
-                <hr />
-                <ValidationSummary class="text-danger" role="alert" />
-                <div class="mb-3">
-                    <label for="Input.Identifier" class="form-label">Email or username</label>
-                    <InputText @bind-Value="Input.Identifier" id="Input.Identifier" class="form-control form-control-lg" autocomplete="username webauthn" aria-required="true" placeholder="name@example.com or username" />
-                    <ValidationMessage For="() => Input.Identifier" class="text-danger" />
-                </div>
-                <div class="mb-3">
-                    <label for="Input.Password" class="form-label">Password</label>
-                    <SecretInput @bind-Value="Input.Password" Id="Input.Password" class="form-control form-control-lg" autocomplete="current-password" aria-required="true" placeholder="password" />
-                    <ValidationMessage For="() => Input.Password" class="text-danger" />
-                </div>
-                <div class="checkbox mb-3">
-                    <label class="form-label">
-                        <InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
-                        Remember me
-                    </label>
-                </div>
-                <div>
-                    <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-                    <a class="w-100 btn btn-lg btn-outline-primary mt-2" href="@GetRegisterUrl()">Create account</a>
-                </div>
-                <hr />
-                <div>
-                    <p>
-                        <a href="Account/ForgotPassword">Forgot your password?</a>
-                    </p>
-                    <p>
-                        <a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
-                    </p>
-                </div>
-            </EditForm>
-        </section>
-    </div>
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<h1>Log in</h1>
+			<p>Sign in with your password or use a saved passkey on this device.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		<StatusMessage Message="@errorMessage" />
+		<EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
+			<DataAnnotationsValidator />
+			<div class="page-stack">
+				<div class="page-header">
+					<div>
+						<h2>Use your account</h2>
+						<p>Enter your email or username, then choose your preferred sign-in method.</p>
+					</div>
+				</div>
+				<ValidationSummary class="text-danger" role="alert" />
+				<div class="mb-3">
+					<label for="Input.Identifier" class="form-label">Email or username</label>
+					<InputText @bind-Value="Input.Identifier" id="Input.Identifier" class="form-control form-control-lg" autocomplete="username webauthn" aria-required="true" placeholder="name@example.com or username" />
+					<ValidationMessage For="() => Input.Identifier" class="text-danger" />
+				</div>
+				<div class="mb-3">
+					<label for="Input.Password" class="form-label">Password</label>
+					<SecretInput @bind-Value="Input.Password" Id="Input.Password" class="form-control form-control-lg" autocomplete="current-password" aria-required="true" placeholder="password" />
+					<ValidationMessage For="() => Input.Password" class="text-danger" />
+				</div>
+				<div class="checkbox mb-3">
+					<label class="form-label">
+						<InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
+						Remember me
+					</label>
+				</div>
+				<div class="page-stack">
+					<button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
+					<PasskeySubmit Operation="PasskeyOperation.Request" Name="PasskeyInput" EmailName="Input.Identifier" class="w-100 btn btn-lg btn-outline-secondary">Log in with passkey</PasskeySubmit>
+					<a class="w-100 btn btn-lg btn-outline-primary" href="@GetRegisterUrl()">Create account</a>
+				</div>
+				<div class="toolbar">
+					<a href="Account/ForgotPassword">Forgot your password?</a>
+					<a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
+				</div>
+			</div>
+		</EditForm>
+	</div>
 </div>
 
 @code {
@@ -79,6 +85,7 @@
         }
 
         Input ??= new();
+		PasskeyInput ??= new();
 
         editContext = new EditContext(Input);
 
@@ -91,10 +98,22 @@
 
     public async Task LoginUser()
     {
-        if (!editContext.Validate())
+        if (!string.IsNullOrWhiteSpace(PasskeyInput.CredentialJson) || !string.IsNullOrWhiteSpace(PasskeyInput.Error))
         {
+            await LoginWithPasskeyAsync();
             return;
         }
+
+		if (!editContext.Validate())
+		{
+			return;
+		}
+
+		if (string.IsNullOrWhiteSpace(Input.Password))
+		{
+			errorMessage = "Error: The Password field is required.";
+			return;
+		}
 
         // This doesn't count login failures towards account lockout
         // To enable password failures to trigger account lockout, set lockoutOnFailure: true
@@ -105,33 +124,57 @@
             return;
         }
 
-        var result = await SignInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, lockoutOnFailure: false);
-
-        if (result.Succeeded)
-        {
-            Logger.LogInformation("User logged in.");
-            RedirectManager.RedirectTo(ReturnUrl);
-        }
-        else if (result.RequiresTwoFactor)
-        {
-            RedirectManager.RedirectTo(
-                "Account/LoginWith2fa",
-                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
-        }
-        else if (result.IsLockedOut)
-        {
-            Logger.LogWarning("User account locked out.");
-            RedirectManager.RedirectTo("Account/Lockout");
-        }
-        else if (result.IsNotAllowed)
-        {
-            errorMessage = "Error: Confirm your email before logging in.";
-        }
-        else
-        {
-            errorMessage = "Error: Invalid login attempt.";
-        }
+        var result = await SignInManager.PasswordSignInAsync(user, Input.Password!, Input.RememberMe, lockoutOnFailure: false);
+		await HandleLoginResultAsync(result);
     }
+
+	private async Task LoginWithPasskeyAsync()
+	{
+		if (!string.IsNullOrWhiteSpace(PasskeyInput.Error))
+		{
+			errorMessage = $"Error: {PasskeyInput.Error}";
+			return;
+		}
+
+		if (string.IsNullOrWhiteSpace(PasskeyInput.CredentialJson))
+		{
+			errorMessage = "Error: The browser did not provide a passkey.";
+			return;
+		}
+
+		var result = await SignInManager.PasskeySignInAsync(PasskeyInput.CredentialJson);
+		await HandleLoginResultAsync(result);
+	}
+
+	private Task HandleLoginResultAsync(SignInResult result)
+	{
+		if (result.Succeeded)
+		{
+			Logger.LogInformation("User logged in.");
+			RedirectManager.RedirectTo(ReturnUrl);
+		}
+		else if (result.RequiresTwoFactor)
+		{
+			RedirectManager.RedirectTo(
+				"Account/LoginWith2fa",
+				new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+		}
+		else if (result.IsLockedOut)
+		{
+			Logger.LogWarning("User account locked out.");
+			RedirectManager.RedirectTo("Account/Lockout");
+		}
+		else if (result.IsNotAllowed)
+		{
+			errorMessage = "Error: Confirm your email before logging in.";
+		}
+		else
+		{
+			errorMessage = "Error: Invalid login attempt.";
+		}
+
+		return Task.CompletedTask;
+	}
 
     private string GetRegisterUrl()
     {
@@ -177,11 +220,13 @@
         [StringLength(256)]
         public string Identifier { get; set; } = "";
 
-        [Required]
         [DataType(DataType.Password)]
-        public string Password { get; set; } = "";
+        public string? Password { get; set; }
 
         [Display(Name = "Remember me?")]
         public bool RememberMe { get; set; }
     }
+
+	[SupplyParameterFromForm(FormName = "login")]
+	private PasskeyInputModel PasskeyInput { get; set; } = default!;
 }

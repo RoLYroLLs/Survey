@@ -117,10 +117,24 @@
 	text-align: left;
 }
 
+.topbar__tenant-trigger-copy {
+	display: grid;
+	min-width: 0;
+}
+
 .topbar__tenant-name {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.topbar__tenant-owner {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--app-muted);
+	font-size: 0.78rem;
+	font-weight: 500;
 }
 
 .topbar ::deep(.topbar__tenant-chevron) {
@@ -158,6 +172,26 @@
 	font: inherit;
 	font-weight: 600;
 	text-align: left;
+}
+
+.topbar__tenant-option-copy {
+	display: grid;
+	min-width: 0;
+}
+
+.topbar__tenant-option-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.topbar__tenant-option-owner {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--app-muted);
+	font-size: 0.78rem;
+	font-weight: 500;
 }
 
 .topbar__tenant-option:hover,

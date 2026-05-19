@@ -31,6 +31,17 @@ public sealed partial class SurveyApplicationService
 		return context;
 	}
 
+	private async Task<CurrentAccessContext> RequireTenantAdminOrOwnerAsync(CancellationToken cancellationToken = default)
+	{
+		var context = await RequireTenantAccessAsync(cancellationToken);
+		if (context.TenantRole is not TenantRole.Owner and not TenantRole.Admin)
+		{
+			throw new UnauthorizedAccessException("Only a tenant owner or admin can perform this action.");
+		}
+
+		return context;
+	}
+
 	private async Task<int> RequireTenantIdAsync(CancellationToken cancellationToken = default)
 	{
 		var context = await RequireTenantAccessAsync(cancellationToken);

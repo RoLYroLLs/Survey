@@ -50,6 +50,7 @@ public sealed class PlatformUserEditModel
 
 	public bool IsPlatformUserEnabled { get; set; }
 	public bool IsPlatformSuperAdmin { get; set; }
+	public bool IsBootstrapPlatformOwner { get; set; }
 	public bool IsCurrentUser { get; set; }
 	public IReadOnlyList<PlatformUserPermissionEditModel> Permissions { get; set; } = Array.Empty<PlatformUserPermissionEditModel>();
 	public bool IsNew => string.IsNullOrWhiteSpace(Id);
@@ -100,6 +101,8 @@ public sealed class PlatformTenantListItem
 	public int MembershipCount { get; set; }
 	public int EnabledMembershipCount { get; set; }
 	public int OwnerCount { get; set; }
+	public string OwnerDisplayName { get; set; } = string.Empty;
+	public string OwnerEmail { get; set; } = string.Empty;
 	public int PendingInvitationCount { get; set; }
 	public DateTimeOffset CreatedUtc { get; set; }
 	public DateTimeOffset UpdatedUtc { get; set; }
@@ -126,6 +129,8 @@ public sealed class PlatformTenantDetailModel
 	public int MembershipCount { get; set; }
 	public int EnabledMembershipCount { get; set; }
 	public int OwnerCount { get; set; }
+	public string OwnerDisplayName { get; set; } = string.Empty;
+	public string OwnerEmail { get; set; } = string.Empty;
 	public int PendingInvitationCount { get; set; }
 	public int PeopleCount { get; set; }
 	public int LocationCount { get; set; }
@@ -137,6 +142,19 @@ public sealed class PlatformTenantDetailModel
 	public DateTimeOffset CreatedUtc { get; set; }
 	public DateTimeOffset UpdatedUtc { get; set; }
 	public IReadOnlyList<PlatformTenantMembershipListItem> Memberships { get; set; } = Array.Empty<PlatformTenantMembershipListItem>();
+}
+
+public sealed class PlatformTenantEditModel
+{
+	public int Id { get; set; }
+
+	[Required]
+	[StringLength(200)]
+	public string Name { get; set; } = string.Empty;
+
+	public string Slug { get; set; } = string.Empty;
+	public string ThemePresetKey { get; set; } = string.Empty;
+	public DateTimeOffset UpdatedUtc { get; set; }
 }
 
 public sealed class AuditLogListItem

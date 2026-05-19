@@ -10,53 +10,76 @@
 
 <PageTitle>Manage your passkeys</PageTitle>
 
-<h3>Manage your passkeys</h3>
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<h2>Passkeys</h2>
+			<p>Add passwordless sign-ins for faster, device-based access to your account.</p>
+		</div>
+	</div>
 
-<StatusMessage />
+	<StatusMessage />
 
-@if (currentPasskeys is { Count: > 0 })
-{
-    <table class="table">
-        <tbody>
-            @foreach (var passkey in currentPasskeys)
-            {
-                <tr>
-                    <td>@(passkey.Name ?? "Unnamed passkey")</td>
-                    <td>
-                        @{
-                            var credentialId = Base64Url.EncodeToString(passkey.CredentialId);
-                        }
-                        <form @formname="@($"update-passkey-{credentialId}")" @onsubmit="UpdatePasskey" method="post">
-                            <AntiforgeryToken />
-                            <div>
-                                <input type="hidden" name="CredentialId" value="@credentialId" />
-                                <button type="submit" name="Action" value="rename" class="btn btn-primary" title="Rename this passkey">Rename</button>
-                                <button type="submit" name="Action" value="delete" class="btn btn-danger" title="Remove this passkey from your account">Delete</button>
-                            </div>
-                        </form>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
-else
-{
-    <p>No passkeys are registered.</p>
-}
+	@if (currentPasskeys is { Count: > 0 })
+	{
+		<div class="table-responsive">
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Created</th>
+						<th class="text-end">Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var passkey in currentPasskeys)
+					{
+						<tr>
+							<td>@(passkey.Name ?? "Unnamed passkey")</td>
+							<td>@passkey.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td>
+							<td class="text-end">
+								@{
+									var credentialId = Base64Url.EncodeToString(passkey.CredentialId);
+								}
+								<form @formname="@($"update-passkey-{credentialId}")" @onsubmit="UpdatePasskey" method="post" class="toolbar justify-content-end">
+									<AntiforgeryToken />
+									<input type="hidden" name="CredentialId" value="@credentialId" />
+									<button type="submit" name="Action" value="rename" class="btn btn-outline-primary btn-sm" title="Rename this passkey">Rename</button>
+									<button type="submit" name="Action" value="delete" class="btn btn-outline-danger btn-sm" title="Remove this passkey from your account">Delete</button>
+								</form>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+	else
+	{
+		<div class="status-card">
+			<div class="page-stack">
+				<div class="page-header">
+					<div>
+						<h3>No passkeys yet</h3>
+						<p>Add your first passkey to sign in with your device instead of typing a password every time.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
 
-<form @formname="add-passkey" @onsubmit="AddPasskey" method="post">
-    <AntiforgeryToken />
-    @if (currentPasskeys is { Count: >= MaxPasskeyCount })
-    {
-        <p class="text-danger">You have reached the maximum number of allowed passkeys. Please delete one before adding a new one.</p>
-    }
-    else
-    {
-        <PasskeySubmit Operation="PasskeyOperation.Create" Name="Input" class="btn btn-primary">Add a new passkey</PasskeySubmit>
-    }
-
-</form>
+	<form @formname="add-passkey" @onsubmit="AddPasskey" method="post">
+		<AntiforgeryToken />
+		@if (currentPasskeys is { Count: >= MaxPasskeyCount })
+		{
+			<div class="alert alert-warning" role="alert">You have reached the maximum number of allowed passkeys. Please delete one before adding a new one.</div>
+		}
+		else
+		{
+			<PasskeySubmit Operation="PasskeyOperation.Create" Name="Input" class="btn btn-primary">Add a new passkey</PasskeySubmit>
+		}
+	</form>
+</div>
 
 @code {
     private const int MaxPasskeyCount = 100;

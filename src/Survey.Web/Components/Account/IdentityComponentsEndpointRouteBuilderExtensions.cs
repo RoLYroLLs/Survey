@@ -84,7 +84,22 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         {
             await antiforgery.ValidateRequestAsync(context);
 
-            var user = string.IsNullOrEmpty(username) ? null : await userManager.FindByNameAsync(username);
+            ApplicationUser? user = null;
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                var identifier = username.Trim();
+                if (identifier.Contains('@'))
+                {
+                    user = await userManager.FindByEmailAsync(identifier)
+                        ?? await userManager.FindByNameAsync(identifier);
+                }
+                else
+                {
+                    user = await userManager.FindByNameAsync(identifier)
+                        ?? await userManager.FindByEmailAsync(identifier);
+                }
+            }
+
             var optionsJson = await signInManager.MakePasskeyRequestOptionsAsync(user);
             return TypedResults.Content(optionsJson, contentType: "application/json");
         });

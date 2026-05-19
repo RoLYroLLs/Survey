@@ -12,10 +12,10 @@
 			<h1>Tenants</h1>
 			<p>Review tenant membership health, pending invitations, and overall usage.</p>
 		</div>
-		<div class="toolbar">
-			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
+			<div class="toolbar">
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsManage)">
 				<Authorized>
-					<a class="btn btn-primary" href="/Account/CreateTenant?returnUrl=%2Fadmin%2Ftenants">Create Tenant</a>
+					<a class="btn btn-primary" href="/admin/tenants/new">Create Tenant</a>
 				</Authorized>
 			</AuthorizeView>
 		</div>
@@ -46,7 +46,7 @@
 						<th><SortableHeader Label="Tenant" SortKey="tenant" CurrentSort="@Sort" Href="@GetSortUrl("tenant")" /></th>
 						<th><SortableHeader Label="Members" SortKey="members" CurrentSort="@Sort" Href="@GetSortUrl("members")" /></th>
 						<th><SortableHeader Label="Enabled" SortKey="enabled" CurrentSort="@Sort" Href="@GetSortUrl("enabled")" /></th>
-						<th><SortableHeader Label="Owners" SortKey="owners" CurrentSort="@Sort" Href="@GetSortUrl("owners")" /></th>
+						<th><SortableHeader Label="Owner" SortKey="owner" CurrentSort="@Sort" Href="@GetSortUrl("owner")" /></th>
 						<th><SortableHeader Label="Pending Invites" SortKey="pendinginvites" CurrentSort="@Sort" Href="@GetSortUrl("pendinginvites")" /></th>
 						<th><SortableHeader Label="Updated" SortKey="updated" CurrentSort="@Sort" Href="@GetSortUrl("updated")" /></th>
 						<th></th>
@@ -62,7 +62,13 @@
 							</td>
 							<td>@item.MembershipCount</td>
 							<td>@item.EnabledMembershipCount</td>
-							<td>@item.OwnerCount</td>
+							<td>
+								<div>@(string.IsNullOrWhiteSpace(item.OwnerDisplayName) ? "-" : item.OwnerDisplayName)</div>
+								@if (!string.IsNullOrWhiteSpace(item.OwnerEmail))
+								{
+									<div class="text-muted">@item.OwnerEmail</div>
+								}
+							</td>
 							<td>@item.PendingInvitationCount</td>
 							<td>@item.UpdatedUtc.LocalDateTime.ToString("g")</td>
 							<td>
@@ -70,6 +76,11 @@
 									<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsOversight)">
 										<Authorized>
 											<a class="btn btn-sm btn-outline-primary" href="/admin/tenants/@item.Id">View</a>
+										</Authorized>
+									</AuthorizeView>
+									<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsManage)">
+										<Authorized>
+											<a class="btn btn-sm btn-outline-primary" href="/admin/tenants/@item.Id/edit">Edit</a>
 										</Authorized>
 									</AuthorizeView>
 								</div>

@@ -52,6 +52,7 @@ public class SurveyDbContext(
 	public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
 	public DbSet<SurveyAnswer> SurveyAnswers => Set<SurveyAnswer>();
 	public DbSet<ZipCountyLookup> ZipCountyLookups => Set<ZipCountyLookup>();
+	public DbSet<ApplicationUserPasskey> UserPasskeys => Set<ApplicationUserPasskey>();
 
 	protected override void OnModelCreating(ModelBuilder builder)
 	{
@@ -84,7 +85,7 @@ public class SurveyDbContext(
 		{
 			entity.Property(tenant => tenant.Name).HasMaxLength(200).IsRequired();
 			entity.Property(tenant => tenant.Slug).HasMaxLength(200).IsRequired();
-			entity.HasIndex(tenant => tenant.Slug).IsUnique();
+			entity.HasIndex(tenant => tenant.Slug);
 		});
 
 		builder.Entity<TenantMembership>(entity =>
@@ -179,6 +180,16 @@ public class SurveyDbContext(
 			entity.Property(permission => permission.UserId).HasMaxLength(450).IsRequired();
 			entity.Property(permission => permission.PermissionKey).HasMaxLength(200).IsRequired();
 			entity.HasIndex(permission => new { permission.UserId, permission.PermissionKey }).IsUnique();
+		});
+
+		builder.Entity<ApplicationUserPasskey>(entity =>
+		{
+			entity.ToTable("AspNetUserPasskeys");
+			entity.HasKey(passkey => passkey.CredentialId);
+			entity.Property(passkey => passkey.CredentialId).HasColumnType("BLOB");
+			entity.Property(passkey => passkey.UserId).HasMaxLength(450).IsRequired();
+			entity.Property(passkey => passkey.Data).IsRequired();
+			entity.HasIndex(passkey => passkey.UserId);
 		});
 
 		builder.Entity<PlatformUserInvitation>(entity =>

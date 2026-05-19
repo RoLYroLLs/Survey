@@ -230,16 +230,20 @@
 					<div class="field-stack">
 						<FieldLabel Text="Enabled" />
 						<div class="form-check">
-							<InputCheckbox class="form-check-input" @bind-Value="_model.IsPlatformUserEnabled" />
+							<InputCheckbox class="form-check-input" @bind-Value="_model.IsPlatformUserEnabled" disabled="@_model.IsBootstrapPlatformOwner" />
 							<label class="form-check-label">Platform access is enabled</label>
 						</div>
 					</div>
 					<div class="field-stack">
 						<FieldLabel Text="Platform Super Admin" />
 						<div class="form-check">
-							<InputCheckbox class="form-check-input" @bind-Value="_model.IsPlatformSuperAdmin" />
+							<InputCheckbox class="form-check-input" @bind-Value="_model.IsPlatformSuperAdmin" disabled="@_model.IsBootstrapPlatformOwner" />
 							<label class="form-check-label">Grant full platform administration</label>
 						</div>
+						@if (_model.IsBootstrapPlatformOwner)
+						{
+							<div class="text-muted">The bootstrap platform owner is locked and cannot be disabled or have its platform role changed.</div>
+						}
 						@if (_model.IsCurrentUser)
 						{
 							<div class="text-muted">Your own platform access and permission scope cannot be changed from this page.</div>
@@ -280,14 +284,14 @@
 									<td>@permission.Category</td>
 									<td>@permission.PermissionLabel</td>
 									<td>
-										<InputCheckbox class="form-check-input" @bind-Value="permission.Selected" disabled="@_model.IsPlatformSuperAdmin" />
+										<InputCheckbox class="form-check-input" @bind-Value="permission.Selected" disabled="@(_model.IsPlatformSuperAdmin || _model.IsBootstrapPlatformOwner)" />
 									</td>
 								</tr>
 							}
 						</tbody>
 					</table>
 
-					@if (_model.IsPlatformSuperAdmin)
+					@if (_model.IsPlatformSuperAdmin || _model.IsBootstrapPlatformOwner)
 					{
 						<p class="text-muted mb-0">Super admins receive every platform permission automatically, so the granular list is read-only.</p>
 					}

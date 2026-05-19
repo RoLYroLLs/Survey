@@ -8,7 +8,7 @@ public sealed partial class SurveyApplicationService
 {
 	public async Task<TenantGeographyVisibilityEditModel> GetTenantGeographyVisibilityAsync(CancellationToken cancellationToken = default)
 	{
-		await RequireTenantOwnerAsync(cancellationToken);
+		await RequireTenantAdminOrOwnerAsync(cancellationToken);
 
 		return new TenantGeographyVisibilityEditModel
 		{
@@ -35,7 +35,7 @@ public sealed partial class SurveyApplicationService
 
 	public async Task SaveTenantGeographyVisibilityAsync(TenantGeographyVisibilityEditModel model, CancellationToken cancellationToken = default)
 	{
-		var tenantContext = await RequireTenantOwnerAsync(cancellationToken);
+		var tenantContext = await RequireTenantAdminOrOwnerAsync(cancellationToken);
 		var tenantId = tenantContext.TenantId ?? throw new UnauthorizedAccessException("An active tenant is required.");
 
 		var visibleCountryIds = model.VisibleCountryIds

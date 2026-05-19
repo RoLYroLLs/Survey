@@ -1,0 +1,92 @@
+@page "/admin/tenants/{TenantId:int}/edit"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.TenantsManage)]
+@inject IPlatformAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>Edit Tenant</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Platform Oversight</p>
+			<h1>Edit Tenant</h1>
+			<p>Rename the tenant and review its current theme assignment.</p>
+		</div>
+	</div>
+
+	<div class="form-card narrow-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (!_isLoaded)
+		{
+			<p>Loading tenant...</p>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<ValidationSummary />
+
+				<div class="field-stack">
+					<FieldLabel Text="Tenant Name" Required />
+					<InputText class="form-control form-control-lg" @bind-Value="_model.Name" />
+				</div>
+
+				<div class="assignment-detail-list mt-4">
+					<div class="assignment-detail-row">
+						<strong>Slug</strong>
+						<span>@_model.Slug</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Theme</strong>
+						<span>@_model.ThemePresetKey</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Updated</strong>
+						<span>@_model.UpdatedUtc.LocalDateTime.ToString("f")</span>
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Save Tenant</button>
+					<a class="btn btn-outline-primary" href="/admin/tenants/@TenantId">Cancel</a>
+				</div>
+			</EditForm>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int TenantId { get; set; }
+
+	private PlatformTenantEditModel _model = new();
+	private bool _isLoaded;
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_errorMessage = null;
+		_model = await AdministrationService.GetPlatformTenantEditAsync(TenantId);
+		_isLoaded = true;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			await AdministrationService.SavePlatformTenantAsync(_model);
+			ToastService.ShowSuccess("Tenant updated successfully.", "Saved");
+			NavigationManager.NavigateTo($"/admin/tenants/{TenantId}");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+			ToastService.ShowError(ex.Message, "Save failed");
+		}
+	}
+}

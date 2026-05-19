@@ -243,6 +243,34 @@ h4 {
   color: var(--app-muted);
 }
 
+.account-manage__body {
+  min-height: 100%;
+}
+
+.account-manage__body {
+  display: grid;
+  gap: 1rem;
+}
+
+.account-manage__body > h3:first-child,
+.account-manage__body > h4:first-child {
+  margin: 0;
+}
+
+.account-manage__body > .row {
+  --bs-gutter-x: 0;
+  margin: 0;
+}
+
+.account-manage__body > .row > [class*="col-"] {
+  padding: 0;
+}
+
+.account-manage__body .btn-lg {
+  width: auto !important;
+}
+
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1248,7 +1276,7 @@ h4 {
   align-items: center !important;
   gap: 0.7rem !important;
   margin: 0 !important;
-  padding: 0.4rem 2rem !important;
+  padding: 0.6rem 2rem !important;
   line-height: 1 !important;
 }
 
