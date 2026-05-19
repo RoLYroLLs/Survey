@@ -52,6 +52,7 @@
 	private bool _isSaving;
 	private string? _errorMessage;
 	private ApplicationUser? _user;
+	private bool _canCreateAdditionalTenants;
 
 	[SupplyParameterFromForm]
 	private CreateTenantModel Input { get; set; } = default!;
@@ -71,7 +72,10 @@
 			return;
 		}
 
-		if (_user.ActiveTenantMembershipId.HasValue)
+		_canCreateAdditionalTenants = _user.IsPlatformSuperAdmin
+			|| (_user.IsPlatformUserEnabled && await DbContext.PlatformUserPermissions.AsNoTracking().AnyAsync(permission => permission.UserId == _user.Id));
+
+		if (_user.ActiveTenantMembershipId.HasValue && !_canCreateAdditionalTenants)
 		{
 			RedirectManager.RedirectTo(GetPostCreateUrl());
 			return;
@@ -109,7 +113,7 @@
 			var membershipCount = await DbContext.TenantMemberships
 				.AsNoTracking()
 				.CountAsync(membership => membership.UserId == _user.Id);
-			if (membershipCount > 0)
+			if (membershipCount > 0 && !_canCreateAdditionalTenants)
 			{
 				throw new InvalidOperationException("This account already belongs to a tenant.");
 			}

@@ -66,6 +66,9 @@
 	[SupplyParameterFromQuery]
 	private string? ReturnUrl { get; set; }
 
+	[SupplyParameterFromQuery(Name = "email")]
+	private string? PrefilledEmail { get; set; }
+
 	protected override async Task OnInitializedAsync()
 	{
 		if (!await UserManager.Users.AnyAsync())
@@ -75,6 +78,10 @@
 		}
 
 		Input ??= new();
+		if (string.IsNullOrWhiteSpace(Input.Email) && !string.IsNullOrWhiteSpace(PrefilledEmail))
+		{
+			Input.Email = PrefilledEmail;
+		}
 	}
 
 	private async Task RegisterAsync()

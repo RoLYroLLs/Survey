@@ -38,6 +38,13 @@
 					<span>Audit</span>
 				</NavLink>
 			}
+			@if (CanSeePlatformThemes)
+			{
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/themes">
+					<span class="nav-shell__icon"><OutlineIcon Name="theme" CssClass="nav-shell__icon-svg" /></span>
+					<span>Themes</span>
+				</NavLink>
+			}
 			@if (CanSeePlatformGeography)
 			{
 				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/countries">
@@ -215,9 +222,10 @@
 	private bool CanSeePlatformUsers => HasPlatformPermission(PlatformPermissionKeys.UsersView);
 	private bool CanSeePlatformTenants => HasPlatformPermission(PlatformPermissionKeys.TenantsView);
 	private bool CanSeePlatformAudit => HasPlatformPermission(PlatformPermissionKeys.AuditView);
+	private bool CanSeePlatformThemes => HasPlatformPermission(PlatformPermissionKeys.SettingsManage);
 	private bool CanSeePlatformGeography => HasPlatformPermission(PlatformPermissionKeys.GeographyView);
 	private bool CanSeeBackToTenant => _accessContext.HasTenantAccess;
-	private bool CanSeePlatformSection => CanSeePlatformHome || CanSeePlatformUsers || CanSeePlatformTenants || CanSeePlatformAudit || CanSeePlatformGeography;
+	private bool CanSeePlatformSection => CanSeePlatformHome || CanSeePlatformUsers || CanSeePlatformTenants || CanSeePlatformAudit || CanSeePlatformThemes || CanSeePlatformGeography;
 
 	private bool CanSeeDashboard => HasTenantPermission(TenantPermissionKeys.DashboardView);
 	private bool CanSeeAssignments => HasTenantPermission(TenantPermissionKeys.AssignmentsView);

@@ -10,12 +10,12 @@
 		<div>
 			<p class="eyebrow">Platform Access</p>
 			<h1>Users</h1>
-			<p>View the platform user accounts that can administer the survey platform.</p>
+			<p>View platform users and send new platform invitations that follow the standard account creation flow.</p>
 		</div>
 		<div class="toolbar">
 			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
 				<Authorized>
-					<a class="btn btn-primary" href="admin/users/new">Add User</a>
+					<a class="btn btn-primary" href="admin/users/new">Invite User</a>
 				</Authorized>
 			</AuthorizeView>
 		</div>

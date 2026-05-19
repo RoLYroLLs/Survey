@@ -169,6 +169,12 @@
 
 	private string BuildNextUrl()
 	{
+		if (!string.IsNullOrWhiteSpace(ReturnUrl)
+			&& ReturnUrl.StartsWith("/Account/AcceptPlatformInvite", StringComparison.OrdinalIgnoreCase))
+		{
+			return ReturnUrl;
+		}
+
 		return string.IsNullOrWhiteSpace(ReturnUrl)
 			? "Account/CreateTenant"
 			: $"Account/CreateTenant?returnUrl={Uri.EscapeDataString(ReturnUrl)}";

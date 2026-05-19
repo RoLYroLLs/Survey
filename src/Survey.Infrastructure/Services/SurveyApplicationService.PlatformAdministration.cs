@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Survey.Application.Models;
 using Survey.Domain;
 using Survey.Infrastructure.Identity;
@@ -54,6 +55,22 @@ public sealed partial class SurveyApplicationService
 		return CreatePagedResult(pagedItems, totalCount, normalizedRequest.Offset);
 	}
 
+	public async Task<IReadOnlyList<SelectOption>> GetPlatformTenantSelectOptionsAsync(CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.UsersManage, cancellationToken);
+
+		return await _dbContext.Tenants
+			.AsNoTracking()
+			.OrderBy(tenant => tenant.Name)
+			.ThenBy(tenant => tenant.Id)
+			.Select(tenant => new SelectOption
+			{
+				Value = tenant.Id.ToString(),
+				Label = tenant.Name
+			})
+			.ToListAsync(cancellationToken);
+	}
+
 	public async Task<PlatformUserEditModel> GetPlatformUserAsync(string? id, CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.UsersView, cancellationToken);
@@ -71,6 +88,25 @@ public sealed partial class SurveyApplicationService
 			?? throw new InvalidOperationException("The requested platform user was not found.");
 
 		return BuildPlatformUserEditModel(user, currentUserId);
+	}
+
+	public async Task<PlatformUserInviteModel> GetPlatformUserInviteAsync(CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.UsersManage, cancellationToken);
+
+		return new PlatformUserInviteModel
+		{
+			IsPlatformUserEnabled = true,
+			Permissions = PlatformPermissionCatalog.All
+				.Select(definition => new PlatformUserPermissionEditModel
+				{
+					PermissionKey = definition.Key,
+					Category = definition.Category,
+					PermissionLabel = definition.Label,
+					Selected = false
+				})
+				.ToList()
+		};
 	}
 
 	public async Task<string> SavePlatformUserAsync(PlatformUserEditModel model, CancellationToken cancellationToken = default)
@@ -204,6 +240,420 @@ public sealed partial class SurveyApplicationService
 		}
 
 		return user.Id;
+	}
+
+	public async Task<PlatformUserInviteResultModel> CreatePlatformUserInvitationAsync(PlatformUserInviteModel model, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.UsersManage, cancellationToken);
+
+		var actor = await RequirePlatformAccessAsync(cancellationToken);
+		var desiredPermissionKeys = model.Permissions
+			.Where(permission => permission.Selected)
+			.Select(permission => permission.PermissionKey)
+			.Distinct(StringComparer.Ordinal)
+			.ToHashSet(StringComparer.Ordinal);
+		if (model.IsPlatformSuperAdmin || desiredPermissionKeys.Count > 0)
+		{
+			await RequirePlatformPermissionAsync(PlatformPermissionKeys.PermissionsManage, cancellationToken);
+		}
+
+		if (model.TenantId.HasValue)
+		{
+			var tenantExists = await _dbContext.Tenants
+				.AsNoTracking()
+				.AnyAsync(tenant => tenant.Id == model.TenantId.Value, cancellationToken);
+			if (!tenantExists)
+			{
+				throw new InvalidOperationException("The selected tenant was not found.");
+			}
+		}
+
+		var normalizedEmail = model.Email.Trim();
+		var pendingInvitations = await _dbContext.PlatformUserInvitations
+			.Where(invitation => invitation.Email.ToUpper() == normalizedEmail.ToUpper() && invitation.AcceptedUtc == null && invitation.RevokedUtc == null)
+			.ToListAsync(cancellationToken);
+		foreach (var invitation in pendingInvitations)
+		{
+			invitation.Revoke();
+			await _auditWriter.WriteAsync("platform", "platform.user-invitation.revoked", nameof(PlatformUserInvitation), invitation.Id.ToString(), $"Pending platform invitation for '{invitation.Email}' was revoked before issuing a replacement.", true, cancellationToken);
+		}
+
+		var rawToken = CreateInvitationToken();
+		var permissionKeysJson = JsonSerializer.Serialize(model.IsPlatformSuperAdmin ? Array.Empty<string>() : desiredPermissionKeys.OrderBy(static key => key).ToArray(), JsonOptions);
+		var entity = new PlatformUserInvitation(
+			normalizedEmail,
+			model.IsPlatformUserEnabled,
+			model.IsPlatformSuperAdmin,
+			permissionKeysJson,
+			model.TenantId,
+			model.TenantId.HasValue ? model.TenantRole : null,
+			HashInvitationToken(rawToken),
+			DateTimeOffset.UtcNow.AddDays(7),
+			actor.UserId);
+		_dbContext.PlatformUserInvitations.Add(entity);
+		await _dbContext.SaveChangesAsync(cancellationToken);
+
+		await _auditWriter.WriteAsync("platform", "platform.user-invited", nameof(PlatformUserInvitation), entity.Id.ToString(), $"Platform invitation created for '{entity.Email}'.", true, cancellationToken);
+
+		return new PlatformUserInviteResultModel
+		{
+			Token = rawToken,
+			Email = entity.Email,
+			ExpiresAtUtc = entity.ExpiresAtUtc,
+			InvitationUrl = $"/Account/AcceptPlatformInvite?token={Uri.EscapeDataString(rawToken)}"
+		};
+	}
+
+	public async Task<PlatformUserInvitationAcceptanceContextModel> GetPlatformUserInvitationAcceptanceAsync(string token, CancellationToken cancellationToken = default)
+	{
+		if (string.IsNullOrWhiteSpace(token))
+		{
+			return new PlatformUserInvitationAcceptanceContextModel
+			{
+				Token = string.Empty,
+				IsValid = false,
+				ErrorMessage = "The invitation token is missing."
+			};
+		}
+
+		var invitation = await FindUsablePlatformInvitationAsync(token, asTracking: false, cancellationToken);
+		if (invitation is null)
+		{
+			return new PlatformUserInvitationAcceptanceContextModel
+			{
+				Token = token,
+				IsValid = false,
+				ErrorMessage = "The platform invitation was not found or has expired."
+			};
+		}
+
+		var existingUser = await _userManager.FindByEmailAsync(invitation.Email);
+		var permissionKeys = ParsePlatformInvitationPermissions(invitation);
+		var permissionLabels = invitation.IsPlatformSuperAdmin
+			? ["Full platform administration"]
+			: permissionKeys
+				.Select(permissionKey => $"{PlatformPermissionCatalog.Get(permissionKey).Category}: {PlatformPermissionCatalog.Get(permissionKey).Label}")
+				.ToArray();
+
+		return new PlatformUserInvitationAcceptanceContextModel
+		{
+			Token = token,
+			IsValid = true,
+			Email = invitation.Email,
+			IsPlatformUserEnabled = invitation.IsPlatformUserEnabled,
+			IsPlatformSuperAdmin = invitation.IsPlatformSuperAdmin,
+			ExistingAccountFound = existingUser is not null,
+			TenantName = invitation.Tenant?.Name,
+			TenantRole = invitation.TenantRole,
+			ExpiresAtUtc = invitation.ExpiresAtUtc,
+			PermissionLabels = permissionLabels
+		};
+	}
+
+	public async Task<string> AcceptPlatformUserInvitationAsync(string token, string userId, CancellationToken cancellationToken = default)
+	{
+		var invitation = await FindUsablePlatformInvitationAsync(token, asTracking: true, cancellationToken)
+			?? throw new InvalidOperationException("The platform invitation was not found or has expired.");
+		var user = await _userManager.Users
+			.Include(item => item.PlatformPermissions)
+			.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken)
+			?? throw new InvalidOperationException("The current user account was not found.");
+
+		if (!string.Equals(user.Email, invitation.Email, StringComparison.OrdinalIgnoreCase))
+		{
+			throw new UnauthorizedAccessException("The signed-in account does not match the invited email address.");
+		}
+
+		user.IsPlatformUserEnabled = invitation.IsPlatformUserEnabled;
+		user.IsPlatformSuperAdmin = invitation.IsPlatformSuperAdmin;
+		await ApplyPlatformUserPermissionsAsync(user, invitation.IsPlatformSuperAdmin ? [] : ParsePlatformInvitationPermissions(invitation), cancellationToken);
+
+		int? createdMembershipId = null;
+		if (invitation.TenantId.HasValue)
+		{
+			var existingMembership = await _dbContext.TenantMemberships
+				.FirstOrDefaultAsync(membership => membership.TenantId == invitation.TenantId.Value && membership.UserId == user.Id, cancellationToken);
+			if (existingMembership is null)
+			{
+				var membership = new TenantMembership(invitation.TenantId.Value, user.Id, invitation.TenantRole ?? TenantRole.User);
+				_dbContext.TenantMemberships.Add(membership);
+				await _dbContext.SaveChangesAsync(cancellationToken);
+				createdMembershipId = membership.Id;
+				await _auditWriter.WriteAsync("tenant", "tenant.user.invited-platform", nameof(TenantMembership), membership.Id.ToString(), $"Platform invitation added '{invitation.Email}' to tenant '{invitation.TenantId.Value}' as '{membership.Role}'.", true, cancellationToken);
+			}
+			else if (!user.ActiveTenantMembershipId.HasValue && existingMembership.IsEnabled)
+			{
+				createdMembershipId = existingMembership.Id;
+			}
+		}
+
+		if (createdMembershipId.HasValue)
+		{
+			user.ActiveTenantMembershipId = createdMembershipId.Value;
+		}
+
+		var updateResult = await _userManager.UpdateAsync(user);
+		if (!updateResult.Succeeded)
+		{
+			throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
+		}
+
+		invitation.Accept();
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await _auditWriter.WriteAsync("platform", "platform.user-invitation.accepted", nameof(PlatformUserInvitation), invitation.Id.ToString(), $"Platform invitation accepted for '{invitation.Email}'.", true, cancellationToken);
+
+		return user.Id;
+	}
+
+	public async Task<PagedResult<PlatformThemeListItem>> GetPlatformThemesAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
+
+		var query = _dbContext.PlatformThemes
+			.AsNoTracking()
+			.AsQueryable();
+
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			var term = search.Trim();
+			query = query.Where(theme =>
+				theme.Name.Contains(term) ||
+				theme.Key.Contains(term) ||
+				theme.Description.Contains(term));
+		}
+
+		var itemsQuery = query
+			.OrderBy(theme => theme.Name)
+			.ThenBy(theme => theme.Key)
+			.Select(theme => new PlatformThemeListItem
+			{
+				Id = theme.Id,
+				Key = theme.Key,
+				Name = theme.Name,
+				Description = theme.Description,
+				PrimaryColor = theme.PrimaryColor,
+				AccentColor = theme.AccentColor,
+				BackgroundColor = theme.BackgroundColor,
+				IsEnabled = theme.IsEnabled,
+				IsArchived = theme.IsArchived,
+				UpdatedUtc = theme.UpdatedUtc
+			});
+		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+		{
+			["name"] = [nameof(PlatformThemeListItem.Name)],
+			["key"] = [nameof(PlatformThemeListItem.Key)],
+			["description"] = [nameof(PlatformThemeListItem.Description)],
+			["status"] = [nameof(PlatformThemeListItem.IsArchived), nameof(PlatformThemeListItem.IsEnabled)],
+			["primary"] = [nameof(PlatformThemeListItem.PrimaryColor)],
+			["accent"] = [nameof(PlatformThemeListItem.AccentColor)],
+			["background"] = [nameof(PlatformThemeListItem.BackgroundColor)],
+			["updated"] = [nameof(PlatformThemeListItem.UpdatedUtc)]
+		};
+
+		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(PlatformThemeListItem.Id), cancellationToken);
+	}
+
+	public async Task<PlatformThemeEditModel> GetPlatformThemeAsync(int? id, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
+
+		if (!id.HasValue)
+		{
+			var seed = SiteThemePresetCatalog.GetSeedModels()
+				.First(seed => string.Equals(seed.Key, SiteThemePresetCatalog.DefaultPresetKey, StringComparison.OrdinalIgnoreCase));
+			return new PlatformThemeEditModel
+			{
+				Key = seed.Key,
+				Name = seed.Name,
+				Description = seed.Description,
+				PrimaryColor = seed.PrimaryColor,
+				AccentColor = seed.AccentColor,
+				BackgroundColor = seed.BackgroundColor,
+				CssVariablesBlock = seed.CssVariablesBlock
+			};
+		}
+
+		var theme = await _dbContext.PlatformThemes
+			.AsNoTracking()
+			.FirstOrDefaultAsync(item => item.Id == id.Value, cancellationToken)
+			?? throw new InvalidOperationException("The requested theme was not found.");
+
+		return new PlatformThemeEditModel
+		{
+			Id = theme.Id,
+			Key = theme.Key,
+			Name = theme.Name,
+			Description = theme.Description,
+			PrimaryColor = theme.PrimaryColor,
+			AccentColor = theme.AccentColor,
+			BackgroundColor = theme.BackgroundColor,
+			CssVariablesBlock = theme.CssVariablesBlock,
+			IsEnabled = theme.IsEnabled,
+			IsArchived = theme.IsArchived,
+			UpdatedUtc = theme.UpdatedUtc
+		};
+	}
+
+	public async Task<int> SavePlatformThemeAsync(PlatformThemeEditModel model, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
+
+		var normalizedKey = model.Key.Trim();
+		var normalizedName = model.Name.Trim();
+		var normalizedDescription = model.Description.Trim();
+		var normalizedCssVariablesBlock = model.CssVariablesBlock.Trim();
+		var duplicateExists = await _dbContext.PlatformThemes
+			.AsNoTracking()
+			.AnyAsync(theme => theme.Key == normalizedKey && (!model.Id.HasValue || theme.Id != model.Id.Value), cancellationToken);
+		if (duplicateExists)
+		{
+			throw new InvalidOperationException("A global theme with this key already exists.");
+		}
+
+		PlatformTheme entity;
+		var isNew = !model.Id.HasValue;
+		if (isNew)
+		{
+			entity = new PlatformTheme(
+				normalizedKey,
+				normalizedName,
+				normalizedDescription,
+				model.PrimaryColor,
+				model.AccentColor,
+				model.BackgroundColor,
+				normalizedCssVariablesBlock);
+			_dbContext.PlatformThemes.Add(entity);
+		}
+		else
+		{
+			entity = await _dbContext.PlatformThemes
+				.FirstOrDefaultAsync(theme => theme.Id == model.Id!.Value, cancellationToken)
+				?? throw new InvalidOperationException("The requested theme was not found.");
+
+			if (!string.Equals(entity.Key, normalizedKey, StringComparison.Ordinal))
+			{
+				throw new InvalidOperationException("The theme key cannot be changed after the theme is created.");
+			}
+
+			entity.UpdateIdentity(normalizedKey, normalizedName, normalizedDescription);
+			entity.UpdatePresentation(model.PrimaryColor, model.AccentColor, model.BackgroundColor, normalizedCssVariablesBlock);
+			if (model.IsArchived)
+			{
+				entity.Archive();
+			}
+			else if (model.IsEnabled)
+			{
+				entity.Enable();
+			}
+			else
+			{
+				entity.Disable();
+			}
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await _auditWriter.WriteAsync(
+			"platform",
+			isNew ? "platform.theme.created" : "platform.theme.updated",
+			nameof(PlatformTheme),
+			entity.Id.ToString(),
+			$"Global theme '{entity.Name}' ({entity.Key}) was {(isNew ? "created" : "updated")}.",
+			true,
+			cancellationToken);
+
+		return entity.Id;
+	}
+
+	public async Task SetPlatformThemeEnabledAsync(int id, bool isEnabled, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
+
+		var theme = await _dbContext.PlatformThemes
+			.FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
+			?? throw new InvalidOperationException("The requested theme was not found.");
+
+		if (isEnabled)
+		{
+			theme.Enable();
+		}
+		else
+		{
+			theme.Disable();
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await _auditWriter.WriteAsync(
+			"platform",
+			isEnabled ? "platform.theme.enabled" : "platform.theme.disabled",
+			nameof(PlatformTheme),
+			theme.Id.ToString(),
+			$"Global theme '{theme.Name}' ({theme.Key}) was {(isEnabled ? "enabled" : "disabled")}.",
+			true,
+			cancellationToken);
+	}
+
+	public async Task SetPlatformThemeArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
+
+		var theme = await _dbContext.PlatformThemes
+			.FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
+			?? throw new InvalidOperationException("The requested theme was not found.");
+
+		if (isArchived)
+		{
+			theme.Archive();
+		}
+		else
+		{
+			theme.Enable();
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await _auditWriter.WriteAsync(
+			"platform",
+			isArchived ? "platform.theme.archived" : "platform.theme.restored",
+			nameof(PlatformTheme),
+			theme.Id.ToString(),
+			$"Global theme '{theme.Name}' ({theme.Key}) was {(isArchived ? "archived" : "restored")}.",
+			true,
+			cancellationToken);
+	}
+
+	public async Task DeletePlatformThemeAsync(int id, CancellationToken cancellationToken = default)
+	{
+		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
+
+		var theme = await _dbContext.PlatformThemes
+			.FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
+			?? throw new InvalidOperationException("The requested theme was not found.");
+
+		var isReferencedBySite = await _dbContext.SiteSettings
+			.AsNoTracking()
+			.AnyAsync(setting => setting.ThemePresetKey == theme.Key, cancellationToken);
+		if (isReferencedBySite)
+		{
+			throw new InvalidOperationException("This theme is currently used by the site default and cannot be deleted.");
+		}
+
+		var isReferencedByTenant = await _dbContext.TenantSettings
+			.AsNoTracking()
+			.AnyAsync(setting => setting.ThemePresetKey == theme.Key, cancellationToken);
+		if (isReferencedByTenant)
+		{
+			throw new InvalidOperationException("This theme is currently assigned to one or more tenants and cannot be deleted.");
+		}
+
+		_dbContext.PlatformThemes.Remove(theme);
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await _auditWriter.WriteAsync(
+			"platform",
+			"platform.theme.deleted",
+			nameof(PlatformTheme),
+			theme.Id.ToString(),
+			$"Global theme '{theme.Name}' ({theme.Key}) was deleted.",
+			true,
+			cancellationToken);
 	}
 
 	public async Task<PagedResult<PlatformTenantListItem>> GetPlatformTenantsAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)
@@ -580,5 +1030,46 @@ public sealed partial class SurveyApplicationService
 			permission.PermissionKey.Contains(term, StringComparison.OrdinalIgnoreCase)
 			|| PlatformPermissionCatalog.Get(permission.PermissionKey).Category.Contains(term, StringComparison.OrdinalIgnoreCase)
 			|| PlatformPermissionCatalog.Get(permission.PermissionKey).Label.Contains(term, StringComparison.OrdinalIgnoreCase));
+	}
+
+	private async Task<PlatformUserInvitation?> FindUsablePlatformInvitationAsync(string token, bool asTracking, CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(token))
+		{
+			return null;
+		}
+
+		var tokenHash = HashInvitationToken(token);
+		var query = _dbContext.PlatformUserInvitations
+			.Include(invitation => invitation.Tenant)
+			.Where(invitation => invitation.TokenHash == tokenHash);
+		if (!asTracking)
+		{
+			query = query.AsNoTracking();
+		}
+
+		var invitation = await query.FirstOrDefaultAsync(cancellationToken);
+		if (invitation is null || !invitation.IsUsable(DateTimeOffset.UtcNow))
+		{
+			return null;
+		}
+
+		return invitation;
+	}
+
+	private static IReadOnlyCollection<string> ParsePlatformInvitationPermissions(PlatformUserInvitation invitation)
+	{
+		try
+		{
+			var values = JsonSerializer.Deserialize<string[]>(invitation.PermissionKeysJson, JsonOptions) ?? [];
+			return values
+				.Where(static value => !string.IsNullOrWhiteSpace(value))
+				.Distinct(StringComparer.Ordinal)
+				.ToArray();
+		}
+		catch
+		{
+			return [];
+		}
 	}
 }

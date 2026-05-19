@@ -4,8 +4,8 @@
 	align-items: center;
 	gap: 1rem;
 	padding: 0.85rem 1.5rem;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-	background: rgba(9, 27, 35, 0.98);
+	border-bottom: 1px solid var(--app-sidebar-border);
+	background: var(--app-sidebar-bg);
 	color: var(--app-sidebar-ink);
 }
 

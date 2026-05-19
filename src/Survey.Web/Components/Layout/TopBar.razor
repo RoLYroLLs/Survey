@@ -22,32 +22,35 @@
 	</form>
 
 	<div class="topbar__actions">
-		<details class="topbar__tenant-switcher topbar__menu">
-			<summary class="topbar__tenant-trigger">
-				<span class="topbar__tenant-name">@GetActiveTenantName()</span>
-				<OutlineIcon Name="chevron-down" CssClass="topbar__tenant-chevron" />
-			</summary>
-			@if (_membershipOptions.Count > 0)
-			{
-				<div class="topbar__tenant-dropdown">
-					@foreach (var membership in _membershipOptions)
-					{
-						@if (!membership.IsEnabled || membership.MembershipId == _accessContext.ActiveTenantMembershipId)
+		@if (_currentUser is not null)
+		{
+			<details class="topbar__tenant-switcher topbar__menu">
+				<summary class="topbar__tenant-trigger">
+					<span class="topbar__tenant-name">@GetActiveTenantName()</span>
+					<OutlineIcon Name="chevron-down" CssClass="topbar__tenant-chevron" />
+				</summary>
+				@if (_membershipOptions.Count > 0)
+				{
+					<div class="topbar__tenant-dropdown">
+						@foreach (var membership in _membershipOptions)
 						{
-							<span class="topbar__tenant-option @(membership.MembershipId == _accessContext.ActiveTenantMembershipId ? "topbar__tenant-option--active" : string.Empty)">
-								@membership.TenantName
-							</span>
+							@if (!membership.IsEnabled || membership.MembershipId == _accessContext.ActiveTenantMembershipId)
+							{
+								<span class="topbar__tenant-option @(membership.MembershipId == _accessContext.ActiveTenantMembershipId ? "topbar__tenant-option--active" : string.Empty)">
+									@membership.TenantName
+								</span>
+							}
+							else
+							{
+								<a class="topbar__tenant-option" href="@BuildTenantSwitchUrl(membership.MembershipId)">
+									@membership.TenantName
+								</a>
+							}
 						}
-						else
-						{
-							<a class="topbar__tenant-option" href="@BuildTenantSwitchUrl(membership.MembershipId)">
-								@membership.TenantName
-							</a>
-						}
-					}
-				</div>
-			}
-		</details>
+					</div>
+				}
+			</details>
+		}
 
 		<AuthorizeView>
 			<Authorized Context="userContext">

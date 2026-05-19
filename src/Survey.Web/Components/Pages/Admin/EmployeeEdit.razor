@@ -15,7 +15,7 @@
 		<div>
 			<p class="eyebrow">Platform User</p>
 			<h1>@GetPageTitle()</h1>
-			<p>View or update a platform user account and its effective platform permissions.</p>
+			<p>@GetIntroCopy()</p>
 		</div>
 	</div>
 
@@ -25,7 +25,121 @@
 			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
 		}
 
-		@if (IsViewMode)
+		@if (IsInviteMode)
+		{
+			<EditForm Model="_inviteModel" OnValidSubmit="InviteAsync">
+				<DataAnnotationsValidator />
+				<ValidationSummary />
+
+				<div class="form-grid">
+					<div class="field-stack">
+						<FieldLabel Text="Email" Required />
+						<InputText class="form-control" @bind-Value="_inviteModel.Email" />
+						<ValidationMessage For="@(() => _inviteModel.Email)" />
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Platform Access" />
+						<div class="form-check">
+							<InputCheckbox class="form-check-input" @bind-Value="_inviteModel.IsPlatformUserEnabled" />
+							<label class="form-check-label">Enable platform access when the invitation is accepted</label>
+						</div>
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Platform Super Admin" />
+						<div class="form-check">
+							<InputCheckbox class="form-check-input" @bind-Value="_inviteModel.IsPlatformSuperAdmin" />
+							<label class="form-check-label">Grant full platform administration</label>
+						</div>
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Tenant" />
+						<InputSelect class="form-select" @bind-Value="_inviteModel.TenantId">
+							<option value="">Do not add to a tenant</option>
+							@foreach (var option in _tenantOptions)
+							{
+								<option value="@option.Value">@option.Label</option>
+							}
+						</InputSelect>
+					</div>
+					@if (_inviteModel.TenantId.HasValue)
+					{
+						<div class="field-stack">
+							<FieldLabel Text="Tenant Role" />
+							<InputSelect class="form-select" @bind-Value="_inviteModel.TenantRole">
+								<option value="@TenantRole.User">User</option>
+								<option value="@TenantRole.Admin">Admin</option>
+								<option value="@TenantRole.Owner">Owner</option>
+							</InputSelect>
+						</div>
+					}
+				</div>
+
+				<div class="list-card mt-4">
+					<div class="page-header">
+						<div>
+							<h2 class="content-card__title-sm">Platform Permissions</h2>
+							<p>Use granular permissions for non-super-admin platform users.</p>
+						</div>
+					</div>
+
+					<table class="admin-table">
+						<thead>
+							<tr>
+								<th>Category</th>
+								<th>Permission</th>
+								<th>Assigned</th>
+							</tr>
+						</thead>
+						<tbody>
+							@foreach (var permission in _inviteModel.Permissions.OrderBy(item => item.Category).ThenBy(item => item.PermissionLabel))
+							{
+								<tr>
+									<td>@permission.Category</td>
+									<td>@permission.PermissionLabel</td>
+									<td>
+										<InputCheckbox class="form-check-input" @bind-Value="permission.Selected" disabled="@_inviteModel.IsPlatformSuperAdmin" />
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+
+					@if (_inviteModel.IsPlatformSuperAdmin)
+					{
+						<p class="text-muted mb-0">Super admins receive every platform permission automatically, so the granular list is read-only.</p>
+					}
+				</div>
+
+				@if (_inviteResult is not null)
+				{
+					<div class="list-card mt-4">
+						<div class="page-header">
+							<div>
+								<h2 class="content-card__title-sm">Invitation Ready</h2>
+								<p>Share this link with @_inviteResult.Email. The invited user will complete the normal account creation flow before accepting platform access.</p>
+							</div>
+						</div>
+
+						<div class="assignment-detail-list">
+							<div class="assignment-detail-row assignment-detail-row--token">
+								<strong>Invitation Link</strong>
+								<span class="text-break">@GetAbsoluteInvitationUrl()</span>
+							</div>
+							<div class="assignment-detail-row">
+								<strong>Expires</strong>
+								<span>@_inviteResult.ExpiresAtUtc.LocalDateTime.ToString("f")</span>
+							</div>
+						</div>
+					</div>
+				}
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit">Create Invitation</button>
+					<a class="btn btn-outline-primary" href="admin/users">Cancel</a>
+				</div>
+			</EditForm>
+		}
+		else if (IsViewMode)
 		{
 			<div class="page-stack">
 				<div class="assignment-detail-list">
@@ -132,7 +246,7 @@
 						}
 					</div>
 					<div class="field-stack">
-						<label>@(_model.IsNew ? "Password" : "New Password")</label>
+						<label>New Password</label>
 						<SecretInput class="form-control" @bind-Value="_model.Password" />
 						<ValidationMessage For="@(() => _model.Password)" />
 					</div>
@@ -193,7 +307,11 @@
 	public string? Id { get; set; }
 
 	private PlatformUserEditModel _model = new();
+	private PlatformUserInviteModel _inviteModel = new();
+	private PlatformUserInviteResultModel? _inviteResult;
+	private IReadOnlyList<SelectOption> _tenantOptions = Array.Empty<SelectOption>();
 	private string? _errorMessage;
+	private bool IsInviteMode => string.IsNullOrWhiteSpace(Id);
 	private bool IsViewMode => !string.IsNullOrWhiteSpace(Id) && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
 
 	protected override void OnInitialized()
@@ -208,13 +326,36 @@
 			return;
 		}
 
-		_model = await AdministrationService.GetPlatformUserAsync(Id);
 		_errorMessage = null;
+		_inviteResult = null;
+		if (IsInviteMode)
+		{
+			_inviteModel = await AdministrationService.GetPlatformUserInviteAsync();
+			_tenantOptions = await AdministrationService.GetPlatformTenantSelectOptionsAsync();
+			return;
+		}
+
+		_model = await AdministrationService.GetPlatformUserAsync(Id);
 	}
 
 	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
 	{
 		_ = InvokeAsync(StateHasChanged);
+	}
+
+	private async Task InviteAsync()
+	{
+		try
+		{
+			_inviteResult = await AdministrationService.CreatePlatformUserInvitationAsync(_inviteModel);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Invitation created successfully.", "Invitation ready");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+			_inviteResult = null;
+		}
 	}
 
 	private async Task SaveAsync()
@@ -228,19 +369,41 @@
 		}
 		catch (Exception ex)
 		{
-			_errorMessage = null;
+			_errorMessage = ex.Message;
 			ToastService.ShowError(ex.Message, "Save failed");
 		}
 	}
 
 	private string GetPageTitle()
 	{
+		if (IsInviteMode)
+		{
+			return "Invite User";
+		}
+
 		if (IsViewMode)
 		{
 			return "View User";
 		}
 
-		return _model.IsNew ? "Add User" : "Edit User";
+		return "Edit User";
+	}
+
+	private string GetIntroCopy()
+	{
+		if (IsInviteMode)
+		{
+			return "Invite a platform user, optionally attach them to a tenant, and share the generated invitation link.";
+		}
+
+		return "View or update a platform user account and its effective platform permissions.";
+	}
+
+	private string GetAbsoluteInvitationUrl()
+	{
+		return _inviteResult is null
+			? string.Empty
+			: NavigationManager.ToAbsoluteUri(_inviteResult.InvitationUrl).AbsoluteUri;
 	}
 
 	private static string DisplayOrDash(string? value)

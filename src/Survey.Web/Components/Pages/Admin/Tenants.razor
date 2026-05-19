@@ -12,6 +12,13 @@
 			<h1>Tenants</h1>
 			<p>Review tenant membership health, pending invitations, and overall usage.</p>
 		</div>
+		<div class="toolbar">
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
+				<Authorized>
+					<a class="btn btn-primary" href="/Account/CreateTenant?returnUrl=%2Fadmin%2Ftenants">Create Tenant</a>
+				</Authorized>
+			</AuthorizeView>
+		</div>
 	</div>
 
 	<div class="list-card">

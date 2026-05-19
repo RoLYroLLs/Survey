@@ -1,0 +1,186 @@
+@page "/Account/AcceptPlatformInvite"
+@using Microsoft.AspNetCore.Identity
+@inject IPlatformAdministrationService AdministrationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+
+<PageTitle>Accept Platform Invite</PageTitle>
+
+<div class="status-card narrow-card">
+	<p class="eyebrow">Platform Invitation</p>
+	<h1>Accept invitation</h1>
+
+	@if (_context is null)
+	{
+		<p>Loading invitation...</p>
+	}
+	else if (!_context.IsValid)
+	{
+		<div class="inline-banner inline-banner--danger">@_context.ErrorMessage</div>
+		<div class="form-footer">
+			<a class="btn btn-outline-primary" href="Account/Login">Back to Login</a>
+		</div>
+	}
+	else
+	{
+		<div class="page-stack">
+			<div class="inline-banner inline-banner--info">
+				You were invited to join the platform as <strong>@GetPlatformRoleLabel()</strong>.
+			</div>
+			<p><strong>Invited email:</strong> @_context.Email</p>
+			@if (!string.IsNullOrWhiteSpace(_context.TenantName))
+			{
+				<p><strong>Tenant access:</strong> @_context.TenantName as @_context.TenantRole</p>
+			}
+			@if (_context.PermissionLabels.Count > 0)
+			{
+				<div class="page-stack">
+					<strong>Platform access</strong>
+					<ul class="feature-list">
+						@foreach (var label in _context.PermissionLabels)
+						{
+							<li>@label</li>
+						}
+					</ul>
+				</div>
+			}
+			@if (_context.ExpiresAtUtc.HasValue)
+			{
+				<p><strong>Expires:</strong> @_context.ExpiresAtUtc.Value.ToLocalTime().ToString("f")</p>
+			}
+
+			@if (!string.IsNullOrWhiteSpace(_errorMessage))
+			{
+				<div class="inline-banner inline-banner--danger">@_errorMessage</div>
+			}
+
+			@if (_context.ExistingAccountFound)
+			{
+				@if (!_isAuthenticated)
+				{
+					<p>An account already exists for this email address. Sign in first, then reopen this invitation.</p>
+					<div class="form-footer">
+						<a class="btn btn-primary" href="@GetLoginUrl()">Sign In</a>
+					</div>
+				}
+				else if (!_isMatchingUser)
+				{
+					<p>You are signed in as <strong>@_currentEmail</strong>. Sign in with <strong>@_context.Email</strong> to accept this invitation.</p>
+					<div class="form-footer">
+						<a class="btn btn-primary" href="@GetLoginUrl()">Switch Account</a>
+					</div>
+				}
+				else
+				{
+					<EditForm Model="AcceptInput" OnValidSubmit="AcceptAsync" FormName="accept-platform-invite" method="post">
+						<div class="form-footer">
+							<button class="btn btn-primary" type="submit">Accept Invitation</button>
+						</div>
+					</EditForm>
+				}
+			}
+			else if (_isAuthenticated)
+			{
+				<p>Sign out of the current account before creating the invited account for <strong>@_context.Email</strong>.</p>
+				<div class="form-footer">
+					<a class="btn btn-primary" href="@GetLoginUrl()">Switch Account</a>
+				</div>
+			}
+			else
+			{
+				<p>Create your account first, then verify your email and complete your profile before accepting this invitation.</p>
+				<div class="form-footer">
+					<a class="btn btn-primary" href="@GetRegisterUrl()">Create Account</a>
+				</div>
+			}
+		</div>
+	}
+</div>
+
+@code {
+	[SupplyParameterFromQuery(Name = "token")]
+	public string? Token { get; set; }
+
+	[SupplyParameterFromForm]
+	private AcceptPlatformInvitationModel AcceptInput { get; set; } = default!;
+
+	private PlatformUserInvitationAcceptanceContextModel? _context;
+	private string? _errorMessage;
+	private bool _isAuthenticated;
+	private bool _isMatchingUser;
+	private string? _currentUserId;
+	private string? _currentEmail;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_errorMessage = null;
+		AcceptInput ??= new();
+		_context = await AdministrationService.GetPlatformUserInvitationAcceptanceAsync(Token ?? string.Empty);
+
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		var principal = authenticationState.User;
+		_isAuthenticated = principal.Identity?.IsAuthenticated == true;
+
+		if (_isAuthenticated)
+		{
+			var user = await UserManager.GetUserAsync(principal);
+			_currentUserId = user?.Id;
+			_currentEmail = user?.Email;
+		}
+		else
+		{
+			_currentUserId = null;
+			_currentEmail = null;
+		}
+
+		_isMatchingUser = _isAuthenticated
+			&& !string.IsNullOrWhiteSpace(_currentEmail)
+			&& _context is not null
+			&& string.Equals(_currentEmail, _context.Email, StringComparison.OrdinalIgnoreCase);
+	}
+
+	private async Task AcceptAsync()
+	{
+		if (string.IsNullOrWhiteSpace(_currentUserId) || _context is null)
+		{
+			return;
+		}
+
+		try
+		{
+			var userId = await AdministrationService.AcceptPlatformUserInvitationAsync(_context.Token, _currentUserId);
+			var user = await UserManager.FindByIdAsync(userId);
+			if (user is not null)
+			{
+				await SignInManager.RefreshSignInAsync(user);
+			}
+
+			NavigationManager.NavigateTo("/admin", forceLoad: true);
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private string GetLoginUrl()
+	{
+		return $"Account/Login?returnUrl={Uri.EscapeDataString($"/Account/AcceptPlatformInvite?token={Token}")}";
+	}
+
+	private string GetRegisterUrl()
+	{
+		return $"Account/Register?email={Uri.EscapeDataString(_context?.Email ?? string.Empty)}&returnUrl={Uri.EscapeDataString($"/Account/AcceptPlatformInvite?token={Token}")}";
+	}
+
+	private string GetPlatformRoleLabel()
+	{
+		return _context?.IsPlatformSuperAdmin == true ? "Platform Super Admin" : "Platform Admin";
+	}
+
+	private sealed class AcceptPlatformInvitationModel
+	{
+	}
+}

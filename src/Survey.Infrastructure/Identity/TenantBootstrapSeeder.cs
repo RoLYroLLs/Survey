@@ -33,7 +33,10 @@ internal sealed class TenantBootstrapSeeder(
 			var defaultTenant = await EnsureDefaultTenantAsync(cancellationToken);
 			await BackfillTenantIdsAsync(defaultTenant.Id, cancellationToken);
 			await EnsureTenantSettingAsync(defaultTenant.Id, cancellationToken);
-			await EnsureMembershipsAsync(defaultTenant.Id, cancellationToken);
+			var hasAnyMemberships = await _dbContext.TenantMemberships
+				.IgnoreQueryFilters()
+				.AnyAsync(cancellationToken);
+			await EnsureMembershipsAsync(defaultTenant.Id, !hasAnyMemberships, cancellationToken);
 		}
 		finally
 		{
@@ -84,10 +87,14 @@ internal sealed class TenantBootstrapSeeder(
 		await _dbContext.SaveChangesAsync(cancellationToken);
 	}
 
-	private async Task EnsureMembershipsAsync(int tenantId, CancellationToken cancellationToken)
+	private async Task EnsureMembershipsAsync(int tenantId, bool allowMembershipBootstrap, CancellationToken cancellationToken)
 	{
 		var users = await _userManager.Users
 			.OrderBy(user => user.Email)
+			.ToListAsync(cancellationToken);
+		var membershipsByUserId = await _dbContext.TenantMemberships
+			.IgnoreQueryFilters()
+			.AsNoTracking()
 			.ToListAsync(cancellationToken);
 
 		foreach (var user in users)
@@ -98,19 +105,27 @@ internal sealed class TenantBootstrapSeeder(
 			user.IsPlatformSuperAdmin = isAdmin;
 			user.IsPlatformUserEnabled = isAdmin;
 
-			var membership = await _dbContext.TenantMemberships
-				.IgnoreQueryFilters()
-				.FirstOrDefaultAsync(item => item.TenantId == tenantId && item.UserId == user.Id, cancellationToken);
-			if (membership is null)
+			var userMemberships = membershipsByUserId
+				.Where(item => item.UserId == user.Id)
+				.OrderBy(item => item.Id)
+				.ToList();
+			var membership = userMemberships.FirstOrDefault(item => item.TenantId == tenantId);
+			if (membership is null && allowMembershipBootstrap)
 			{
 				membership = new TenantMembership(tenantId, user.Id, isAdmin ? TenantRole.Owner : TenantRole.User);
 				_dbContext.TenantMemberships.Add(membership);
 				await _dbContext.SaveChangesAsync(cancellationToken);
+				userMemberships.Add(membership);
+				membershipsByUserId.Add(membership);
 			}
 
 			if (!user.ActiveTenantMembershipId.HasValue)
 			{
-				user.ActiveTenantMembershipId = membership.Id;
+				var activeMembership = userMemberships.FirstOrDefault(item => item.IsEnabled);
+				if (activeMembership is not null)
+				{
+					user.ActiveTenantMembershipId = activeMembership.Id;
+				}
 			}
 
 			await _userManager.UpdateAsync(user);

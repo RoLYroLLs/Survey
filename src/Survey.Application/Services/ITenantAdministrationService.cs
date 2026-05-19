@@ -65,4 +65,5 @@ public interface ITenantAdministrationService
 	Task<string> AcceptTenantInvitationForExistingUserAsync(string token, string userId, CancellationToken cancellationToken = default);
 	Task<string> AcceptTenantInvitationForNewUserAsync(TenantInvitationRegistrationModel model, CancellationToken cancellationToken = default);
 	Task<TenantSearchResultModel> SearchTenantAsync(string query, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<ThemePresetOption>> GetTenantThemeOptionsAsync(CancellationToken cancellationToken = default);
 }

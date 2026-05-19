@@ -10,6 +10,8 @@ internal sealed class SiteSettingsSeeder(SurveyDbContext dbContext)
 
 	public async Task SeedAsync(CancellationToken cancellationToken = default)
 	{
+		await SeedPlatformThemesAsync(cancellationToken);
+
 		var entity = await _dbContext.SiteSettings
 			.FirstOrDefaultAsync(setting => setting.Id == SiteSetting.DefaultId, cancellationToken);
 
@@ -20,9 +22,40 @@ internal sealed class SiteSettingsSeeder(SurveyDbContext dbContext)
 			return;
 		}
 
-		if (!SiteThemePresetCatalog.IsValidPresetKey(entity.ThemePresetKey))
+		var themeExists = await _dbContext.PlatformThemes
+			.AsNoTracking()
+			.AnyAsync(theme => theme.Key == entity.ThemePresetKey, cancellationToken);
+		if (!themeExists)
 		{
 			entity.UpdateThemePreset(SiteThemePresetCatalog.DefaultPresetKey);
+			await _dbContext.SaveChangesAsync(cancellationToken);
+		}
+	}
+
+	private async Task SeedPlatformThemesAsync(CancellationToken cancellationToken)
+	{
+		var existingKeys = await _dbContext.PlatformThemes
+			.AsNoTracking()
+			.Select(theme => theme.Key)
+			.ToListAsync(cancellationToken);
+		var existingLookup = existingKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+		var seededAny = false;
+
+		foreach (var seed in SiteThemePresetCatalog.GetSeedModels().Where(seed => !existingLookup.Contains(seed.Key)))
+		{
+			_dbContext.PlatformThemes.Add(new PlatformTheme(
+				seed.Key,
+				seed.Name,
+				seed.Description,
+				seed.PrimaryColor,
+				seed.AccentColor,
+				seed.BackgroundColor,
+				seed.CssVariablesBlock));
+			seededAny = true;
+		}
+
+		if (seededAny)
+		{
 			await _dbContext.SaveChangesAsync(cancellationToken);
 		}
 	}

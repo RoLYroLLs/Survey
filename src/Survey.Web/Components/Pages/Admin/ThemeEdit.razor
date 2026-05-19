@@ -1,0 +1,265 @@
+@page "/admin/themes/new"
+@page "/admin/themes/{Id:int}"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+@inject IPlatformAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
+@inject ToastService ToastService
+
+<PageTitle>@GetPageTitle()</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Platform Theme</p>
+			<h1>@GetPageTitle()</h1>
+			<p>Manage a global theme that tenant owners can apply inside their own tenant.</p>
+		</div>
+		@if (!_model.IsNew)
+		{
+			<div class="toolbar">
+				@if (_model.IsArchived)
+				{
+					<button class="btn btn-outline-primary" type="button" @onclick="RestoreAsync">Restore</button>
+				}
+				else if (_model.IsEnabled)
+				{
+					<button class="btn btn-outline-primary" type="button" @onclick="DisableAsync">Disable</button>
+					<button class="btn btn-outline-primary" type="button" @onclick="ArchiveAsync">Archive</button>
+				}
+				else
+				{
+					<button class="btn btn-outline-primary" type="button" @onclick="EnableAsync">Enable</button>
+					<button class="btn btn-outline-primary" type="button" @onclick="ArchiveAsync">Archive</button>
+				}
+				<button class="btn btn-outline-primary" type="button" @onclick="DeleteAsync">Delete</button>
+			</div>
+		}
+	</div>
+
+	<div class="form-card">
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		<EditForm Model="_model" OnValidSubmit="SaveAsync">
+			<DataAnnotationsValidator />
+
+			<div class="form-grid">
+				<div class="field-stack">
+					<FieldLabel Text="Theme Key" Required />
+					@if (_model.IsNew)
+					{
+						<InputText class="form-control" @bind-Value="_model.Key" />
+					}
+					else
+					{
+						<input class="form-control" value="@_model.Key" disabled />
+					}
+					<ValidationMessage For="@(() => _model.Key)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Theme Name" Required />
+					<InputText class="form-control" @bind-Value="_model.Name" />
+					<ValidationMessage For="@(() => _model.Name)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Primary Color" Required />
+					<InputText class="form-control" @bind-Value="_model.PrimaryColor" />
+					<ValidationMessage For="@(() => _model.PrimaryColor)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Accent Color" Required />
+					<InputText class="form-control" @bind-Value="_model.AccentColor" />
+					<ValidationMessage For="@(() => _model.AccentColor)" />
+				</div>
+				<div class="field-stack">
+					<FieldLabel Text="Background Color" Required />
+					<InputText class="form-control" @bind-Value="_model.BackgroundColor" />
+					<ValidationMessage For="@(() => _model.BackgroundColor)" />
+				</div>
+				<div class="field-stack">
+					<label>Preview</label>
+					<span class="theme-preset-card__swatch" style="@BuildPreviewStyle()"></span>
+				</div>
+			</div>
+
+			<div class="field-stack mt-4">
+				<FieldLabel Text="Description" Required />
+				<InputTextArea class="form-control" @bind-Value="_model.Description" />
+				<ValidationMessage For="@(() => _model.Description)" />
+			</div>
+
+			<div class="field-stack mt-4">
+				<FieldLabel Text="CSS Variables Block" Required />
+				<InputTextArea class="form-control platform-theme-css" @bind-Value="_model.CssVariablesBlock" />
+				<ValidationMessage For="@(() => _model.CssVariablesBlock)" />
+				<div class="helper-copy">Paste a full <code>:root</code> CSS variable block. These values drive the full tenant shell, cards, buttons, and top bar.</div>
+			</div>
+
+			@if (_model.UpdatedUtc.HasValue)
+			{
+				<div class="helper-copy mt-3">
+					Status: <strong>@GetStatusLabel()</strong>
+					<br />
+					Last updated @_model.UpdatedUtc.Value.LocalDateTime.ToString("g")
+				</div>
+			}
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="submit">Save Theme</button>
+				<a class="btn btn-outline-primary" href="/admin/themes">Back to Themes</a>
+			</div>
+		</EditForm>
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public int? Id { get; set; }
+
+	private PlatformThemeEditModel _model = new();
+	private string? _errorMessage;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_model = await AdministrationService.GetPlatformThemeAsync(Id);
+		_errorMessage = null;
+	}
+
+	private async Task SaveAsync()
+	{
+		try
+		{
+			var savedId = await AdministrationService.SavePlatformThemeAsync(_model);
+			_errorMessage = null;
+			ToastService.ShowSuccess("Theme saved successfully.", "Saved");
+			NavigationManager.NavigateTo($"/admin/themes/{savedId}", true);
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task EnableAsync()
+	{
+		if (!_model.Id.HasValue)
+		{
+			return;
+		}
+
+		try
+		{
+			await AdministrationService.SetPlatformThemeEnabledAsync(_model.Id.Value, true);
+			ToastService.ShowSuccess("Theme enabled successfully.", "Theme updated");
+			await ReloadAsync();
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task DisableAsync()
+	{
+		if (!_model.Id.HasValue)
+		{
+			return;
+		}
+
+		try
+		{
+			await AdministrationService.SetPlatformThemeEnabledAsync(_model.Id.Value, false);
+			ToastService.ShowSuccess("Theme disabled successfully.", "Theme updated");
+			await ReloadAsync();
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task ArchiveAsync()
+	{
+		if (!_model.Id.HasValue)
+		{
+			return;
+		}
+
+		try
+		{
+			await AdministrationService.SetPlatformThemeArchivedAsync(_model.Id.Value, true);
+			ToastService.ShowSuccess("Theme archived successfully.", "Theme updated");
+			await ReloadAsync();
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task RestoreAsync()
+	{
+		if (!_model.Id.HasValue)
+		{
+			return;
+		}
+
+		try
+		{
+			await AdministrationService.SetPlatformThemeArchivedAsync(_model.Id.Value, false);
+			ToastService.ShowSuccess("Theme restored successfully.", "Theme updated");
+			await ReloadAsync();
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task DeleteAsync()
+	{
+		if (!_model.Id.HasValue)
+		{
+			return;
+		}
+
+		try
+		{
+			await AdministrationService.DeletePlatformThemeAsync(_model.Id.Value);
+			ToastService.ShowSuccess("Theme deleted successfully.", "Theme removed");
+			NavigationManager.NavigateTo("/admin/themes", true);
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+	}
+
+	private string GetPageTitle()
+	{
+		return _model.IsNew ? "Add Theme" : "Edit Theme";
+	}
+
+	private string BuildPreviewStyle()
+	{
+		return $"background: linear-gradient(135deg, {_model.PrimaryColor}, {_model.AccentColor});";
+	}
+
+	private async Task ReloadAsync()
+	{
+		_model = await AdministrationService.GetPlatformThemeAsync(Id);
+		_errorMessage = null;
+	}
+
+	private string GetStatusLabel()
+	{
+		if (_model.IsArchived)
+		{
+			return "Archived";
+		}
+
+		return _model.IsEnabled ? "Active" : "Disabled";
+	}
+}

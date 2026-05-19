@@ -12,14 +12,7 @@
 		<div>
 			<p class="eyebrow">Tenant Settings</p>
 			<h1>Theme</h1>
-			<p>View and choose the current theme for this tenant.</p>
-		</div>
-		<div class="toolbar">
-			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyView)">
-				<Authorized>
-					<a class="btn btn-outline-primary" href="/admin/theme/radius-preview">View Radius Preview</a>
-				</Authorized>
-			</AuthorizeView>
+			<p>Choose from the global themes that platform administration has made available to this tenant.</p>
 		</div>
 	</div>
 
@@ -27,7 +20,7 @@
 		<div class="page-header">
 			<div>
 				<h2>Color System</h2>
-				<p>Select from the available theme presets for this tenant.</p>
+				<p>Select from the available platform-managed themes for this tenant.</p>
 			</div>
 			@if (_model.UpdatedUtc.HasValue)
 			{

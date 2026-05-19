@@ -55,6 +55,43 @@ public sealed class PlatformUserEditModel
 	public bool IsNew => string.IsNullOrWhiteSpace(Id);
 }
 
+public sealed class PlatformUserInviteModel
+{
+	[Required]
+	[EmailAddress]
+	[StringLength(256)]
+	public string Email { get; set; } = string.Empty;
+
+	public bool IsPlatformUserEnabled { get; set; } = true;
+	public bool IsPlatformSuperAdmin { get; set; }
+	public int? TenantId { get; set; }
+	public TenantRole TenantRole { get; set; } = TenantRole.User;
+	public IReadOnlyList<PlatformUserPermissionEditModel> Permissions { get; set; } = Array.Empty<PlatformUserPermissionEditModel>();
+}
+
+public sealed class PlatformUserInviteResultModel
+{
+	public string Token { get; set; } = string.Empty;
+	public string Email { get; set; } = string.Empty;
+	public DateTimeOffset ExpiresAtUtc { get; set; }
+	public string InvitationUrl { get; set; } = string.Empty;
+}
+
+public sealed class PlatformUserInvitationAcceptanceContextModel
+{
+	public string Token { get; set; } = string.Empty;
+	public bool IsValid { get; set; }
+	public string? ErrorMessage { get; set; }
+	public string Email { get; set; } = string.Empty;
+	public bool IsPlatformUserEnabled { get; set; }
+	public bool IsPlatformSuperAdmin { get; set; }
+	public bool ExistingAccountFound { get; set; }
+	public string? TenantName { get; set; }
+	public TenantRole? TenantRole { get; set; }
+	public DateTimeOffset? ExpiresAtUtc { get; set; }
+	public IReadOnlyList<string> PermissionLabels { get; set; } = Array.Empty<string>();
+}
+
 public sealed class PlatformTenantListItem
 {
 	public int Id { get; set; }

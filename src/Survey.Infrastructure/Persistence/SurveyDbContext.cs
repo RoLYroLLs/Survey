@@ -25,6 +25,8 @@ public class SurveyDbContext(
 	public DbSet<TenantVisibleStateProvince> TenantVisibleStateProvinces => Set<TenantVisibleStateProvince>();
 	public DbSet<TenantVisibleCounty> TenantVisibleCounties => Set<TenantVisibleCounty>();
 	public DbSet<PlatformUserPermission> PlatformUserPermissions => Set<PlatformUserPermission>();
+	public DbSet<PlatformUserInvitation> PlatformUserInvitations => Set<PlatformUserInvitation>();
+	public DbSet<PlatformTheme> PlatformThemes => Set<PlatformTheme>();
 	public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 	public DbSet<Country> Countries => Set<Country>();
 	public DbSet<StateProvince> StateProvinces => Set<StateProvince>();
@@ -177,6 +179,34 @@ public class SurveyDbContext(
 			entity.Property(permission => permission.UserId).HasMaxLength(450).IsRequired();
 			entity.Property(permission => permission.PermissionKey).HasMaxLength(200).IsRequired();
 			entity.HasIndex(permission => new { permission.UserId, permission.PermissionKey }).IsUnique();
+		});
+
+		builder.Entity<PlatformUserInvitation>(entity =>
+		{
+			entity.Property(invitation => invitation.Email).HasMaxLength(256).IsRequired();
+			entity.Property(invitation => invitation.PermissionKeysJson).HasMaxLength(4000).IsRequired();
+			entity.Property(invitation => invitation.TokenHash).HasMaxLength(512).IsRequired();
+			entity.Property(invitation => invitation.CreatedByUserId).HasMaxLength(450).IsRequired();
+			entity.HasIndex(invitation => invitation.TokenHash).IsUnique();
+			entity.HasIndex(invitation => invitation.Email);
+			entity.HasOne(invitation => invitation.Tenant)
+				.WithMany()
+				.HasForeignKey(invitation => invitation.TenantId)
+				.OnDelete(DeleteBehavior.Restrict);
+		});
+
+		builder.Entity<PlatformTheme>(entity =>
+		{
+			entity.Property(theme => theme.Key).HasMaxLength(100).IsRequired();
+			entity.Property(theme => theme.Name).HasMaxLength(200).IsRequired();
+			entity.Property(theme => theme.Description).HasMaxLength(1000).IsRequired();
+			entity.Property(theme => theme.PrimaryColor).HasMaxLength(32).IsRequired();
+			entity.Property(theme => theme.AccentColor).HasMaxLength(32).IsRequired();
+			entity.Property(theme => theme.BackgroundColor).HasMaxLength(32).IsRequired();
+			entity.Property(theme => theme.CssVariablesBlock).HasMaxLength(12000).IsRequired();
+			entity.Property(theme => theme.IsEnabled).HasDefaultValue(true);
+			entity.Property(theme => theme.IsArchived).HasDefaultValue(false);
+			entity.HasIndex(theme => theme.Key).IsUnique();
 		});
 
 		builder.Entity<AuditLog>(entity =>

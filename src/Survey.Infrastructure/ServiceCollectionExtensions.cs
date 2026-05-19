@@ -444,6 +444,44 @@ public static class ServiceCollectionExtensions
 			cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection,
 			"""
+			CREATE TABLE IF NOT EXISTS "PlatformUserInvitations" (
+				"Id" INTEGER NOT NULL CONSTRAINT "PK_PlatformUserInvitations" PRIMARY KEY AUTOINCREMENT,
+				"Email" TEXT NOT NULL,
+				"IsPlatformUserEnabled" INTEGER NOT NULL,
+				"IsPlatformSuperAdmin" INTEGER NOT NULL,
+				"PermissionKeysJson" TEXT NOT NULL,
+				"TenantId" INTEGER NULL,
+				"TenantRole" INTEGER NULL,
+				"TokenHash" TEXT NOT NULL,
+				"ExpiresAtUtc" TEXT NOT NULL,
+				"CreatedByUserId" TEXT NOT NULL,
+				"CreatedUtc" TEXT NOT NULL,
+				"AcceptedUtc" TEXT NULL,
+				"RevokedUtc" TEXT NULL,
+				CONSTRAINT "FK_PlatformUserInvitations_Tenants_TenantId" FOREIGN KEY ("TenantId") REFERENCES "Tenants" ("Id") ON DELETE RESTRICT
+			);
+			""",
+			cancellationToken);
+		await ExecuteSqliteNonQueryAsync(connection,
+			"""
+			CREATE TABLE IF NOT EXISTS "PlatformThemes" (
+				"Id" INTEGER NOT NULL CONSTRAINT "PK_PlatformThemes" PRIMARY KEY AUTOINCREMENT,
+				"Key" TEXT NOT NULL,
+				"Name" TEXT NOT NULL,
+				"Description" TEXT NOT NULL,
+				"PrimaryColor" TEXT NOT NULL,
+				"AccentColor" TEXT NOT NULL,
+				"BackgroundColor" TEXT NOT NULL,
+				"CssVariablesBlock" TEXT NOT NULL,
+				"IsEnabled" INTEGER NOT NULL DEFAULT 1,
+				"IsArchived" INTEGER NOT NULL DEFAULT 0,
+				"CreatedUtc" TEXT NOT NULL,
+				"UpdatedUtc" TEXT NOT NULL
+			);
+			""",
+			cancellationToken);
+		await ExecuteSqliteNonQueryAsync(connection,
+			"""
 			CREATE TABLE IF NOT EXISTS "AuditLogs" (
 				"Id" INTEGER NOT NULL CONSTRAINT "PK_AuditLogs" PRIMARY KEY AUTOINCREMENT,
 				"TenantId" INTEGER NULL,
@@ -470,6 +508,11 @@ public static class ServiceCollectionExtensions
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_TenantVisibleStateProvinces_TenantId_StateProvinceId" ON "TenantVisibleStateProvinces" ("TenantId", "StateProvinceId");""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_TenantVisibleCounties_TenantId_CountyId" ON "TenantVisibleCounties" ("TenantId", "CountyId");""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlatformUserPermissions_UserId_PermissionKey" ON "PlatformUserPermissions" ("UserId", "PermissionKey");""", cancellationToken);
+		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlatformUserInvitations_TokenHash" ON "PlatformUserInvitations" ("TokenHash");""", cancellationToken);
+		await ExecuteSqliteNonQueryAsync(connection, """CREATE INDEX IF NOT EXISTS "IX_PlatformUserInvitations_Email" ON "PlatformUserInvitations" ("Email");""", cancellationToken);
+		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlatformThemes_Key" ON "PlatformThemes" ("Key");""", cancellationToken);
+		await EnsureSqliteColumnExistsAsync(connection, "PlatformThemes", "IsEnabled", """ALTER TABLE "PlatformThemes" ADD COLUMN "IsEnabled" INTEGER NOT NULL DEFAULT 1;""", cancellationToken);
+		await EnsureSqliteColumnExistsAsync(connection, "PlatformThemes", "IsArchived", """ALTER TABLE "PlatformThemes" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE INDEX IF NOT EXISTS "IX_AuditLogs_TenantId_CreatedUtc" ON "AuditLogs" ("TenantId", "CreatedUtc");""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """DROP INDEX IF EXISTS "IX_PostalAddresses_NormalizedKey";""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_PostalAddresses_TenantId_NormalizedKey" ON "PostalAddresses" ("TenantId", "NormalizedKey");""", cancellationToken);

@@ -27,7 +27,14 @@
 				<section class="content-card">
 					<h2>Tenants</h2>
 					<p>Review tenant directories, membership counts, and tenant-wide usage.</p>
-					<a class="btn btn-outline-primary" href="/admin/tenants">Open Tenants</a>
+					<div class="toolbar">
+						<a class="btn btn-outline-primary" href="/admin/tenants">Open Tenants</a>
+						<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
+							<Authorized Context="tenantCreateAccess">
+								<a class="btn btn-outline-primary" href="/Account/CreateTenant?returnUrl=%2Fadmin">Create Tenant</a>
+							</Authorized>
+						</AuthorizeView>
+					</div>
 				</section>
 			</Authorized>
 		</AuthorizeView>
@@ -37,6 +44,15 @@
 					<h2>Audit</h2>
 					<p>Review platform and tenant security-sensitive activity and denied access attempts.</p>
 					<a class="btn btn-outline-primary" href="/admin/audit">Open Audit</a>
+				</section>
+			</Authorized>
+		</AuthorizeView>
+		<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.SettingsManage)">
+			<Authorized>
+				<section class="content-card">
+					<h2>Themes</h2>
+					<p>Manage the global theme library that controls tenant-facing app appearance.</p>
+					<a class="btn btn-outline-primary" href="/admin/themes">Open Themes</a>
 				</section>
 			</Authorized>
 		</AuthorizeView>

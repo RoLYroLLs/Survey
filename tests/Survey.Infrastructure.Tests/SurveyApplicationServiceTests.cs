@@ -621,6 +621,127 @@ public class SurveyApplicationServiceTests
 	}
 
 	[Fact]
+	public async Task InitializeSurveyPlatformAsync_Does_Not_Add_Existing_Users_To_Another_Users_Tenant_When_Memberships_Already_Exist()
+	{
+		var databasePath = Path.Combine(Path.GetTempPath(), $"survey-bootstrap-{Guid.NewGuid():N}.db");
+		var inviterUserId = string.Empty;
+		var inviteeUserId = string.Empty;
+		var inviterTenantId = 0;
+		var inviteeTenantId = 0;
+		var configuration = new ConfigurationBuilder()
+			.AddInMemoryCollection(new Dictionary<string, string?>
+			{
+				["Database:Provider"] = "Sqlite",
+				["ConnectionStrings:Default"] = $"Data Source={databasePath}"
+			})
+			.Build();
+
+		var services = new ServiceCollection();
+		services.AddDataProtection();
+		services.AddLogging();
+		services.AddSurveyInfrastructure(configuration);
+
+		await using var provider = services.BuildServiceProvider();
+
+		try
+		{
+			await provider.InitializeSurveyPlatformAsync();
+
+			await using (var scope = provider.CreateAsyncScope())
+			{
+				var dbContext = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+				var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+				var inviteeTenant = new Tenant("Invitee Tenant");
+				var inviterTenant = new Tenant("Inviter Tenant");
+				inviteeTenantId = inviteeTenant.Id;
+				inviterTenantId = inviterTenant.Id;
+				dbContext.Tenants.AddRange(inviteeTenant, inviterTenant);
+				await dbContext.SaveChangesAsync();
+				inviteeTenantId = inviteeTenant.Id;
+				inviterTenantId = inviterTenant.Id;
+
+				var inviter = new ApplicationUser
+				{
+					UserName = "inviter@example.com",
+					Email = "inviter@example.com",
+					EmailConfirmed = true
+				};
+				UserAvatarPalette.EnsureAssigned(inviter);
+
+				var invitee = new ApplicationUser
+				{
+					UserName = "invitee@example.com",
+					Email = "invitee@example.com",
+					EmailConfirmed = true
+				};
+				UserAvatarPalette.EnsureAssigned(invitee);
+
+				var inviterResult = await userManager.CreateAsync(inviter, "TempPass123!");
+				Assert.True(inviterResult.Succeeded, string.Join("; ", inviterResult.Errors.Select(static error => error.Description)));
+
+				var inviteeResult = await userManager.CreateAsync(invitee, "TempPass123!");
+				Assert.True(inviteeResult.Succeeded, string.Join("; ", inviteeResult.Errors.Select(static error => error.Description)));
+				inviterUserId = inviter.Id;
+				inviteeUserId = invitee.Id;
+
+				var inviterMembership = new TenantMembership(inviterTenant.Id, inviter.Id, TenantRole.Owner);
+				var inviteeOwnerMembership = new TenantMembership(inviteeTenant.Id, invitee.Id, TenantRole.Owner);
+				var acceptedInviteMembership = new TenantMembership(inviterTenant.Id, invitee.Id, TenantRole.User);
+				dbContext.TenantMemberships.AddRange(inviterMembership, inviteeOwnerMembership, acceptedInviteMembership);
+				await dbContext.SaveChangesAsync();
+
+				inviter.ActiveTenantMembershipId = inviterMembership.Id;
+				invitee.ActiveTenantMembershipId = acceptedInviteMembership.Id;
+				await userManager.UpdateAsync(inviter);
+				await userManager.UpdateAsync(invitee);
+			}
+
+			await provider.InitializeSurveyPlatformAsync();
+
+			await using var verificationScope = provider.CreateAsyncScope();
+			var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+			var membershipRows = await verificationDbContext.TenantMemberships
+				.AsNoTracking()
+				.OrderBy(membership => membership.UserId)
+				.ThenBy(membership => membership.TenantId)
+				.Select(membership => new { membership.UserId, membership.TenantId, membership.Role })
+				.ToListAsync();
+
+			var groupedMemberships = membershipRows
+				.GroupBy(membership => membership.UserId, StringComparer.Ordinal)
+				.ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+
+			Assert.Collection(
+				groupedMemberships[inviterUserId],
+				membership =>
+				{
+					Assert.Equal(inviterTenantId, membership.TenantId);
+					Assert.Equal(TenantRole.Owner, membership.Role);
+				});
+			Assert.Collection(
+				groupedMemberships[inviteeUserId],
+				firstMembership =>
+				{
+					Assert.Equal(inviteeTenantId, firstMembership.TenantId);
+					Assert.Equal(TenantRole.Owner, firstMembership.Role);
+				},
+				secondMembership =>
+				{
+					Assert.Equal(inviterTenantId, secondMembership.TenantId);
+					Assert.Equal(TenantRole.User, secondMembership.Role);
+				});
+		}
+		finally
+		{
+			if (File.Exists(databasePath))
+			{
+				File.Delete(databasePath);
+			}
+		}
+	}
+
+	[Fact]
 	public async Task SaveTenantUserAsync_Throws_When_Current_User_Tries_To_Change_Their_Own_Access()
 	{
 		await using var harness = await TestHarness.CreateAsync();

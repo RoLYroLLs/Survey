@@ -278,6 +278,22 @@ public static class SiteThemePresetCatalog
 			.ToArray();
 	}
 
+	public static IReadOnlyList<ThemeSeedModel> GetSeedModels()
+	{
+		return Definitions
+			.Select(definition => new ThemeSeedModel
+			{
+				Key = definition.Key,
+				Name = definition.Name,
+				Description = definition.Description,
+				PrimaryColor = definition.Primary,
+				AccentColor = definition.Accent,
+				BackgroundColor = definition.Background,
+				CssVariablesBlock = BuildCssVariablesBlock(definition.Key)
+			})
+			.ToArray();
+	}
+
 	public static string GetPresetName(string? key)
 	{
 		return GetDefinition(key).Name;

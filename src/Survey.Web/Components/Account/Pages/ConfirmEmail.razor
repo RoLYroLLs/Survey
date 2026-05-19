@@ -63,11 +63,18 @@
         }
     }
 
-    private string GetNextStep(ApplicationUser user)
-    {
-        var nextPath = user.HasCompletedSelfSignupProfile()
-            ? "Account/CreateTenant"
-            : "Account/CompleteProfile";
+	private string GetNextStep(ApplicationUser user)
+	{
+		if (user.HasCompletedSelfSignupProfile()
+			&& !string.IsNullOrWhiteSpace(ReturnUrl)
+			&& ReturnUrl.StartsWith("/Account/AcceptPlatformInvite", StringComparison.OrdinalIgnoreCase))
+		{
+			return ReturnUrl;
+		}
+
+		var nextPath = user.HasCompletedSelfSignupProfile()
+			? GetPostProfilePath()
+			: "Account/CompleteProfile";
 
         if (string.IsNullOrWhiteSpace(ReturnUrl))
         {
@@ -76,4 +83,9 @@
 
         return $"{nextPath}?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
     }
+
+	private string GetPostProfilePath()
+	{
+		return "Account/CreateTenant";
+	}
 }
