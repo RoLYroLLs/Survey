@@ -2,7 +2,7 @@
 @attribute [TenantAuthorize(TenantPermissionKeys.ResponsesView)]
 @inject ITenantAdministrationService AdministrationService
 
-<PageTitle>Response Detail</PageTitle>
+<PageTitle>Response</PageTitle>
 
 @if (_item is null)
 {
@@ -17,9 +17,9 @@ else
 	<div class="page-stack">
 		<div class="page-header">
 			<div>
-				<p class="eyebrow">Response Detail</p>
-				<h1>@_item.RespondentName</h1>
-				<p>@_item.SurveyName | @_item.VersionName | @_item.PersonName | @_item.LocationName</p>
+				<p class="eyebrow">Response</p>
+				<h1>Response</h1>
+				<p>@_item.RespondentName | @_item.SurveyName | @_item.VersionName | @_item.PersonName | @_item.LocationName</p>
 			</div>
 			<div class="toolbar">
 				<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.PeopleEdit)">

@@ -6,13 +6,13 @@
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Question" : "Add Question")</PageTitle>
+<PageTitle>@(Id.HasValue ? "Edit Question" : "New Question")</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Survey Question</p>
-			<h1>@(Id.HasValue ? "Edit Question" : "Add Question")</h1>
+			<h1>@(Id.HasValue ? "Edit Question" : "New Question")</h1>
 			<p>View or update this question.</p>
 		</div>
 	</div>

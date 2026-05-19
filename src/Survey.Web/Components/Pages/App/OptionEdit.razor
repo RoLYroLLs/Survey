@@ -6,13 +6,13 @@
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Option" : "Add Option")</PageTitle>
+<PageTitle>@(Id.HasValue ? "Edit Option" : "New Option")</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Question Option</p>
-			<h1>@(Id.HasValue ? "Edit Option" : "Add Option")</h1>
+			<h1>@(Id.HasValue ? "Edit Option" : "New Option")</h1>
 			<p>@GetHeaderDescription()</p>
 		</div>
 	</div>

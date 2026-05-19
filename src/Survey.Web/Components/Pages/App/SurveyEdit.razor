@@ -141,10 +141,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Survey";
+			return "Survey";
 		}
 
-		return Id.HasValue ? "Edit Survey" : "Add Survey";
+		return Id.HasValue ? "Edit Survey" : "New Survey";
 	}
 
 	private static string DisplayOrDash(string? value)

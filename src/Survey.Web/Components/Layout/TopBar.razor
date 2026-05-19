@@ -99,7 +99,7 @@
 						}
 						<form action="Account/Logout" method="post">
 							<AntiforgeryToken />
-							<input type="hidden" name="ReturnUrl" value="@_currentUrl" />
+							<input type="hidden" name="ReturnUrl" value="/Account/Login" />
 							<button type="submit" class="topbar__menu-item topbar__menu-item--button">
 								<OutlineIcon Name="logout" CssClass="topbar__menu-icon" />
 								<span>Logout</span>
@@ -187,6 +187,11 @@
 
 	private string GetBrandUrl()
 	{
+		if (_currentUser is null)
+		{
+			return "/";
+		}
+
 		if (_accessContext.HasTenantAccess)
 		{
 			return "/app";

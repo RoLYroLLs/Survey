@@ -231,10 +231,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Address";
+			return "Address";
 		}
 
-		return Id.HasValue ? "Edit Address" : "Add Address";
+		return Id.HasValue ? "Edit Address" : "New Address";
 	}
 
 	private IReadOnlyList<string> FormatAddress()

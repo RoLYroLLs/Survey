@@ -198,10 +198,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Area";
+			return "Area";
 		}
 
-		return Id.HasValue ? "Edit Area" : "Add Area";
+		return Id.HasValue ? "Edit Area" : "New Area";
 	}
 
 	private static string DisplayOrDash(string? value)

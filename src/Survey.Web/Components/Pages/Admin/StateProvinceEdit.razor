@@ -147,10 +147,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View State / Territory";
+			return "State / Territory";
 		}
 
-		return Id.HasValue ? "Edit State / Territory" : "Add State / Territory";
+		return Id.HasValue ? "Edit State / Territory" : "New State / Territory";
 	}
 
 	private static string DisplayOrDash(string? value)

@@ -6,8 +6,15 @@
 		<nav class="marketing-topbar__nav">
 			<a href="/">Overview</a>
 			<a href="/pricing">Pricing</a>
-			<a href="/Account/Login">Login</a>
-			<a class="btn btn-primary marketing-topbar__cta" href="/Account/Register">Create Account</a>
+			<AuthorizeView>
+				<Authorized>
+					<a class="btn btn-primary marketing-topbar__cta" href="/app">Go to Dashboard</a>
+				</Authorized>
+				<NotAuthorized>
+					<a href="/Account/Login">Login</a>
+					<a class="btn btn-primary marketing-topbar__cta" href="/Account/Register">Create Account</a>
+				</NotAuthorized>
+			</AuthorizeView>
 		</nav>
 	</header>
 

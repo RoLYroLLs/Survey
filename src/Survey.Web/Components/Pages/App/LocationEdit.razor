@@ -14,7 +14,7 @@
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Recipient Location</p>
-			<h1>@GetHeading()</h1>
+			<h1>@GetPageTitle()</h1>
 			<p>View or update this location and its contact details.</p>
 		</div>
 	</div>
@@ -376,25 +376,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Location";
+			return "Location";
 		}
 
-		return Id.HasValue ? "Edit Location" : "Add Location";
-	}
-
-	private string GetHeading()
-	{
-		if (IsViewMode)
-		{
-			var personName = !string.IsNullOrWhiteSpace(_model.PersonName)
-				? _model.PersonName
-				: GetSelectedOptionLabel(_model.PersonOptions, _model.PersonId);
-			var nickname = DisplayOrDash(_model.Nickname);
-			var combined = string.Join(" - ", new[] { personName, nickname }.Where(value => !string.IsNullOrWhiteSpace(value) && value != "-"));
-			return string.IsNullOrWhiteSpace(combined) ? "View Location" : combined;
-		}
-
-		return GetPageTitle();
+		return Id.HasValue ? "Edit Location" : "New Location";
 	}
 
 	private async Task OnPersonChangedAsync()

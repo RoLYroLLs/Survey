@@ -14,7 +14,7 @@
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Recipient</p>
-			<h1>@GetHeading()</h1>
+			<h1>@GetPageTitle()</h1>
 			<p>View or update this person's profile, addresses, and contact methods.</p>
 		</div>
 	</div>
@@ -504,21 +504,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Person";
+			return "Person";
 		}
 
-		return Id.HasValue ? "Edit Person" : "Add Person";
-	}
-
-	private string GetHeading()
-	{
-		if (IsViewMode)
-		{
-			var fullName = GetFullName();
-			return string.IsNullOrWhiteSpace(fullName) ? "View Person" : fullName;
-		}
-
-		return GetPageTitle();
+		return Id.HasValue ? "Edit Person" : "New Person";
 	}
 
 	private string GetBackUrl()

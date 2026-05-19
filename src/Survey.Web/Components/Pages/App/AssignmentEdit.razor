@@ -7,13 +7,13 @@
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Assignment" : "Add Assignment")</PageTitle>
+<PageTitle>@(Id.HasValue ? "Edit Assignment" : "New Assignment")</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Survey Assignment</p>
-			<h1>@(Id.HasValue ? "Edit Assignment" : "Add Assignment")</h1>
+			<h1>@(Id.HasValue ? "Edit Assignment" : "New Assignment")</h1>
 			<p>View or update the person, location, survey, and timing for this assignment.</p>
 		</div>
 	</div>

@@ -172,10 +172,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Goal";
+			return "Goal";
 		}
 
-		return Id.HasValue ? "Edit Goal" : "Add Goal";
+		return Id.HasValue ? "Edit Goal" : "New Goal";
 	}
 
 	private static string DisplayOrDash(string? value)

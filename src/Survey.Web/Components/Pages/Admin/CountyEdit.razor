@@ -138,10 +138,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View County";
+			return "County";
 		}
 
-		return Id.HasValue ? "Edit County" : "Add County";
+		return Id.HasValue ? "Edit County" : "New County";
 	}
 
 	private static string DisplayOrDash(string? value)

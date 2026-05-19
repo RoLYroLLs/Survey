@@ -133,10 +133,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Country";
+			return "Country";
 		}
 
-		return Id.HasValue ? "Edit Country" : "Add Country";
+		return Id.HasValue ? "Edit Country" : "New Country";
 	}
 
 	private static string DisplayOrDash(string? value)

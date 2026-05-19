@@ -180,10 +180,10 @@
 	{
 		if (IsViewMode)
 		{
-			return "View Version";
+			return "Version";
 		}
 
-		return Id.HasValue ? "Edit Version" : "Add Version";
+		return Id.HasValue ? "Edit Version" : "New Version";
 	}
 
 	private static string DisplayOrDash(string? value)

@@ -35,7 +35,7 @@
 - Platform access is separate from tenant access. Platform administration uses platform permissions and must not imply automatic tenant access.
 - A user may belong to multiple tenants. One active tenant membership is selected server-side for the current session, and the UI provides a tenant switcher when needed.
 - Self-serve onboarding is phased: first collect email, username, and password; then require email confirmation; then collect name, address, and phone; then create the first tenant. The first membership becomes the initial `Owner`.
-- Self-serve onboarding should prefill the first tenant name as `My First Tenant` until the user changes it.
+- Self-serve onboarding should prefill the first tenant name as `Default Tenant` until the user changes it.
 - Tenant admins can invite users into their tenant with secure invitation tokens. Existing accounts can accept an invite after signing in, and new accounts can be created directly from the invitation flow.
 - Tenant membership management must prevent privilege escalation, disallow changing one’s own tenant role/status/permissions through normal tenant-admin flows, and block removal, disablement, or demotion of the final enabled `Owner` or the final enabled admin-capable membership.
 - Sensitive authorization denials and tenant-admin security changes should be audit logged.
@@ -95,7 +95,7 @@
 
 - The web host is structured for Azure hosting and Aspire-managed local orchestration.
 - Production should use a durable shared database and external secret storage.
-- Seed-admin settings are read from configuration so the first administrator can be bootstrapped without self-registration.
+- First-run setup should create the bootstrap platform admin interactively instead of relying on seeded administrator credentials in configuration.
 - Tenant bootstrap should remain self-serve, while invitation delivery can use copied secure links until outbound email delivery is introduced.
 - Platform administration now exposes dedicated `/admin/users`, `/admin/tenants`, and `/admin/audit` surfaces for platform-user management, tenant oversight, and audit review.
 - Application service dependencies should stay split between `ITenantAdministrationService` and `IPlatformAdministrationService`; callers should not depend on a combined admin service contract.
@@ -144,3 +144,12 @@
 
 - The platform should seed the full United States county list, including county equivalents such as the District of Columbia, Alaska boroughs / census areas, independent cities, and Louisiana parishes.
 - Florida ZIP-to-county seed data remains a separate reference dataset and should continue to load after the full county reference list is in place.
+
+## Open Work
+
+- Tenant billing, plan tiers, subscription state, and payment enforcement are not implemented yet; tenant details currently manage only the tenant name while leaving room for later commercial fields.
+- Outbound email delivery is still a placeholder workflow; account confirmation, password reset, and invitation flows need a real email sender/provider before hosted environments can rely on email-driven onboarding.
+- Public pricing is still a mockup and is not connected to enforceable tenant limits, checkout, invoicing, or plan provisioning.
+- Passkey support is build-wired, but the browser registration and sign-in flow still needs live end-to-end verification across supported devices and browsers.
+- Account-management pages have been brought closer to the main shell, but the remaining manage screens should continue to be reviewed so every account/settings page matches the main app styling and navigation consistently.
+- The current automated coverage is still lighter than the target security plan; tenant-switching, protected-owner rules, invitation flows, first-run setup, and public/auth navigation regressions would benefit from broader web and integration tests.

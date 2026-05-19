@@ -2,7 +2,7 @@
 @attribute [PlatformAuthorize(PlatformPermissionKeys.TenantsOversight)]
 @inject IPlatformAdministrationService AdministrationService
 
-<PageTitle>Tenant Detail</PageTitle>
+<PageTitle>Tenant</PageTitle>
 
 @if (_item is null)
 {
@@ -18,8 +18,8 @@ else
 		<div class="page-header">
 			<div>
 				<p class="eyebrow">Platform Oversight</p>
-				<h1>@_item.Name</h1>
-				<p>@_item.Slug</p>
+				<h1>Tenant</h1>
+				<p>@_item.Name | @_item.Slug</p>
 			</div>
 			<div class="toolbar">
 				<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsManage)">

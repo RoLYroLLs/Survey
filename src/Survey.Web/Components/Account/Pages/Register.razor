@@ -14,7 +14,7 @@
 
 <div class="status-card narrow-card">
 	<p class="eyebrow">Step 1 of 4</p>
-	<h1>Create your account</h1>
+<h1>Create Account</h1>
 	<p class="mb-4">Start with your email, username, and password. You’ll verify your email before continuing.</p>
 
 	@if (!string.IsNullOrWhiteSpace(_errorMessage))
@@ -52,6 +52,7 @@
 		<div class="form-footer">
 			<button class="btn btn-primary" type="submit" disabled="@_isSaving">Continue</button>
 			<a class="btn btn-outline-primary" href="Account/Login">Back to Login</a>
+			<a class="btn btn-outline-primary" href="/">Back to Overview</a>
 		</div>
 	</EditForm>
 </div>

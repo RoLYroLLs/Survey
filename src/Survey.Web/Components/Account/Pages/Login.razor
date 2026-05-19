@@ -53,6 +53,7 @@
 					<button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
 					<PasskeySubmit Operation="PasskeyOperation.Request" Name="PasskeyInput" EmailName="Input.Identifier" class="w-100 btn btn-lg btn-outline-secondary">Log in with passkey</PasskeySubmit>
 					<a class="w-100 btn btn-lg btn-outline-primary" href="@GetRegisterUrl()">Create account</a>
+					<a class="w-100 btn btn-lg btn-outline-primary" href="/">Back to Overview</a>
 				</div>
 				<div class="toolbar">
 					<a href="Account/ForgotPassword">Forgot your password?</a>
@@ -151,7 +152,7 @@
 		if (result.Succeeded)
 		{
 			Logger.LogInformation("User logged in.");
-			RedirectManager.RedirectTo(ReturnUrl);
+			RedirectManager.RedirectTo(GetPostLoginUrl());
 		}
 		else if (result.RequiresTwoFactor)
 		{
@@ -176,12 +177,19 @@
 		return Task.CompletedTask;
 	}
 
-    private string GetRegisterUrl()
-    {
-        return string.IsNullOrWhiteSpace(ReturnUrl)
-            ? "Account/Register"
-            : $"Account/Register?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
-    }
+	private string GetRegisterUrl()
+	{
+		return string.IsNullOrWhiteSpace(ReturnUrl)
+			? "Account/Register"
+			: $"Account/Register?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+	}
+
+	private string GetPostLoginUrl()
+	{
+		return string.IsNullOrWhiteSpace(ReturnUrl)
+			? "/app"
+			: ReturnUrl;
+	}
 
     private async Task<ApplicationUser?> FindUserForSignInAsync(string identifier)
     {
