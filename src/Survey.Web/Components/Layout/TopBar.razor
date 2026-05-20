@@ -8,7 +8,7 @@
 <header class="topbar">
 	<a class="topbar__brand" href="@GetBrandUrl()">Survey</a>
 
-	@if (_currentUser is not null)
+	@if (_currentUser is not null && !IsSetupRoute && !IsAccountOnboardingRoute)
 	{
 		<form class="topbar__search" @onsubmit="SubmitSearchAsync">
 			<OutlineIcon Name="search" CssClass="topbar__search-icon" />
@@ -25,14 +25,11 @@
 	}
 
 	<div class="topbar__actions">
-		@if (_currentUser is not null)
+		@if (_currentUser is not null && !IsSetupRoute && !IsAccountOnboardingRoute)
 		{
 			<details class="topbar__tenant-switcher topbar__menu">
 				<summary class="topbar__tenant-trigger">
-					<span class="topbar__tenant-trigger-copy">
-						<span class="topbar__tenant-name">@GetActiveTenantName()</span>
-						<span class="topbar__tenant-owner">@GetActiveTenantOwnerName()</span>
-					</span>
+					<span class="topbar__tenant-name">@GetActiveTenantName()</span>
 					<OutlineIcon Name="chevron-down" CssClass="topbar__tenant-chevron" />
 				</summary>
 				@if (_membershipOptions.Count > 0)
@@ -45,7 +42,10 @@
 								<span class="topbar__tenant-option @(membership.MembershipId == _accessContext.ActiveTenantMembershipId ? "topbar__tenant-option--active" : string.Empty)">
 									<span class="topbar__tenant-option-copy">
 										<span class="topbar__tenant-option-name">@membership.TenantName</span>
-										<span class="topbar__tenant-option-owner">@membership.OwnerDisplayName</span>
+										@if (!string.IsNullOrWhiteSpace(membership.DropdownSubtitle))
+										{
+											<span class="topbar__tenant-option-owner">@membership.DropdownSubtitle</span>
+										}
 									</span>
 								</span>
 							}
@@ -54,7 +54,10 @@
 								<a class="topbar__tenant-option" href="@BuildTenantSwitchUrl(membership.MembershipId)">
 									<span class="topbar__tenant-option-copy">
 										<span class="topbar__tenant-option-name">@membership.TenantName</span>
-										<span class="topbar__tenant-option-owner">@membership.OwnerDisplayName</span>
+										@if (!string.IsNullOrWhiteSpace(membership.DropdownSubtitle))
+										{
+											<span class="topbar__tenant-option-owner">@membership.DropdownSubtitle</span>
+										}
 									</span>
 								</a>
 							}
@@ -64,51 +67,57 @@
 			</details>
 		}
 
-		<AuthorizeView>
-			<Authorized Context="userContext">
-				<details class="topbar__profile-menu topbar__menu">
-					<summary class="topbar__profile-trigger">
-						<span class="topbar__avatar" style="@GetAvatarStyle()">@GetAvatarLetter()</span>
-						<OutlineIcon Name="chevron-down" CssClass="topbar__chevron" />
-					</summary>
-					<div class="topbar__profile-dropdown">
-						<div class="topbar__profile-header">
-							<span class="topbar__avatar topbar__avatar--large" style="@GetAvatarStyle()">@GetAvatarLetter()</span>
-							<div>
-								<div class="topbar__profile-name">@GetDisplayName()</div>
-								<div class="topbar__profile-email">@GetAccountEmail(userContext.User)</div>
+		@if (!IsSetupRoute)
+		{
+			<AuthorizeView>
+				<Authorized Context="userContext">
+					<details class="topbar__profile-menu topbar__menu">
+						<summary class="topbar__profile-trigger">
+							<span class="topbar__avatar" style="@GetAvatarStyle()">@GetAvatarLetter()</span>
+							<OutlineIcon Name="chevron-down" CssClass="topbar__chevron" />
+						</summary>
+						<div class="topbar__profile-dropdown">
+							<div class="topbar__profile-header">
+								<span class="topbar__avatar topbar__avatar--large" style="@GetAvatarStyle()">@GetAvatarLetter()</span>
+								<div>
+									<div class="topbar__profile-name">@GetDisplayName()</div>
+									<div class="topbar__profile-email">@GetAccountEmail(userContext.User)</div>
+								</div>
 							</div>
+							@if (!IsAccountOnboardingRoute && _accessContext.IsPlatformUserEnabled && _accessContext.PlatformPermissions.Count > 0)
+							{
+								<a class="topbar__menu-item" href="/admin">
+									<OutlineIcon Name="platform" CssClass="topbar__menu-icon" />
+									<span>Platform Admin</span>
+								</a>
+							}
+							@if (!IsAccountOnboardingRoute)
+							{
+								<a class="topbar__menu-item" href="/Account/CreateTenant">
+									<OutlineIcon Name="tenant" CssClass="topbar__menu-icon" />
+									<span>Create Tenant</span>
+								</a>
+								@if (_accessContext.HasTenantAccess)
+								{
+									<a class="topbar__menu-item" href="/Account/Manage">
+										<OutlineIcon Name="settings" CssClass="topbar__menu-icon" />
+										<span>Account</span>
+									</a>
+								}
+							}
+							<form action="Account/Logout" method="post">
+								<AntiforgeryToken />
+								<input type="hidden" name="ReturnUrl" value="/Account/Login" />
+								<button type="submit" class="topbar__menu-item topbar__menu-item--button">
+									<OutlineIcon Name="logout" CssClass="topbar__menu-icon" />
+									<span>Logout</span>
+								</button>
+							</form>
 						</div>
-						@if (_accessContext.IsPlatformUserEnabled && _accessContext.PlatformPermissions.Count > 0)
-						{
-							<a class="topbar__menu-item" href="/admin">
-								<OutlineIcon Name="platform" CssClass="topbar__menu-icon" />
-								<span>Platform Admin</span>
-							</a>
-						}
-						<a class="topbar__menu-item" href="/Account/CreateTenant">
-							<OutlineIcon Name="tenant" CssClass="topbar__menu-icon" />
-							<span>Create Tenant</span>
-						</a>
-						@if (_accessContext.HasTenantAccess)
-						{
-							<a class="topbar__menu-item" href="/Account/Manage">
-								<OutlineIcon Name="settings" CssClass="topbar__menu-icon" />
-								<span>Account</span>
-							</a>
-						}
-						<form action="Account/Logout" method="post">
-							<AntiforgeryToken />
-							<input type="hidden" name="ReturnUrl" value="/Account/Login" />
-							<button type="submit" class="topbar__menu-item topbar__menu-item--button">
-								<OutlineIcon Name="logout" CssClass="topbar__menu-icon" />
-								<span>Logout</span>
-							</button>
-						</form>
-					</div>
-				</details>
-			</Authorized>
-		</AuthorizeView>
+					</details>
+				</Authorized>
+			</AuthorizeView>
+		}
 	</div>
 </header>
 
@@ -118,6 +127,14 @@
 	private IReadOnlyList<TenantMembershipOption> _membershipOptions = Array.Empty<TenantMembershipOption>();
 	private string _searchText = string.Empty;
 	private string _currentUrl = string.Empty;
+	private bool IsSetupRoute =>
+		string.Equals(_currentUrl, "setup", StringComparison.OrdinalIgnoreCase)
+		|| (!string.IsNullOrWhiteSpace(_currentUrl)
+			&& _currentUrl.StartsWith("setup/", StringComparison.OrdinalIgnoreCase));
+	private bool IsAccountOnboardingRoute =>
+		string.Equals(_currentUrl, "Account/CompleteProfile", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(_currentUrl, "Account/CreateTenant", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(_currentUrl, "Account/AcceptPlatformInvite", StringComparison.OrdinalIgnoreCase);
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -217,13 +234,6 @@
 		return _membershipOptions.FirstOrDefault(x => x.MembershipId == _accessContext.ActiveTenantMembershipId)?.TenantName
 			?? _membershipOptions.FirstOrDefault()?.TenantName
 			?? "No tenant";
-	}
-
-	private string GetActiveTenantOwnerName()
-	{
-		var ownerName = _membershipOptions.FirstOrDefault(x => x.MembershipId == _accessContext.ActiveTenantMembershipId)?.OwnerDisplayName
-			?? _membershipOptions.FirstOrDefault()?.OwnerDisplayName;
-		return string.IsNullOrWhiteSpace(ownerName) ? string.Empty : ownerName;
 	}
 
 	private string GetAccountEmail(ClaimsPrincipal principal)

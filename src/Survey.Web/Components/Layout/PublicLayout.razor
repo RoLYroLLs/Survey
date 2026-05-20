@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject global::Survey.Infrastructure.Persistence.InitialSetupStateService InitialSetupStateService
 
 <div class="marketing-shell">
 	<header class="marketing-topbar">
@@ -8,11 +9,14 @@
 			<a href="/pricing">Pricing</a>
 			<AuthorizeView>
 				<Authorized>
-					<a class="btn btn-primary marketing-topbar__cta" href="/app">Go to Dashboard</a>
+					<a class="btn btn-primary marketing-topbar__cta" href="@GetAuthorizedCtaUrl()">@GetAuthorizedCtaLabel()</a>
 				</Authorized>
 				<NotAuthorized>
 					<a href="/Account/Login">Login</a>
-					<a class="btn btn-primary marketing-topbar__cta" href="/Account/Register">Create Account</a>
+					@if (_canCreateAccount)
+					{
+						<a class="btn btn-primary marketing-topbar__cta" href="/Account/Register">Create Account</a>
+					}
 				</NotAuthorized>
 			</AuthorizeView>
 		</nav>
@@ -22,3 +26,25 @@
 		@Body
 	</main>
 </div>
+
+@code {
+	private bool _canCreateAccount;
+	private bool _isSetupComplete;
+
+	protected override async Task OnInitializedAsync()
+	{
+		var setupState = await InitialSetupStateService.GetStatusAsync();
+		_isSetupComplete = setupState.IsComplete;
+		_canCreateAccount = _isSetupComplete;
+	}
+
+	private string GetAuthorizedCtaUrl()
+	{
+		return _isSetupComplete ? "/app" : "/setup/initial-seeding";
+	}
+
+	private string GetAuthorizedCtaLabel()
+	{
+		return _isSetupComplete ? "Go to Dashboard" : "Continue Setup";
+	}
+}

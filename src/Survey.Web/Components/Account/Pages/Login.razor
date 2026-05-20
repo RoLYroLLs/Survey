@@ -10,6 +10,7 @@
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
+@inject global::Survey.Infrastructure.Persistence.InitialSetupStateService InitialSetupStateService
 
 <PageTitle>Log in</PageTitle>
 
@@ -52,8 +53,13 @@
 				<div class="page-stack">
 					<button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
 					<PasskeySubmit Operation="PasskeyOperation.Request" Name="PasskeyInput" EmailName="Input.Identifier" class="w-100 btn btn-lg btn-outline-secondary">Log in with passkey</PasskeySubmit>
-					<a class="w-100 btn btn-lg btn-outline-primary" href="@GetRegisterUrl()">Create account</a>
-					<a class="w-100 btn btn-lg btn-outline-primary" href="/">Back to Overview</a>
+					<div class="form-footer form-footer--split">
+					@if (_canCreateAccount)
+					{
+							<a class="btn btn-lg btn-outline-primary" href="@GetRegisterUrl()">Create account</a>
+					}
+						<a class="btn btn-lg btn-outline-primary" href="/">Cancel</a>
+					</div>
 				</div>
 				<div class="toolbar">
 					<a href="Account/ForgotPassword">Forgot your password?</a>
@@ -67,6 +73,7 @@
 @code {
     private string? errorMessage;
     private EditContext editContext = default!;
+	private bool _canCreateAccount;
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -77,28 +84,31 @@
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
-    protected override async Task OnInitializedAsync()
-    {
-        if (!await UserManager.Users.AnyAsync())
-        {
-            NavigationManager.NavigateTo("Account/SetupPlatformAdmin", forceLoad: true);
-            return;
-        }
+	protected override async Task OnInitializedAsync()
+	{
+		var setupState = await InitialSetupStateService.GetStatusAsync();
+		if (!setupState.HasUsers)
+		{
+			NavigationManager.NavigateTo("/setup", forceLoad: true);
+			return;
+		}
+
+		_canCreateAccount = setupState.IsComplete;
 
         Input ??= new();
 		PasskeyInput ??= new();
 
         editContext = new EditContext(Input);
 
-        if (HttpMethods.IsGet(HttpContext.Request.Method))
-        {
+		if (HttpMethods.IsGet(HttpContext.Request.Method))
+		{
             // Clear the existing external cookie to ensure a clean login process
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         }
     }
 
-    public async Task LoginUser()
-    {
+	public async Task LoginUser()
+	{
         if (!string.IsNullOrWhiteSpace(PasskeyInput.CredentialJson) || !string.IsNullOrWhiteSpace(PasskeyInput.Error))
         {
             await LoginWithPasskeyAsync();
@@ -125,9 +135,9 @@
             return;
         }
 
-        var result = await SignInManager.PasswordSignInAsync(user, Input.Password!, Input.RememberMe, lockoutOnFailure: false);
-		await HandleLoginResultAsync(result);
-    }
+		var result = await SignInManager.PasswordSignInAsync(user, Input.Password!, Input.RememberMe, lockoutOnFailure: false);
+		await HandleLoginResultAsync(result, user);
+	}
 
 	private async Task LoginWithPasskeyAsync()
 	{
@@ -144,13 +154,29 @@
 		}
 
 		var result = await SignInManager.PasskeySignInAsync(PasskeyInput.CredentialJson);
-		await HandleLoginResultAsync(result);
+		var user = await UserManager.GetUserAsync(HttpContext.User);
+		await HandleLoginResultAsync(result, user);
 	}
 
-	private Task HandleLoginResultAsync(SignInResult result)
+	private async Task HandleLoginResultAsync(SignInResult result, ApplicationUser? user)
 	{
 		if (result.Succeeded)
 		{
+			var setupState = await InitialSetupStateService.GetStatusAsync();
+			if (!setupState.IsComplete)
+			{
+				if (user is null || !user.IsBootstrapPlatformOwner)
+				{
+					await SignInManager.SignOutAsync();
+					errorMessage = "Error: The platform setup is still in progress. Only the initial platform super admin can sign in until setup is complete.";
+					return;
+				}
+
+				Logger.LogInformation("Bootstrap platform owner logged in during initial setup.");
+				RedirectManager.RedirectTo("/setup/initial-seeding");
+				return;
+			}
+
 			Logger.LogInformation("User logged in.");
 			RedirectManager.RedirectTo(GetPostLoginUrl());
 		}
@@ -174,7 +200,7 @@
 			errorMessage = "Error: Invalid login attempt.";
 		}
 
-		return Task.CompletedTask;
+		return;
 	}
 
 	private string GetRegisterUrl()

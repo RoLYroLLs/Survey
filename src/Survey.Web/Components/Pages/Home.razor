@@ -1,8 +1,6 @@
 @page "/"
 @layout Layout.PublicLayout
-@using Microsoft.EntityFrameworkCore
-@inject ITenantContextAccessor TenantContextAccessor
-@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+@inject global::Survey.Infrastructure.Persistence.InitialSetupStateService InitialSetupStateService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Survey</PageTitle>
@@ -20,13 +18,13 @@ else
 		<section class="marketing-hero">
 			<div class="marketing-hero__content">
 				<p class="marketing-kicker">Survey outreach, assignment, and reporting in one tenant-safe workspace</p>
-				<h1>Launch surveys faster, follow every response, and keep each tenant isolated by design.</h1>
+				<h1 class="marketing-hero__title marketing-hero__title--compact">Launch surveys faster, follow every response, and keep each tenant isolated by design.</h1>
 				<p class="marketing-copy">
 					Survey helps teams organize people, assign survey links, review submissions, and measure goals without mixing customer data.
 					Platform admins control global themes and shared configuration, while tenant owners manage their own workspace.
 				</p>
 				<div class="marketing-actions">
-					<a class="btn btn-primary btn-lg" href="/Account/Register">Create Account</a>
+					<a class="btn btn-primary btn-lg" href="@GetPrimaryCtaUrl()">@GetPrimaryCtaLabel()</a>
 					<a class="btn btn-outline-primary btn-lg" href="/pricing">View Pricing</a>
 				</div>
 				<div class="marketing-proof">
@@ -201,7 +199,7 @@ else
 				</article>
 			</div>
 			<div class="marketing-actions">
-				<a class="btn btn-outline-primary btn-lg" href="/pricing">Open Full Pricing Mockup</a>
+				<a class="btn btn-outline-primary btn-lg" href="/pricing">Open Full Pricing</a>
 			</div>
 		</section>
 	</div>
@@ -209,21 +207,28 @@ else
 
 @code {
 	private bool _isLoading = true;
+	private bool _canCreateAccount;
 
-	protected override async Task OnAfterRenderAsync(bool firstRender)
+	protected override async Task OnInitializedAsync()
 	{
-		if (!firstRender)
+		var setupState = await InitialSetupStateService.GetStatusAsync();
+		if (!setupState.HasUsers)
 		{
+			NavigationManager.NavigateTo("/setup", forceLoad: true);
 			return;
 		}
 
-		if (!await UserManager.Users.AnyAsync())
-		{
-			NavigationManager.NavigateTo("Account/SetupPlatformAdmin", forceLoad: true);
-			return;
-		}
-
+		_canCreateAccount = setupState.IsComplete;
 		_isLoading = false;
-		StateHasChanged();
+	}
+
+	private string GetPrimaryCtaUrl()
+	{
+		return _canCreateAccount ? "/Account/Register" : "/Account/Login";
+	}
+
+	private string GetPrimaryCtaLabel()
+	{
+		return _canCreateAccount ? "Create Account" : "Log In";
 	}
 }
