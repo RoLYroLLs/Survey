@@ -81,6 +81,20 @@
 					<span>Audit</span>
 				</NavLink>
 			}
+			@if (CanSeePlatformJobs)
+			{
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/jobs">
+					<span class="nav-shell__icon"><OutlineIcon Name="platform" CssClass="nav-shell__icon-svg" /></span>
+					<span>Jobs</span>
+				</NavLink>
+			}
+			@if (CanSeePlatformEmails)
+			{
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/emails">
+					<span class="nav-shell__icon"><OutlineIcon Name="email" CssClass="nav-shell__icon-svg" /></span>
+					<span>Emails</span>
+				</NavLink>
+			}
 			@if (CanSeePlatformThemes)
 			{
 				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/themes">
@@ -281,10 +295,12 @@
 	private bool CanSeePlatformUsers => HasPlatformPermission(PlatformPermissionKeys.UsersView);
 	private bool CanSeePlatformTenants => HasPlatformPermission(PlatformPermissionKeys.TenantsView);
 	private bool CanSeePlatformAudit => HasPlatformPermission(PlatformPermissionKeys.AuditView);
+	private bool CanSeePlatformJobs => HasPlatformPermission(PlatformPermissionKeys.JobsView);
+	private bool CanSeePlatformEmails => HasPlatformPermission(PlatformPermissionKeys.JobsView);
 	private bool CanSeePlatformThemes => HasPlatformPermission(PlatformPermissionKeys.SettingsManage);
 	private bool CanSeePlatformGeography => HasPlatformPermission(PlatformPermissionKeys.GeographyView);
 	private bool CanSeeBackToTenant => _accessContext.HasTenantAccess;
-	private bool CanSeePlatformSection => CanSeePlatformHome || CanSeePlatformUsers || CanSeePlatformTenants || CanSeePlatformAudit || CanSeePlatformThemes || CanSeePlatformGeography;
+	private bool CanSeePlatformSection => CanSeePlatformHome || CanSeePlatformUsers || CanSeePlatformTenants || CanSeePlatformAudit || CanSeePlatformJobs || CanSeePlatformEmails || CanSeePlatformThemes || CanSeePlatformGeography;
 
 	private bool CanSeeDashboard => HasTenantPermission(TenantPermissionKeys.DashboardView);
 	private bool CanSeeAssignments => HasTenantPermission(TenantPermissionKeys.AssignmentsView);

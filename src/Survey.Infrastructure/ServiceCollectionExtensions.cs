@@ -1,3 +1,10 @@
+using System.Configuration;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using Hangfire;
+using Hangfire.SQLite;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
@@ -16,9 +23,14 @@ namespace Survey.Infrastructure;
 
 public static class ServiceCollectionExtensions
 {
+	private static readonly object HangfireSqliteConfigurationLock = new();
+
 	public static IServiceCollection AddSurveyInfrastructure(this IServiceCollection services, IConfiguration configuration)
 	{
+		services.AddMemoryCache();
+		services.Configure<AppOptions>(configuration.GetSection(AppOptions.SectionName));
 		services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
+		services.Configure<BackgroundJobsOptions>(configuration.GetSection(BackgroundJobsOptions.SectionName));
 
 		var databaseProvider = NormalizeProvider(configuration[$"{DatabaseOptions.SectionName}:Provider"]);
 		var connectionString = configuration.GetConnectionString("Default")
@@ -26,6 +38,7 @@ public static class ServiceCollectionExtensions
 		var migrationsAssembly = databaseProvider == DatabaseOptions.SqlServer
 			? "Survey.Migrations.SqlServer"
 			: "Survey.Migrations.Sqlite";
+		var backgroundJobsOptions = configuration.GetSection(BackgroundJobsOptions.SectionName).Get<BackgroundJobsOptions>() ?? new BackgroundJobsOptions();
 
 		services.AddDbContext<SurveyDbContext>(options =>
 		{
@@ -59,6 +72,17 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<ITenantPermissionEvaluator, TenantPermissionEvaluator>();
 		services.AddScoped<IPlatformPermissionEvaluator, PlatformPermissionEvaluator>();
 		services.AddScoped<IAuditWriter, AuditWriter>();
+		services.AddScoped<BackgroundOperationsService>();
+		services.AddScoped<IBackgroundOperationsService>(serviceProvider => serviceProvider.GetRequiredService<BackgroundOperationsService>());
+		services.AddScoped<IInitialSetupJobService, InitialSetupJobService>();
+		services.AddScoped<IQueuedEmailService, QueuedEmailService>();
+		services.AddScoped<IEmailTrackingService, EmailTrackingService>();
+		services.AddScoped<IPublicOriginResolver, PublicOriginResolver>();
+		services.AddSingleton<IEmailTransport, NoOpEmailTransport>();
+		services.AddSingleton<InitialSetupTaskQueue>();
+		services.AddHostedService<InitialSetupBackgroundWorker>();
+		services.AddScoped<InitialSetupBackgroundRunner>();
+		services.AddScoped<EmailHangfireJobRunner>();
 		services.AddScoped<SurveyApplicationService>();
 		services.AddScoped<ITenantAdministrationService>(serviceProvider => serviceProvider.GetRequiredService<SurveyApplicationService>());
 		services.AddScoped<IPlatformAdministrationService>(serviceProvider => serviceProvider.GetRequiredService<SurveyApplicationService>());
@@ -67,8 +91,42 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<TenantBootstrapSeeder>();
 		services.AddScoped<GeographyDataSeeder>();
 		services.AddScoped<SiteSettingsSeeder>();
+		services.AddScoped<InitialSetupSeeder>();
+		services.AddSingleton<InitialSetupStateService>();
+		services.AddSingleton<InitialSeedingProgressService>();
 		services.AddScoped<IAuthorizationHandler, TenantPermissionAuthorizationHandler>();
 		services.AddScoped<IAuthorizationHandler, PlatformPermissionAuthorizationHandler>();
+
+		if (backgroundJobsOptions.Enabled)
+		{
+			services.AddHangfire(hangfire =>
+			{
+				hangfire.UseSimpleAssemblyNameTypeSerializer();
+				hangfire.UseRecommendedSerializerSettings();
+
+				if (databaseProvider == DatabaseOptions.SqlServer)
+				{
+					hangfire.UseSqlServerStorage(connectionString);
+					return;
+				}
+
+				var sqliteConnectionName = EnsureHangfireSqliteConnectionStringRegistered(connectionString);
+				hangfire.UseSQLiteStorage(sqliteConnectionName, new SQLiteStorageOptions
+				{
+					PrepareSchemaIfNecessary = true
+				});
+			});
+			services.AddHangfireServer(serverOptions =>
+			{
+				serverOptions.WorkerCount = Math.Max(1, backgroundJobsOptions.WorkerCount);
+				serverOptions.Queues =
+				[
+					backgroundJobsOptions.SetupQueueName,
+					backgroundJobsOptions.EmailQueueName,
+					backgroundJobsOptions.DefaultQueueName
+				];
+			});
+		}
 
 		var authorization = services.AddAuthorizationBuilder();
 		authorization.AddPolicy(SurveyAuthorizationPolicies.TenantAccess, policy =>
@@ -115,7 +173,10 @@ public static class ServiceCollectionExtensions
 		{
 			EnsureSqliteDirectoryExists(connectionString);
 			await ClearStaleSqliteMigrationLockAsync(connectionString, cancellationToken);
-			await RepairLegacySqliteSchemaAsync(connectionString, cancellationToken);
+			if (await ShouldRepairLegacySqliteSchemaAsync(connectionString, cancellationToken))
+			{
+				await RepairLegacySqliteSchemaAsync(connectionString, cancellationToken);
+			}
 		}
 
 		var dbContext = serviceProvider.GetRequiredService<SurveyDbContext>();
@@ -126,15 +187,8 @@ public static class ServiceCollectionExtensions
 			await RepairLegacySqliteSchemaAsync(connectionString, cancellationToken);
 		}
 
-		var geographySeeder = serviceProvider.GetRequiredService<GeographyDataSeeder>();
-		var forceGeographySeed = configuration.GetValue<bool>("Seeding:ForceGeography");
-		await geographySeeder.SeedAsync(forceGeographySeed, cancellationToken);
-
-		var siteSettingsSeeder = serviceProvider.GetRequiredService<SiteSettingsSeeder>();
-		await siteSettingsSeeder.SeedAsync(cancellationToken);
-
 		var seeder = serviceProvider.GetRequiredService<IdentityDataSeeder>();
-		await seeder.SeedAsync(cancellationToken);
+		await seeder.SeedAsync(cancellationToken: cancellationToken);
 
 		var tenantBootstrapSeeder = serviceProvider.GetRequiredService<TenantBootstrapSeeder>();
 		await tenantBootstrapSeeder.SeedAsync(cancellationToken);
@@ -148,6 +202,33 @@ public static class ServiceCollectionExtensions
 		}
 
 		return DatabaseOptions.Sqlite;
+	}
+
+	private static string EnsureHangfireSqliteConnectionStringRegistered(string connectionString)
+	{
+		var normalizedConnectionString = connectionString.Trim();
+		var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedConnectionString)))[..16];
+		var connectionName = $"SurveyHangfireSqlite_{hash}";
+
+		lock (HangfireSqliteConfigurationLock)
+		{
+			var connectionStrings = System.Configuration.ConfigurationManager.ConnectionStrings;
+			if (connectionStrings[connectionName] is null)
+			{
+				EnsureConfigurationCollectionWritable(connectionStrings);
+				connectionStrings.Add(new ConnectionStringSettings(connectionName, normalizedConnectionString));
+			}
+		}
+
+		return connectionName;
+	}
+
+	private static void EnsureConfigurationCollectionWritable(ConfigurationElementCollection collection)
+	{
+		var field = typeof(ConfigurationElementCollection).GetField("bReadOnly", BindingFlags.Instance | BindingFlags.NonPublic)
+			?? typeof(ConfigurationElementCollection).GetField("_bReadOnly", BindingFlags.Instance | BindingFlags.NonPublic)
+			?? typeof(ConfigurationElementCollection).GetField("_readOnly", BindingFlags.Instance | BindingFlags.NonPublic);
+		field?.SetValue(collection, false);
 	}
 
 	private static void EnsureSqliteDirectoryExists(string connectionString)
@@ -212,6 +293,24 @@ public static class ServiceCollectionExtensions
 		await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
 	}
 
+	private static async Task<bool> ShouldRepairLegacySqliteSchemaAsync(string connectionString, CancellationToken cancellationToken)
+	{
+		await using var connection = new SqliteConnection(connectionString);
+		await connection.OpenAsync(cancellationToken);
+
+		await using var command = connection.CreateCommand();
+		command.CommandText = """
+			SELECT COUNT(*)
+			FROM sqlite_master
+			WHERE type = 'table'
+				AND name NOT LIKE 'sqlite_%'
+				AND name <> '__EFMigrationsHistory'
+				AND name <> '__EFMigrationsLock';
+			""";
+
+		return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+	}
+
 	private static async Task RepairLegacySqliteSchemaAsync(string connectionString, CancellationToken cancellationToken)
 	{
 		await using var connection = new SqliteConnection(connectionString);
@@ -274,6 +373,18 @@ public static class ServiceCollectionExtensions
 			"AspNetUsers",
 			"PostalCode",
 			"""ALTER TABLE "AspNetUsers" ADD COLUMN "PostalCode" TEXT NULL;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
+			"IsOrganizationAccount",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "IsOrganizationAccount" INTEGER NOT NULL DEFAULT 0;""",
+			cancellationToken);
+		await EnsureSqliteColumnExistsAsync(
+			connection,
+			"AspNetUsers",
+			"OrganizationName",
+			"""ALTER TABLE "AspNetUsers" ADD COLUMN "OrganizationName" TEXT NULL;""",
 			cancellationToken);
 		await EnsureSqliteColumnExistsAsync(
 			connection,
@@ -522,8 +633,11 @@ public static class ServiceCollectionExtensions
 		await EnsureSqliteColumnExistsAsync(connection, "PlatformThemes", "IsEnabled", """ALTER TABLE "PlatformThemes" ADD COLUMN "IsEnabled" INTEGER NOT NULL DEFAULT 1;""", cancellationToken);
 		await EnsureSqliteColumnExistsAsync(connection, "PlatformThemes", "IsArchived", """ALTER TABLE "PlatformThemes" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE INDEX IF NOT EXISTS "IX_AuditLogs_TenantId_CreatedUtc" ON "AuditLogs" ("TenantId", "CreatedUtc");""", cancellationToken);
-		await ExecuteSqliteNonQueryAsync(connection, """DROP INDEX IF EXISTS "IX_PostalAddresses_NormalizedKey";""", cancellationToken);
-		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_PostalAddresses_TenantId_NormalizedKey" ON "PostalAddresses" ("TenantId", "NormalizedKey");""", cancellationToken);
+		if (await SqliteTableExistsAsync(connection, "PostalAddresses", cancellationToken))
+		{
+			await ExecuteSqliteNonQueryAsync(connection, """DROP INDEX IF EXISTS "IX_PostalAddresses_NormalizedKey";""", cancellationToken);
+			await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_PostalAddresses_TenantId_NormalizedKey" ON "PostalAddresses" ("TenantId", "NormalizedKey");""", cancellationToken);
+		}
 	}
 
 	private static async Task EnsureSqliteColumnExistsAsync(

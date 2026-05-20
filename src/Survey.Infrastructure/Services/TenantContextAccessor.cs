@@ -145,9 +145,13 @@ public sealed class TenantContextAccessor(
 			.Where(item => ownerUserIds.Contains(item.Id))
 			.ToDictionaryAsync(
 				item => item.Id,
-				item => string.IsNullOrWhiteSpace(item.FirstName) && string.IsNullOrWhiteSpace(item.LastName)
-					? (item.Email ?? item.UserName ?? "Unknown user")
-					: string.Join(" ", new[] { item.FirstName, item.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))),
+				item => new
+				{
+					DisplayName = string.IsNullOrWhiteSpace(item.FirstName) && string.IsNullOrWhiteSpace(item.LastName)
+						? (item.Email ?? item.UserName ?? "Unknown user")
+						: string.Join(" ", new[] { item.FirstName, item.LastName }.Where(part => !string.IsNullOrWhiteSpace(part))),
+					OrganizationName = item.IsOrganizationAccount ? item.OrganizationName ?? string.Empty : string.Empty
+				},
 				cancellationToken);
 		var tenantOwnerLookup = ownerMemberships
 			.GroupBy(membership => membership.TenantId)
@@ -156,7 +160,13 @@ public sealed class TenantContextAccessor(
 				group =>
 				{
 					var ownerMembership = group.First();
-					return ownerLookup.GetValueOrDefault(ownerMembership.UserId, string.Empty);
+					return ownerLookup.TryGetValue(ownerMembership.UserId, out var owner)
+						? owner
+						: new
+						{
+							DisplayName = string.Empty,
+							OrganizationName = string.Empty
+						};
 				});
 
 		return memberships
@@ -165,7 +175,10 @@ public sealed class TenantContextAccessor(
 				MembershipId = membership.Id,
 				TenantId = membership.TenantId,
 				TenantName = membership.Tenant.Name,
-				OwnerDisplayName = tenantOwnerLookup.GetValueOrDefault(membership.TenantId, string.Empty),
+				OwnerDisplayName = tenantOwnerLookup.GetValueOrDefault(membership.TenantId)?.DisplayName ?? string.Empty,
+				DropdownSubtitle = !string.IsNullOrWhiteSpace(tenantOwnerLookup.GetValueOrDefault(membership.TenantId)?.OrganizationName)
+					? tenantOwnerLookup.GetValueOrDefault(membership.TenantId)!.OrganizationName
+					: tenantOwnerLookup.GetValueOrDefault(membership.TenantId)?.DisplayName ?? string.Empty,
 				Role = membership.Role,
 				IsEnabled = membership.IsEnabled,
 				IsActive = membership.Id == user.ActiveTenantMembershipId

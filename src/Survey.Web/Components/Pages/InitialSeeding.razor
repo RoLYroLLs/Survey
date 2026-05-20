@@ -1,0 +1,616 @@
+@page "/setup/initial-seeding"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITenantContextAccessor TenantContextAccessor
+@inject IBackgroundOperationsService BackgroundOperationsService
+@inject IInitialSetupJobService InitialSetupJobService
+@inject NavigationManager NavigationManager
+@inject global::Survey.Infrastructure.Persistence.InitialSeedingProgressService InitialSeedingProgressService
+
+<PageTitle>Initial Seeding</PageTitle>
+
+<div class="status-card narrow-card seed-progress-card">
+	<p class="eyebrow">Initial Setup</p>
+	<h1>Initial Seeding</h1>
+	<p class="mb-4">Import the shared application defaults and geography reference data before the app can be used.</p>
+
+	@if (!string.IsNullOrWhiteSpace(_errorMessage))
+	{
+		<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+	}
+
+	@if (!_isReady)
+	{
+		<p>Loading setup...</p>
+	}
+	else if (!_canSeed)
+	{
+		<p class="seed-progress__help mt-4">A platform admin must complete the initial geography import before the app can be used.</p>
+	}
+	else if (_currentStep == SetupStep.ThemeSelection)
+	{
+		<div class="form-card seed-theme-selection">
+			<div class="page-header">
+				<div>
+					<p class="eyebrow">Step 3 of 5</p>
+					<h2>Choose Allowed Themes</h2>
+					<p>Select the predefined themes tenants are allowed to use after setup, then choose which one becomes the starting default.</p>
+				</div>
+				<span class="status-pill status-pill--muted">@_selectedThemeKeys.Count selected</span>
+			</div>
+
+			<p class="seed-progress__help">Only the themes selected here will exist after setup completes.</p>
+
+			<div class="theme-preset-grid">
+				@foreach (var option in _themeOptions)
+				{
+					var isSelected = _selectedThemeKeys.Contains(option.Key);
+					var isDefault = string.Equals(_defaultThemeKey, option.Key, StringComparison.OrdinalIgnoreCase);
+					<button class="theme-preset-card @(isSelected ? "theme-preset-card--selected" : null)"
+							type="button"
+							disabled="@(_isSeeding || _isComplete)"
+							aria-pressed="@isSelected"
+							@onclick="() => ToggleThemeSelection(option.Key)">
+						<div class="theme-preset-card__top">
+							<div>
+								<h3>@option.Name</h3>
+								<p>@option.Description</p>
+							</div>
+							<span class="theme-preset-card__indicator" aria-hidden="true">@(isDefault ? "Default" : isSelected ? "Selected" : "Optional")</span>
+						</div>
+						<span class="theme-preset-card__swatch" style="@option.PreviewStyle"></span>
+						<div class="theme-preset-card__chips">
+							<span class="theme-preset-card__chip">Primary @option.PrimaryColor</span>
+							<span class="theme-preset-card__chip">Accent @option.AccentColor</span>
+							<span class="theme-preset-card__chip">Background @option.BackgroundColor</span>
+						</div>
+					</button>
+				}
+			</div>
+
+			<div class="field-stack">
+				<FieldLabel Text="Default Theme" Required />
+				<select class="form-select"
+						value="@_defaultThemeKey"
+						disabled="@(_isSeeding || _isComplete || _selectedThemeKeys.Count == 0)"
+						@onchange="OnDefaultThemeChanged">
+					@foreach (var option in GetSelectedThemeOptions())
+					{
+						<option value="@option.Key">@GetDefaultThemeLabel(option)</option>
+					}
+				</select>
+				<div class="helper-copy">New tenants will start from this theme unless an owner changes their tenant theme later.</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-primary" type="button" disabled="@(_selectedThemeKeys.Count == 0 || string.IsNullOrWhiteSpace(_defaultThemeKey))" @onclick="GoToSeedingReviewStep">Next</button>
+			</div>
+		</div>
+	}
+	else if (_currentStep == SetupStep.SeedingReview)
+	{
+		<div class="form-card seed-step-card">
+			<p class="eyebrow">Step 4 of 5</p>
+			<h2>Ready to Start Seeding</h2>
+			<p>The selected themes and all reference data are ready to be imported.</p>
+
+			<div class="page-stack">
+				<div>
+					<strong>Allowed themes</strong>
+					<ul class="feature-list">
+						@foreach (var option in GetSelectedThemeOptions())
+						{
+							<li>@GetDefaultThemeLabel(option)</li>
+						}
+					</ul>
+				</div>
+				<div>
+					<strong>Seeded data</strong>
+					<ul class="feature-list">
+						<li>Platform roles</li>
+						<li>Countries</li>
+						<li>States and territories</li>
+						<li>Counties and FIPS data</li>
+						<li>ZIP and county mappings</li>
+						<li>Platform themes and site settings</li>
+					</ul>
+				</div>
+			</div>
+
+			<div class="form-footer">
+				<button class="btn btn-outline-primary" type="button" disabled="@_isSeeding" @onclick="GoToThemeSelection">Back</button>
+				@if (_hasFailedOperation)
+				{
+					<button class="btn btn-primary" type="button" disabled="@_isSeeding" @onclick="RetrySeedingAsync">Retry Setup</button>
+				}
+				else
+				{
+					<button class="btn btn-primary" type="button" disabled="@_isSeeding" @onclick="StartSeedingAsync">Start Seeding</button>
+				}
+			</div>
+		</div>
+	}
+	else if (_isComplete)
+	{
+		<div class="seed-progress">
+			@foreach (var stage in _stages)
+			{
+				<div class="seed-progress__row">
+					<div class="seed-progress__header">
+						<span class="seed-progress__label">Seeding @stage.Label: <span class="seed-progress__status @(stage.IsComplete ? "seed-progress__status--done" : null)">@BuildStageStatus(stage)</span></span>
+						<span class="seed-progress__percent">@GetStagePercent(stage)%</span>
+					</div>
+					<div class="seed-progress__bar" aria-hidden="true">
+						<span class="seed-progress__fill" style="width: @($"{GetStagePercent(stage)}%")"></span>
+					</div>
+					<div class="seed-progress__activity">@BuildStageActivity(stage)</div>
+				</div>
+			}
+		</div>
+		@if (_activityEntries.Count > 0)
+		{
+			<div class="form-card seed-activity-log mt-4">
+				<h2>Live Activity</h2>
+				<div class="seed-activity-log__entries">
+					@foreach (var entry in _activityEntries)
+					{
+						<div class="seed-activity-log__entry">
+							<strong>@entry.StageLabel</strong>
+							<span>@entry.Message</span>
+						</div>
+					}
+				</div>
+			</div>
+		}
+		<div class="form-footer mt-4">
+			<button class="btn btn-primary" type="button" @onclick="ContinueAsync">Done</button>
+		</div>
+	}
+	else
+	{
+		<div class="seed-progress">
+			<div class="page-header">
+				<div>
+					<p class="eyebrow">Step 5 of 5</p>
+					<h2>Importing Initial Data</h2>
+					<p>Keep this page open while the platform imports reference data and activates the selected themes.</p>
+				</div>
+			</div>
+			@foreach (var stage in _stages)
+			{
+				<div class="seed-progress__row">
+					<div class="seed-progress__header">
+						<span class="seed-progress__label">Seeding @stage.Label: <span class="seed-progress__status @(stage.IsComplete ? "seed-progress__status--done" : null)">@BuildStageStatus(stage)</span></span>
+						<span class="seed-progress__percent">@GetStagePercent(stage)%</span>
+					</div>
+					<div class="seed-progress__bar" aria-hidden="true">
+						<span class="seed-progress__fill" style="width: @($"{GetStagePercent(stage)}%")"></span>
+					</div>
+					<div class="seed-progress__activity">@BuildStageActivity(stage)</div>
+				</div>
+			}
+		</div>
+		@if (_activityEntries.Count > 0)
+		{
+			<div class="form-card seed-activity-log mt-4">
+				<h2>Live Activity</h2>
+				<div class="seed-activity-log__entries">
+					@foreach (var entry in _activityEntries)
+					{
+						<div class="seed-activity-log__entry">
+							<strong>@entry.StageLabel</strong>
+							<span>@entry.Message</span>
+						</div>
+					}
+				</div>
+			</div>
+		}
+		<p class="seed-progress__help mt-4">The initial import is running. Please keep this page open until all stages are marked done.</p>
+	}
+</div>
+
+@code {
+	private SetupStep _currentStep = SetupStep.ThemeSelection;
+	private bool _isReady;
+	private bool _isSeeding;
+	private bool _isComplete;
+	private bool _canSeed;
+	private bool _hasFailedOperation;
+	private int? _currentOperationId;
+	private string? _errorMessage;
+	private PeriodicTimer? _progressTimer;
+	private CancellationTokenSource? _progressPollingCancellation;
+	private readonly IReadOnlyList<ThemePresetOption> _themeOptions = SiteThemePresetCatalog.GetOptions();
+	private readonly HashSet<string> _selectedThemeKeys = new(StringComparer.OrdinalIgnoreCase)
+	{
+		SiteThemePresetCatalog.DefaultPresetKey
+	};
+	private string _defaultThemeKey = SiteThemePresetCatalog.DefaultPresetKey;
+	private readonly List<SeedStageViewModel> _stages = InitialSeedingStages.Ordered
+		.Select(stage => new SeedStageViewModel(stage.Key, stage.Label))
+		.ToList();
+	private readonly List<InitialSeedingActivityEntry> _activityEntries = [];
+	private long _lastActivitySequence;
+
+	protected override async Task OnInitializedAsync()
+	{
+		var accessContext = await TenantContextAccessor.GetCurrentAsync();
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		if (authenticationState.User.Identity?.IsAuthenticated != true)
+		{
+			NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
+			return;
+		}
+
+		_canSeed = accessContext.IsPlatformSuperAdmin
+			|| accessContext.PlatformPermissions.Contains(PlatformPermissionKeys.GeographyManage, StringComparer.Ordinal);
+
+		var jobStatus = await BackgroundOperationsService.GetInitialSetupJobStatusAsync();
+		ApplyJobStatus(jobStatus);
+		AppendActivityEntries();
+		if (_isSeeding)
+		{
+			EnsureProgressPolling();
+		}
+
+		_isReady = true;
+	}
+
+	private async Task StartSeedingAsync()
+	{
+		if (_isSeeding || _isComplete || !_canSeed)
+		{
+			return;
+		}
+
+		_errorMessage = null;
+		_hasFailedOperation = false;
+		var accessContext = await TenantContextAccessor.GetCurrentAsync();
+		var result = await InitialSetupJobService.StartOrResumeAsync(_selectedThemeKeys.ToArray(), _defaultThemeKey, accessContext.UserId);
+		_currentOperationId = result.OperationId;
+		_isSeeding = true;
+		_currentStep = SetupStep.Seeding;
+		EnsureProgressPolling();
+		await RefreshJobStatusAsync();
+	}
+
+	private async Task RetrySeedingAsync()
+	{
+		if (_isSeeding || _isComplete || !_canSeed)
+		{
+			return;
+		}
+
+		_errorMessage = null;
+		_hasFailedOperation = false;
+		var accessContext = await TenantContextAccessor.GetCurrentAsync();
+		var result = await InitialSetupJobService.RetryAsync(_selectedThemeKeys.ToArray(), _defaultThemeKey, accessContext.UserId);
+		_currentOperationId = result.OperationId;
+		_isSeeding = true;
+		_currentStep = SetupStep.Seeding;
+		EnsureProgressPolling();
+		await RefreshJobStatusAsync();
+	}
+
+	private void ToggleThemeSelection(string key)
+	{
+		if (_isSeeding || _isComplete || !_canSeed)
+		{
+			return;
+		}
+
+		if (!_selectedThemeKeys.Add(key))
+		{
+			_selectedThemeKeys.Remove(key);
+			if (string.Equals(_defaultThemeKey, key, StringComparison.OrdinalIgnoreCase))
+			{
+				_defaultThemeKey = GetSelectedThemeOptions().FirstOrDefault()?.Key ?? string.Empty;
+			}
+		}
+		else if (string.IsNullOrWhiteSpace(_defaultThemeKey))
+		{
+			_defaultThemeKey = key;
+		}
+	}
+
+	private Task OnDefaultThemeChanged(ChangeEventArgs args)
+	{
+		var selectedKey = args.Value?.ToString()?.Trim() ?? string.Empty;
+		if (_selectedThemeKeys.Contains(selectedKey))
+		{
+			_defaultThemeKey = selectedKey;
+		}
+
+		return Task.CompletedTask;
+	}
+
+	private Task GoToThemeSelection()
+	{
+		if (_isSeeding || _isComplete)
+		{
+			return Task.CompletedTask;
+		}
+
+		_currentStep = SetupStep.ThemeSelection;
+		return Task.CompletedTask;
+	}
+
+	private Task GoToSeedingReviewStep()
+	{
+		if (_isSeeding || _isComplete)
+		{
+			return Task.CompletedTask;
+		}
+
+		_currentStep = SetupStep.SeedingReview;
+		return Task.CompletedTask;
+	}
+
+	private Task ContinueAsync()
+	{
+		NavigationManager.NavigateTo("/", forceLoad: true);
+		return Task.CompletedTask;
+	}
+
+	private void EnsureProgressPolling()
+	{
+		if (_progressPollingCancellation is not null)
+		{
+			return;
+		}
+
+		_progressPollingCancellation = new CancellationTokenSource();
+		_progressTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(750));
+		_ = PollProgressAsync(_progressPollingCancellation.Token);
+	}
+
+	private async Task PollProgressAsync(CancellationToken cancellationToken)
+	{
+		if (_progressTimer is null)
+		{
+			return;
+		}
+
+		try
+		{
+			while (await _progressTimer.WaitForNextTickAsync(cancellationToken))
+			{
+				await RefreshJobStatusAsync();
+				if (!_isSeeding)
+				{
+					break;
+				}
+			}
+		}
+		catch (OperationCanceledException)
+		{
+		}
+	}
+
+	private async Task RefreshJobStatusAsync()
+	{
+		var jobStatus = await BackgroundOperationsService.GetInitialSetupJobStatusAsync();
+		ApplyJobStatus(jobStatus);
+		AppendActivityEntries();
+		await InvokeAsync(StateHasChanged);
+	}
+
+	private void ApplyJobStatus(InitialSetupJobStatusModel status)
+	{
+		_currentOperationId = status.OperationId;
+		_isComplete = status.IsComplete;
+		_isSeeding = status.Status is BackgroundOperationStatuses.Queued or BackgroundOperationStatuses.Running;
+		_hasFailedOperation = status.Status == BackgroundOperationStatuses.Failed;
+		_errorMessage = string.IsNullOrWhiteSpace(status.ErrorMessage) ? null : status.ErrorMessage;
+
+		if (status.SelectedThemeKeys.Count > 0)
+		{
+			_selectedThemeKeys.Clear();
+			foreach (var key in status.SelectedThemeKeys.Where(static key => !string.IsNullOrWhiteSpace(key)))
+			{
+				_selectedThemeKeys.Add(key);
+			}
+		}
+
+		if (!string.IsNullOrWhiteSpace(status.DefaultThemeKey))
+		{
+			_defaultThemeKey = status.DefaultThemeKey;
+		}
+
+		ApplyStageSnapshots(status.Stages);
+
+		if (_isComplete)
+		{
+			_currentStep = SetupStep.Complete;
+			return;
+		}
+
+		if (_isSeeding)
+		{
+			_currentStep = SetupStep.Seeding;
+			return;
+		}
+
+		if (_hasFailedOperation)
+		{
+			_currentStep = SetupStep.SeedingReview;
+		}
+	}
+
+	private void ApplyStageSnapshots(IReadOnlyList<InitialSeedingStageSnapshot> stages)
+	{
+		if (stages.Count == 0)
+		{
+			ResetStages();
+			return;
+		}
+
+		foreach (var stage in _stages)
+		{
+			var snapshot = stages.FirstOrDefault(item => string.Equals(item.StageKey, stage.Key, StringComparison.Ordinal));
+			if (snapshot is null)
+			{
+				stage.Processed = 0;
+				stage.Total = 0;
+				stage.IsStarted = false;
+				stage.IsComplete = false;
+				stage.ActivityMessage = string.Empty;
+				continue;
+			}
+
+			stage.Processed = snapshot.Processed;
+			stage.Total = snapshot.Total;
+			stage.IsStarted = snapshot.IsStarted;
+			stage.IsComplete = snapshot.IsComplete;
+			stage.ActivityMessage = snapshot.ActivityMessage ?? string.Empty;
+		}
+	}
+
+	private void AppendActivityEntries()
+	{
+		var entries = InitialSeedingProgressService.GetActivityEntriesAfter(_lastActivitySequence);
+		if (entries.Count == 0)
+		{
+			return;
+		}
+
+		_activityEntries.AddRange(entries);
+		_lastActivitySequence = _activityEntries[^1].Sequence;
+	}
+
+	private string BuildStageStatus(SeedStageViewModel stage)
+	{
+		if (stage.IsComplete)
+		{
+			return "Done";
+		}
+
+		if (stage.IsStarted)
+		{
+			return "In Progress";
+		}
+
+		return HasStartedAnyStage() && IsNextStageToStart(stage)
+			? "Starting..."
+			: "Pending";
+	}
+
+	private int GetStagePercent(SeedStageViewModel stage)
+	{
+		if (stage.IsComplete)
+		{
+			return 100;
+		}
+
+		if (!stage.IsStarted || stage.Total <= 0)
+		{
+			return 0;
+		}
+
+		return Math.Clamp((int)Math.Floor(stage.Processed * 100d / stage.Total), 0, 100);
+	}
+
+	private string BuildStageActivity(SeedStageViewModel stage)
+	{
+		if (!string.IsNullOrWhiteSpace(stage.ActivityMessage))
+		{
+			return stage.ActivityMessage;
+		}
+
+		if (stage.IsComplete)
+		{
+			return "Completed.";
+		}
+
+		if (stage.IsStarted)
+		{
+			return stage.Total > 0
+				? $"Processed {stage.Processed} of {stage.Total}."
+				: "Processing...";
+		}
+
+		return HasStartedAnyStage() && IsNextStageToStart(stage)
+			? "Warming up..."
+			: "Waiting to begin.";
+	}
+
+	private bool HasStartedAnyStage()
+	{
+		return _stages.Any(stage => stage.IsStarted || stage.IsComplete);
+	}
+
+	private bool IsNextStageToStart(SeedStageViewModel stage)
+	{
+		foreach (var candidate in _stages)
+		{
+			if (!candidate.IsStarted && !candidate.IsComplete)
+			{
+				return ReferenceEquals(candidate, stage);
+			}
+		}
+
+		return false;
+	}
+
+	private void ResetStages()
+	{
+		foreach (var stage in _stages)
+		{
+			stage.Processed = 0;
+			stage.Total = 0;
+			stage.IsStarted = false;
+			stage.IsComplete = false;
+			stage.ActivityMessage = string.Empty;
+		}
+	}
+
+	private IReadOnlyList<ThemePresetOption> GetSelectedThemeOptions()
+	{
+		return _themeOptions
+			.Where(option => _selectedThemeKeys.Contains(option.Key))
+			.OrderBy(option => string.Equals(option.Key, _defaultThemeKey, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+			.ThenBy(option => option.Name)
+			.ToList();
+	}
+
+	private string GetDefaultThemeLabel(ThemePresetOption option)
+	{
+		return string.Equals(option.Key, _defaultThemeKey, StringComparison.OrdinalIgnoreCase)
+			? $"{option.Name} (Default)"
+			: option.Name;
+	}
+
+	private sealed class SeedStageViewModel(string key, string label)
+	{
+		public string Key { get; } = key;
+
+		public string Label { get; } = label;
+
+		public int Processed { get; set; }
+
+		public int Total { get; set; }
+
+		public bool IsStarted { get; set; }
+
+		public bool IsComplete { get; set; }
+
+		public string ActivityMessage { get; set; } = string.Empty;
+	}
+
+	private enum SetupStep
+	{
+		ThemeSelection,
+		SeedingReview,
+		Seeding,
+		Complete
+	}
+
+	public ValueTask DisposeAsync()
+	{
+		_progressPollingCancellation?.Cancel();
+		_progressTimer?.Dispose();
+		_progressPollingCancellation?.Dispose();
+		return ValueTask.CompletedTask;
+	}
+}

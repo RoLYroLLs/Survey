@@ -4,9 +4,9 @@
 @using System.Text.Encodings.Web
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
-@using Microsoft.EntityFrameworkCore
 @inject UserManager<ApplicationUser> UserManager
 @inject IEmailSender<ApplicationUser> EmailSender
+@inject global::Survey.Infrastructure.Persistence.InitialSetupStateService InitialSetupStateService
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
@@ -51,8 +51,7 @@
 
 		<div class="form-footer">
 			<button class="btn btn-primary" type="submit" disabled="@_isSaving">Continue</button>
-			<a class="btn btn-outline-primary" href="Account/Login">Back to Login</a>
-			<a class="btn btn-outline-primary" href="/">Back to Overview</a>
+			<a class="btn btn-outline-primary" href="Account/Login">Cancel</a>
 		</div>
 	</EditForm>
 </div>
@@ -72,9 +71,16 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		if (!await UserManager.Users.AnyAsync())
+		var setupState = await InitialSetupStateService.GetStatusAsync();
+		if (!setupState.HasUsers)
 		{
-			NavigationManager.NavigateTo("Account/SetupPlatformAdmin", forceLoad: true);
+			NavigationManager.NavigateTo("/setup", forceLoad: true);
+			return;
+		}
+
+		if (!setupState.IsComplete)
+		{
+			NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
 			return;
 		}
 

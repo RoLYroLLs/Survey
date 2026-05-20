@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Survey.Application\Survey.Application.csproj" />
     <ProjectReference Include="..\..\src\Survey.Infrastructure\Survey.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Survey.Migrations.Sqlite\Survey.Migrations.Sqlite.csproj" />
   </ItemGroup>
 
   <ItemGroup>

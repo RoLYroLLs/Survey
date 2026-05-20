@@ -9,7 +9,7 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
 @inject SurveyDbContext DbContext
-@inject TenantExecutionContext TenantExecutionContext
+@inject Survey.Infrastructure.Security.TenantExecutionContext TenantExecutionContext
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
@@ -133,10 +133,21 @@
 			{
 				throw new InvalidOperationException(string.Join("; ", updateResult.Errors.Select(static error => error.Description)));
 			}
-
-			TenantExecutionContext.UseTenant(tenant.Id);
-			DbContext.TenantSettings.Add(new TenantSetting(tenant.Id, SiteThemePresetCatalog.DefaultPresetKey));
-			await DbContext.SaveChangesAsync();
+			var siteDefaultThemeKey = await DbContext.SiteSettings
+				.AsNoTracking()
+				.Where(setting => setting.Id == SiteSetting.DefaultId)
+				.Join(
+					DbContext.PlatformThemes.AsNoTracking(),
+					setting => setting.ThemePresetKey,
+					theme => theme.Key,
+					(setting, _) => setting.ThemePresetKey)
+				.FirstOrDefaultAsync();
+			if (!string.IsNullOrWhiteSpace(siteDefaultThemeKey))
+			{
+				TenantExecutionContext.UseTenant(tenant.Id);
+				DbContext.TenantSettings.Add(new TenantSetting(tenant.Id, siteDefaultThemeKey));
+				await DbContext.SaveChangesAsync();
+			}
 			await transaction.CommitAsync();
 			transactionCommitted = true;
 
@@ -154,7 +165,6 @@
 		}
 		finally
 		{
-			TenantExecutionContext.Clear();
 			_isSaving = false;
 		}
 	}

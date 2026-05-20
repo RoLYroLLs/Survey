@@ -47,13 +47,16 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromForm] string returnUrl) =>
         {
             await signInManager.SignOutAsync();
-            var safeReturnUrl = string.IsNullOrWhiteSpace(returnUrl)
-                ? "/Account/Login"
-                : returnUrl.StartsWith("~/", StringComparison.Ordinal)
-                    ? returnUrl
-                    : returnUrl.StartsWith("/", StringComparison.Ordinal)
-                        ? returnUrl
-                        : $"/{returnUrl}";
+            var safeReturnUrl = NormalizeLocalReturnUrl(returnUrl, "/Account/Login");
+            return TypedResults.LocalRedirect(safeReturnUrl);
+        });
+
+        accountGroup.MapGet("/ClearStaleAuth", async (
+            [FromServices] SignInManager<ApplicationUser> signInManager,
+            [FromQuery] string? returnUrl) =>
+        {
+            await signInManager.SignOutAsync();
+            var safeReturnUrl = NormalizeLocalReturnUrl(returnUrl, "/setup");
             return TypedResults.LocalRedirect(safeReturnUrl);
         });
 
@@ -170,5 +173,16 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         });
 
         return accountGroup;
+    }
+
+    private static string NormalizeLocalReturnUrl(string? returnUrl, string defaultUrl)
+    {
+        return string.IsNullOrWhiteSpace(returnUrl)
+            ? defaultUrl
+            : returnUrl.StartsWith("~/", StringComparison.Ordinal)
+                ? returnUrl
+                : returnUrl.StartsWith("/", StringComparison.Ordinal)
+                    ? returnUrl
+                    : $"/{returnUrl}";
     }
 }

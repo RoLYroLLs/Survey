@@ -23,7 +23,7 @@
 				}
 				else if (_model.IsEnabled)
 				{
-					<button class="btn btn-outline-primary" type="button" @onclick="DisableAsync">Disable</button>
+					<button class="btn btn-outline-primary" type="button" disabled="@(!_canReplaceTheme)" @onclick="DisableAsync">@(_model.RequiresReplacement ? "Disable and Replace" : "Disable")</button>
 					<button class="btn btn-outline-primary" type="button" @onclick="ArchiveAsync">Archive</button>
 				}
 				else
@@ -31,7 +31,7 @@
 					<button class="btn btn-outline-primary" type="button" @onclick="EnableAsync">Enable</button>
 					<button class="btn btn-outline-primary" type="button" @onclick="ArchiveAsync">Archive</button>
 				}
-				<button class="btn btn-outline-primary" type="button" @onclick="DeleteAsync">Delete</button>
+				<button class="btn btn-outline-primary" type="button" disabled="@(!_canReplaceTheme)" @onclick="DeleteAsync">@(_model.RequiresReplacement ? "Delete and Replace" : "Delete")</button>
 			</div>
 		}
 	</div>
@@ -40,6 +40,33 @@
 		@if (!string.IsNullOrWhiteSpace(_errorMessage))
 		{
 			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
+		}
+
+		@if (!_model.IsNew && _model.RequiresReplacement)
+		{
+			<div class="alert alert-warning mb-3">
+				@if (_model.ReplacementThemeOptions.Count == 0)
+				{
+					<span>Create another active theme before disabling or deleting this one. It is currently in use.</span>
+				}
+				else
+				{
+					<span>Choose a replacement theme before disabling or deleting this theme. It is currently used by</span>
+					@if (_model.IsDefaultTheme)
+					{
+						<strong> the site default</strong>
+						@if (_model.TenantUsageCount > 0)
+						{
+							<span> and </span>
+						}
+					}
+					@if (_model.TenantUsageCount > 0)
+					{
+						<strong>@_model.TenantUsageCount tenant(s)</strong>
+					}
+					<span>.</span>
+				}
+			</div>
 		}
 
 		<EditForm Model="_model" OnValidSubmit="SaveAsync">
@@ -97,10 +124,41 @@
 				<div class="helper-copy">Paste a full <code>:root</code> CSS variable block. These values drive the full tenant shell, cards, buttons, and top bar.</div>
 			</div>
 
+			@if (!_model.IsNew && _model.RequiresReplacement)
+			{
+				<div class="field-stack mt-4">
+					<FieldLabel Text="Replacement Theme" Required />
+					<InputSelect class="form-select" @bind-Value="_model.ReplacementThemeId">
+						<option value="">Select a replacement theme</option>
+						@foreach (var option in _model.ReplacementThemeOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
+					<div class="helper-copy">
+						This replacement will be applied automatically to the current default theme reference and any tenant currently using this theme.
+						@if (_model.IsDefaultTheme)
+						{
+							<span> Because this theme is the current default, the replacement you choose here will become the new default.</span>
+						}
+					</div>
+				</div>
+			}
+
 			@if (_model.UpdatedUtc.HasValue)
 			{
 				<div class="helper-copy mt-3">
 					Status: <strong>@GetStatusLabel()</strong>
+					@if (_model.IsDefaultTheme)
+					{
+						<br />
+						<span>Default theme: <strong>Yes</strong></span>
+					}
+					@if (_model.TenantUsageCount > 0)
+					{
+						<br />
+						<span>Assigned to <strong>@_model.TenantUsageCount</strong> tenant(s)</span>
+					}
 					<br />
 					Last updated @_model.UpdatedUtc.Value.LocalDateTime.ToString("g")
 				</div>
@@ -120,10 +178,20 @@
 
 	private PlatformThemeEditModel _model = new();
 	private string? _errorMessage;
+	private bool _canReplaceTheme = true;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_model = await AdministrationService.GetPlatformThemeAsync(Id);
+		if (_model.RequiresReplacement
+			&& !_model.ReplacementThemeId.HasValue
+			&& _model.ReplacementThemeOptions.Count > 0
+			&& int.TryParse(_model.ReplacementThemeOptions[0].Value, out var replacementThemeId))
+		{
+			_model.ReplacementThemeId = replacementThemeId;
+		}
+
+		_canReplaceTheme = !_model.RequiresReplacement || _model.ReplacementThemeOptions.Count > 0;
 		_errorMessage = null;
 	}
 
@@ -170,7 +238,7 @@
 
 		try
 		{
-			await AdministrationService.SetPlatformThemeEnabledAsync(_model.Id.Value, false);
+			await AdministrationService.SetPlatformThemeEnabledAsync(_model.Id.Value, false, _model.ReplacementThemeId);
 			ToastService.ShowSuccess("Theme disabled successfully.", "Theme updated");
 			await ReloadAsync();
 		}
@@ -227,7 +295,7 @@
 
 		try
 		{
-			await AdministrationService.DeletePlatformThemeAsync(_model.Id.Value);
+			await AdministrationService.DeletePlatformThemeAsync(_model.Id.Value, _model.ReplacementThemeId);
 			ToastService.ShowSuccess("Theme deleted successfully.", "Theme removed");
 			NavigationManager.NavigateTo("/admin/themes", true);
 		}
@@ -250,6 +318,15 @@
 	private async Task ReloadAsync()
 	{
 		_model = await AdministrationService.GetPlatformThemeAsync(Id);
+		if (_model.RequiresReplacement
+			&& !_model.ReplacementThemeId.HasValue
+			&& _model.ReplacementThemeOptions.Count > 0
+			&& int.TryParse(_model.ReplacementThemeOptions[0].Value, out var replacementThemeId))
+		{
+			_model.ReplacementThemeId = replacementThemeId;
+		}
+
+		_canReplaceTheme = !_model.RequiresReplacement || _model.ReplacementThemeOptions.Count > 0;
 		_errorMessage = null;
 	}
 

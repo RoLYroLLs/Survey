@@ -245,7 +245,7 @@ public sealed partial class SurveyApplicationService
 		await _auditWriter.WriteAsync("tenant", "tenant.user.removed", nameof(TenantMembership), membershipId.ToString(), "The tenant membership was removed.", true, cancellationToken);
 	}
 
-	public async Task<TenantInvitationCreateResultModel> CreateTenantInvitationAsync(TenantUserInviteModel model, CancellationToken cancellationToken = default)
+	public async Task<TenantInvitationCreateResultModel> CreateTenantInvitationAsync(TenantUserInviteModel model, string baseUrl, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.UsersInvite, cancellationToken);
 
@@ -283,7 +283,7 @@ public sealed partial class SurveyApplicationService
 			await _auditWriter.WriteAsync("tenant", "tenant.invitation.revoked", nameof(TenantInvitation), invitation.Id.ToString(), $"Pending invitation for '{invitation.Email}' was revoked before issuing a replacement.", true, cancellationToken);
 		}
 
-		return await CreateTenantInvitationCoreAsync(context, model.Email.Trim(), model.Role, cancellationToken);
+		return await CreateTenantInvitationCoreAsync(context, model.Email.Trim(), model.Role, baseUrl, cancellationToken);
 	}
 
 	public async Task<PagedResult<TenantInvitationListItem>> GetTenantInvitationsAsync(PagedQuery request, bool includeHistory = true, CancellationToken cancellationToken = default)
@@ -358,7 +358,7 @@ public sealed partial class SurveyApplicationService
 		return CreatePagedResult(pagedItems, totalCount, normalizedRequest.Offset);
 	}
 
-	public async Task<TenantInvitationCreateResultModel> ReissueTenantInvitationAsync(int invitationId, CancellationToken cancellationToken = default)
+	public async Task<TenantInvitationCreateResultModel> ReissueTenantInvitationAsync(int invitationId, string baseUrl, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.UsersInvite, cancellationToken);
 
@@ -381,7 +381,7 @@ public sealed partial class SurveyApplicationService
 			await EnsureSingleOwnerConstraintAsync(context.TenantId ?? 0, null, invitation.Role, cancellationToken);
 		}
 
-		return await CreateTenantInvitationCoreAsync(context, invitation.Email, invitation.Role, cancellationToken);
+		return await CreateTenantInvitationCoreAsync(context, invitation.Email, invitation.Role, baseUrl, cancellationToken);
 	}
 
 	public async Task RevokeTenantInvitationAsync(int invitationId, CancellationToken cancellationToken = default)
@@ -521,6 +521,7 @@ public sealed partial class SurveyApplicationService
 		CurrentAccessContext context,
 		string email,
 		TenantRole role,
+		string baseUrl,
 		CancellationToken cancellationToken)
 	{
 		var rawToken = CreateInvitationToken();
@@ -535,6 +536,7 @@ public sealed partial class SurveyApplicationService
 		_dbContext.TenantInvitations.Add(invitationEntity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
 		await _auditWriter.WriteAsync("tenant", "tenant.user.invited", nameof(TenantInvitation), invitationEntity.Id.ToString(), $"Invitation created for '{invitationEntity.Email}' with role '{invitationEntity.Role}'.", true, cancellationToken);
+		await QueueTenantInvitationEmailAsync(baseUrl, context.TenantName ?? "this tenant", invitationEntity, rawToken, cancellationToken);
 
 		return new TenantInvitationCreateResultModel
 		{

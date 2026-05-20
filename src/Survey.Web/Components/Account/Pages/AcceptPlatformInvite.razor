@@ -1,9 +1,11 @@
 @page "/Account/AcceptPlatformInvite"
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
 @inject IPlatformAdministrationService AdministrationService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
+@inject global::Survey.Infrastructure.Persistence.InitialSetupStateService InitialSetupStateService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Accept Platform Invite</PageTitle>
@@ -90,10 +92,20 @@
 			}
 			else
 			{
-				<p>Create your account first, then verify your email and complete your profile before accepting this invitation.</p>
-				<div class="form-footer">
-					<a class="btn btn-primary" href="@GetRegisterUrl()">Create Account</a>
-				</div>
+				@if (_canCreateAccount)
+				{
+					<p>Create your account first, then verify your email and complete your profile before accepting this invitation.</p>
+					<div class="form-footer">
+						<a class="btn btn-primary" href="@GetRegisterUrl()">Create Account</a>
+					</div>
+				}
+				else
+				{
+					<p>The platform is still being set up. New accounts cannot be created until the initial platform setup is complete.</p>
+					<div class="form-footer">
+						<a class="btn btn-primary" href="@GetLoginUrl()">Back to Login</a>
+					</div>
+				}
 			}
 		</div>
 	}
@@ -112,6 +124,7 @@
 	private bool _isMatchingUser;
 	private string? _currentUserId;
 	private string? _currentEmail;
+	private bool _canCreateAccount;
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -135,6 +148,8 @@
 			_currentEmail = null;
 		}
 
+		var setupState = await InitialSetupStateService.GetStatusAsync();
+		_canCreateAccount = setupState.IsComplete;
 		_isMatchingUser = _isAuthenticated
 			&& !string.IsNullOrWhiteSpace(_currentEmail)
 			&& _context is not null

@@ -1,6 +1,7 @@
 @page "/app/assignments/{Id:int}"
 @attribute [TenantAuthorize(TenantPermissionKeys.AssignmentsView)]
 @inject ITenantAdministrationService AdministrationService
+@inject NavigationManager NavigationManager
 @inject ToastService ToastService
 @using Microsoft.AspNetCore.Components
 
@@ -104,6 +105,18 @@
 					}
 				</Authorized>
 			</AuthorizeView>
+			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsSend)">
+				<Authorized>
+					@if (CanSendEmail)
+					{
+						<button class="btn btn-outline-primary" type="button" @onclick="SendEmailAsync">Send Email</button>
+					}
+					else
+					{
+						<button class="btn btn-muted-disabled" type="button" disabled>Send Email</button>
+					}
+				</Authorized>
+			</AuthorizeView>
 			<a class="btn btn-outline-primary" href="@GetBackUrl()">Back to Assignments</a>
 		</div>
 	</div>
@@ -123,6 +136,7 @@
 	public string? Status { get; set; }
 
 	private SurveyAssignmentEditModel _model = new();
+	private bool CanSendEmail => _model.IsFillable && _model.LocationEmailId.HasValue;
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -206,5 +220,23 @@
 		{
 			ToastService.ShowError(ex.Message, "Archive failed");
 		}
+	}
+
+	private async Task SendEmailAsync()
+	{
+		try
+		{
+			await AdministrationService.SendAssignmentEmailAsync(Id, GetBaseUrl());
+			ToastService.ShowSuccess("Assignment email queued successfully.", "Email queued");
+		}
+		catch (Exception ex)
+		{
+			ToastService.ShowError(ex.Message, "Email failed");
+		}
+	}
+
+	private string GetBaseUrl()
+	{
+		return NavigationManager.ToAbsoluteUri("/").GetLeftPart(UriPartial.Authority);
 	}
 }

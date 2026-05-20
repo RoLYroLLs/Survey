@@ -27,6 +27,11 @@ public class SurveyDbContext(
 	public DbSet<PlatformUserPermission> PlatformUserPermissions => Set<PlatformUserPermission>();
 	public DbSet<PlatformUserInvitation> PlatformUserInvitations => Set<PlatformUserInvitation>();
 	public DbSet<PlatformTheme> PlatformThemes => Set<PlatformTheme>();
+	public DbSet<BackgroundOperation> BackgroundOperations => Set<BackgroundOperation>();
+	public DbSet<BackgroundOperationEvent> BackgroundOperationEvents => Set<BackgroundOperationEvent>();
+	public DbSet<OutboundEmail> OutboundEmails => Set<OutboundEmail>();
+	public DbSet<OutboundEmailAttempt> OutboundEmailAttempts => Set<OutboundEmailAttempt>();
+	public DbSet<OutboundEmailClickEvent> OutboundEmailClickEvents => Set<OutboundEmailClickEvent>();
 	public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 	public DbSet<Country> Countries => Set<Country>();
 	public DbSet<StateProvince> StateProvinces => Set<StateProvince>();
@@ -68,6 +73,7 @@ public class SurveyDbContext(
 			entity.Property(user => user.City).HasMaxLength(100);
 			entity.Property(user => user.State).HasMaxLength(100);
 			entity.Property(user => user.PostalCode).HasMaxLength(20);
+			entity.Property(user => user.OrganizationName).HasMaxLength(200);
 			entity.Property(user => user.PhoneNumber).HasMaxLength(50);
 			entity.Property(user => user.ActiveTenantMembershipId);
 			entity.Property(user => user.AvatarColorHex).HasMaxLength(16);
@@ -186,7 +192,6 @@ public class SurveyDbContext(
 		{
 			entity.ToTable("AspNetUserPasskeys");
 			entity.HasKey(passkey => passkey.CredentialId);
-			entity.Property(passkey => passkey.CredentialId).HasColumnType("BLOB");
 			entity.Property(passkey => passkey.UserId).HasMaxLength(450).IsRequired();
 			entity.Property(passkey => passkey.Data).IsRequired();
 			entity.HasIndex(passkey => passkey.UserId);
@@ -218,6 +223,93 @@ public class SurveyDbContext(
 			entity.Property(theme => theme.IsEnabled).HasDefaultValue(true);
 			entity.Property(theme => theme.IsArchived).HasDefaultValue(false);
 			entity.HasIndex(theme => theme.Key).IsUnique();
+		});
+
+		builder.Entity<BackgroundOperation>(entity =>
+		{
+			entity.Property(operation => operation.Kind).HasMaxLength(100).IsRequired();
+			entity.Property(operation => operation.Status).HasMaxLength(50).IsRequired();
+			entity.Property(operation => operation.QueueName).HasMaxLength(100).IsRequired();
+			entity.Property(operation => operation.Summary).HasMaxLength(500).IsRequired();
+			entity.Property(operation => operation.RequestedByUserId).HasMaxLength(450);
+			entity.Property(operation => operation.HangfireJobId).HasMaxLength(100);
+			entity.Property(operation => operation.CurrentStageKey).HasMaxLength(100).IsRequired();
+			entity.Property(operation => operation.CurrentStageLabel).HasMaxLength(200).IsRequired();
+			entity.Property(operation => operation.CurrentItemMessage).HasMaxLength(1000).IsRequired();
+			entity.Property(operation => operation.StageStatesJson).HasMaxLength(32000).IsRequired();
+			entity.Property(operation => operation.MetadataJson).HasMaxLength(32000).IsRequired();
+			entity.Property(operation => operation.ErrorMessage).HasMaxLength(4000);
+			entity.HasIndex(operation => new { operation.Kind, operation.Status });
+			entity.HasIndex(operation => operation.CreatedUtc);
+			entity.HasOne<Tenant>()
+				.WithMany()
+				.HasForeignKey(operation => operation.TenantId)
+				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasMany(operation => operation.Events)
+				.WithOne(item => item.Operation)
+				.HasForeignKey(item => item.BackgroundOperationId)
+				.OnDelete(DeleteBehavior.Cascade);
+		});
+
+		builder.Entity<BackgroundOperationEvent>(entity =>
+		{
+			entity.Property(item => item.StageKey).HasMaxLength(100).IsRequired();
+			entity.Property(item => item.StageLabel).HasMaxLength(200).IsRequired();
+			entity.Property(item => item.Status).HasMaxLength(50).IsRequired();
+			entity.Property(item => item.Message).HasMaxLength(2000).IsRequired();
+			entity.HasIndex(item => new { item.BackgroundOperationId, item.CreatedUtc });
+		});
+
+		builder.Entity<OutboundEmail>(entity =>
+		{
+			entity.Property(email => email.CreatedByUserId).HasMaxLength(450);
+			entity.Property(email => email.TemplateKey).HasMaxLength(100).IsRequired();
+			entity.Property(email => email.SourceType).HasMaxLength(100).IsRequired();
+			entity.Property(email => email.SourceId).HasMaxLength(100).IsRequired();
+			entity.Property(email => email.RecipientName).HasMaxLength(200).IsRequired();
+			entity.Property(email => email.RecipientEmail).HasMaxLength(256).IsRequired();
+			entity.Property(email => email.Subject).HasMaxLength(500).IsRequired();
+			entity.Property(email => email.HtmlBody).HasMaxLength(32000).IsRequired();
+			entity.Property(email => email.TextBody).HasMaxLength(16000).IsRequired();
+			entity.Property(email => email.TrackingToken).HasMaxLength(200).IsRequired();
+			entity.Property(email => email.Status).HasMaxLength(50).IsRequired();
+			entity.Property(email => email.ProviderMessageId).HasMaxLength(200);
+			entity.Property(email => email.LastError).HasMaxLength(4000);
+			entity.HasIndex(email => email.TrackingToken).IsUnique();
+			entity.HasIndex(email => new { email.Status, email.CreatedUtc });
+			entity.HasOne(email => email.Operation)
+				.WithMany()
+				.HasForeignKey(email => email.BackgroundOperationId)
+				.OnDelete(DeleteBehavior.SetNull);
+			entity.HasOne<Tenant>()
+				.WithMany()
+				.HasForeignKey(email => email.TenantId)
+				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasMany(email => email.Attempts)
+				.WithOne(item => item.Email)
+				.HasForeignKey(item => item.OutboundEmailId)
+				.OnDelete(DeleteBehavior.Cascade);
+			entity.HasMany(email => email.ClickEvents)
+				.WithOne(item => item.Email)
+				.HasForeignKey(item => item.OutboundEmailId)
+				.OnDelete(DeleteBehavior.Cascade);
+		});
+
+		builder.Entity<OutboundEmailAttempt>(entity =>
+		{
+			entity.Property(item => item.Status).HasMaxLength(50).IsRequired();
+			entity.Property(item => item.ProviderMessageId).HasMaxLength(200);
+			entity.Property(item => item.ErrorMessage).HasMaxLength(4000);
+			entity.HasIndex(item => new { item.OutboundEmailId, item.AttemptNumber }).IsUnique();
+		});
+
+		builder.Entity<OutboundEmailClickEvent>(entity =>
+		{
+			entity.Property(item => item.LinkType).HasMaxLength(100).IsRequired();
+			entity.Property(item => item.DestinationUrl).HasMaxLength(2000).IsRequired();
+			entity.Property(item => item.UserAgent).HasMaxLength(1000).IsRequired();
+			entity.Property(item => item.IpAddressHash).HasMaxLength(200).IsRequired();
+			entity.HasIndex(item => new { item.OutboundEmailId, item.OccurredUtc });
 		});
 
 		builder.Entity<AuditLog>(entity =>

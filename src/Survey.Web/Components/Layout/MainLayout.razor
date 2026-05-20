@@ -1,19 +1,62 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager NavigationManager
 
-<div class="shell">
+<div class="shell @(IsSinglePaneShellRoute ? "shell--setup" : string.Empty) @(IsFocusedShellRoute ? "shell--setup-center" : string.Empty)">
 	<header class="shell__topbar">
 		<TopBar />
 	</header>
 
-	<aside class="shell__sidebar">
-		<NavMenu />
-	</aside>
+	@if (!IsSinglePaneShellRoute)
+	{
+		<aside class="shell__sidebar">
+			<NavMenu />
+		</aside>
+	}
 
 	<div class="shell__content">
 		<ToastHost />
 
-		<main class="shell__main">
+		<main class="shell__main @(IsSinglePaneShellRoute ? "shell__main--setup" : string.Empty) @(IsFocusedShellRoute ? "shell__main--setup-center" : string.Empty)">
 			@Body
 		</main>
 	</div>
 </div>
+
+@code {
+	private string _currentUrl = string.Empty;
+
+	private bool IsAuthFocusRoute =>
+		string.Equals(_currentUrl, "Account/Login", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(_currentUrl, "Account/Register", StringComparison.OrdinalIgnoreCase);
+
+	private bool IsSetupFocusRoute =>
+		string.Equals(_currentUrl, "setup", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(_currentUrl, "setup/platform-admin", StringComparison.OrdinalIgnoreCase);
+
+	private bool IsSetupShellRoute =>
+		string.Equals(_currentUrl, "setup", StringComparison.OrdinalIgnoreCase)
+		|| (!string.IsNullOrWhiteSpace(_currentUrl)
+			&& _currentUrl.StartsWith("setup/", StringComparison.OrdinalIgnoreCase));
+
+	private bool IsSinglePaneShellRoute => IsSetupShellRoute || IsAuthFocusRoute;
+
+	private bool IsFocusedShellRoute => IsSetupFocusRoute || IsAuthFocusRoute;
+
+	protected override void OnInitialized()
+	{
+		_currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
+
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		_currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+		_ = InvokeAsync(StateHasChanged);
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+	}
+}

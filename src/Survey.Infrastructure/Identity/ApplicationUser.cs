@@ -30,6 +30,11 @@ public class ApplicationUser : IdentityUser
 	[StringLength(20)]
 	public string? PostalCode { get; set; }
 
+	public bool IsOrganizationAccount { get; set; }
+
+	[StringLength(200)]
+	public string? OrganizationName { get; set; }
+
 	public int? ActiveTenantMembershipId { get; set; }
 
 	public bool IsPlatformSuperAdmin { get; set; }
@@ -89,6 +94,7 @@ public class ApplicationUser : IdentityUser
 	{
 		return !string.IsNullOrWhiteSpace(FirstName)
 			&& !string.IsNullOrWhiteSpace(LastName)
+			&& (!IsOrganizationAccount || !string.IsNullOrWhiteSpace(OrganizationName))
 			&& !string.IsNullOrWhiteSpace(AddressLine1)
 			&& !string.IsNullOrWhiteSpace(City)
 			&& !string.IsNullOrWhiteSpace(State)

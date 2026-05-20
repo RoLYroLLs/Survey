@@ -1,0 +1,97 @@
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject global::Survey.Infrastructure.Persistence.InitialSetupStateService InitialSetupStateService
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+@inject Microsoft.AspNetCore.Identity.SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+
+@code {
+	private static readonly HashSet<string> AllowedPaths = new(StringComparer.OrdinalIgnoreCase)
+	{
+		"setup",
+		"setup/platform-admin",
+		"setup/initial-seeding",
+		"Account/Login",
+		"Account/Logout",
+		"Account/ClearStaleAuth"
+	};
+
+	protected override void OnInitialized()
+	{
+		NavigationManager.LocationChanged += OnLocationChanged;
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (!firstRender)
+		{
+			return;
+		}
+
+		await EnforceAsync();
+	}
+
+	private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+	{
+		await InvokeAsync(EnforceAsync);
+	}
+
+	private async Task EnforceAsync()
+	{
+		var setupState = await InitialSetupStateService.GetStatusAsync();
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		if (!setupState.HasUsers)
+		{
+			return;
+		}
+
+		if (IsAllowedPath())
+		{
+			return;
+		}
+
+		if (!setupState.IsComplete)
+		{
+			if (authenticationState.User.Identity?.IsAuthenticated != true)
+			{
+				NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
+				return;
+			}
+
+			var pendingSetupUser = await UserManager.GetUserAsync(authenticationState.User);
+			if (pendingSetupUser is null || !pendingSetupUser.IsBootstrapPlatformOwner)
+			{
+				await SignInManager.SignOutAsync();
+				NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
+				return;
+			}
+
+			NavigationManager.NavigateTo("/setup/initial-seeding", forceLoad: true);
+			return;
+		}
+
+		if (authenticationState.User.Identity?.IsAuthenticated != true)
+		{
+			return;
+		}
+	}
+
+	private bool IsAllowedPath()
+	{
+		var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+		var pathOnly = relativePath.Split('?', '#')[0].Trim('/');
+		return AllowedPaths.Contains(pathOnly);
+	}
+
+	private bool IsCurrentPath(string expectedPath)
+	{
+		var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+		var pathOnly = relativePath.Split('?', '#')[0].Trim('/');
+		return string.Equals(pathOnly, expectedPath, StringComparison.OrdinalIgnoreCase);
+	}
+
+	public void Dispose()
+	{
+		NavigationManager.LocationChanged -= OnLocationChanged;
+	}
+}

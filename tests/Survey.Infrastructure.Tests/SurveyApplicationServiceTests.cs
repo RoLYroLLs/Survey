@@ -52,9 +52,11 @@ public class SurveyApplicationServiceTests
 	public async Task SaveSiteSettingsAsync_Persists_Selected_Theme()
 	{
 		await using var harness = await TestHarness.CreateAsync();
+		await harness.CompleteInitialSetupAsync(SiteThemePresetCatalog.DefaultPresetKey, "harbor-blue");
 
 		await harness.AdministrationService.SaveSiteSettingsAsync(new SiteSettingsEditModel
 		{
+			TenantName = "Test Tenant",
 			ThemePresetKey = "harbor-blue"
 		});
 
@@ -67,32 +69,34 @@ public class SurveyApplicationServiceTests
 	}
 
 	[Fact]
-	public async Task SaveSiteSettingsAsync_Throws_When_Current_User_Is_Not_Tenant_Owner()
+	public async Task SaveSiteSettingsAsync_Throws_When_Current_User_Is_Not_Tenant_Admin_Or_Owner()
 	{
 		await using var harness = await TestHarness.CreateAsync();
+		await harness.CompleteInitialSetupAsync(SiteThemePresetCatalog.DefaultPresetKey, "harbor-blue");
 
-		var adminUser = new ApplicationUser
+		var standardUser = new ApplicationUser
 		{
-			UserName = "tenant.admin@example.com",
-			Email = "tenant.admin@example.com",
+			UserName = "tenant.user@example.com",
+			Email = "tenant.user@example.com",
 			EmailConfirmed = true,
 			FirstName = "Tenant",
-			LastName = "Admin",
+			LastName = "User",
 			IsPlatformSuperAdmin = false,
 			IsPlatformUserEnabled = false
 		};
 
-		var createResult = await harness.UserManager.CreateAsync(adminUser, "TempPass123!");
+		var createResult = await harness.UserManager.CreateAsync(standardUser, "TempPass123!");
 		Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(static error => error.Description)));
 
-		var membership = new TenantMembership(harness.PrimaryTenantId, adminUser.Id, TenantRole.Admin);
+		var membership = new TenantMembership(harness.PrimaryTenantId, standardUser.Id, TenantRole.User);
 		harness.DbContext.TenantMemberships.Add(membership);
 		await harness.DbContext.SaveChangesAsync();
-		await harness.SetCurrentUserAsync(adminUser, membership.Id);
+		await harness.SetCurrentUserAsync(standardUser, membership.Id);
 
 		var exception = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
 			harness.AdministrationService.SaveSiteSettingsAsync(new SiteSettingsEditModel
 			{
+				TenantName = "Test Tenant",
 				ThemePresetKey = "harbor-blue"
 			}));
 
@@ -100,29 +104,45 @@ public class SurveyApplicationServiceTests
 	}
 
 	[Fact]
-	public async Task SaveTenantGeographyVisibilityAsync_Throws_When_Current_User_Is_Not_Tenant_Owner()
+	public async Task GetTenantThemeOptionsAsync_Returns_Empty_Until_InitialSetup_Is_Completed()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+
+		var beforeSetup = await harness.AdministrationService.GetTenantThemeOptionsAsync();
+		Assert.Empty(beforeSetup);
+
+		await harness.CompleteInitialSetupAsync(SiteThemePresetCatalog.DefaultPresetKey, "harbor-blue");
+
+		var afterSetup = await harness.AdministrationService.GetTenantThemeOptionsAsync();
+		Assert.Equal(2, afterSetup.Count);
+		Assert.Contains(afterSetup, option => option.Key == SiteThemePresetCatalog.DefaultPresetKey);
+		Assert.Contains(afterSetup, option => option.Key == "harbor-blue");
+	}
+
+	[Fact]
+	public async Task SaveTenantGeographyVisibilityAsync_Throws_When_Current_User_Is_Not_Tenant_Admin_Or_Owner()
 	{
 		await using var harness = await TestHarness.CreateAsync();
 		var seed = await harness.SeedSurveyAsync();
 
-		var adminUser = new ApplicationUser
+		var standardUser = new ApplicationUser
 		{
-			UserName = "tenant.admin@example.com",
-			Email = "tenant.admin@example.com",
+			UserName = "tenant.user@example.com",
+			Email = "tenant.user@example.com",
 			EmailConfirmed = true,
 			FirstName = "Tenant",
-			LastName = "Admin",
+			LastName = "User",
 			IsPlatformSuperAdmin = false,
 			IsPlatformUserEnabled = false
 		};
 
-		var createResult = await harness.UserManager.CreateAsync(adminUser, "TempPass123!");
+		var createResult = await harness.UserManager.CreateAsync(standardUser, "TempPass123!");
 		Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(static error => error.Description)));
 
-		var membership = new TenantMembership(harness.PrimaryTenantId, adminUser.Id, TenantRole.Admin);
+		var membership = new TenantMembership(harness.PrimaryTenantId, standardUser.Id, TenantRole.User);
 		harness.DbContext.TenantMemberships.Add(membership);
 		await harness.DbContext.SaveChangesAsync();
-		await harness.SetCurrentUserAsync(adminUser, membership.Id);
+		await harness.SetCurrentUserAsync(standardUser, membership.Id);
 
 		var exception = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
 			harness.TenantAdministrationService.SaveTenantGeographyVisibilityAsync(new TenantGeographyVisibilityEditModel
@@ -189,6 +209,78 @@ public class SurveyApplicationServiceTests
 		Assert.Equal("District", districtOfColumbia!.SubdivisionType);
 		Assert.Single(districtOfColumbia.Counties);
 		Assert.Equal("District of Columbia", districtOfColumbia.Counties.Single().Name);
+	}
+
+	[Fact]
+	public async Task InitialSetupSeeder_Seeds_All_Tracked_Stages()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var selectedThemeKeys = new[] { SiteThemePresetCatalog.DefaultPresetKey, "harbor-blue" };
+		const string defaultThemeKey = "harbor-blue";
+
+		var updates = new Dictionary<string, InitialSeedingProgressUpdate>(StringComparer.Ordinal);
+		await harness.InitialSetupSeeder.SeedAsync(selectedThemeKeys, defaultThemeKey, update =>
+		{
+			updates[update.StageKey] = update;
+			return Task.CompletedTask;
+		});
+
+		Assert.True(await harness.InitialSetupSeeder.IsSeededAsync());
+		Assert.Equal(
+			InitialSeedingStages.Ordered.Select(stage => stage.Key).OrderBy(static key => key),
+			updates.Keys.OrderBy(static key => key));
+		Assert.All(updates.Values, update => Assert.True(update.IsComplete));
+		Assert.Equal(selectedThemeKeys.Length, await harness.DbContext.PlatformThemes.CountAsync());
+		var siteSetting = await harness.DbContext.SiteSettings.SingleOrDefaultAsync(setting => setting.Id == SiteSetting.DefaultId);
+		Assert.NotNull(siteSetting);
+		Assert.Equal(defaultThemeKey, siteSetting!.ThemePresetKey);
+		Assert.NotEmpty(await harness.DbContext.Countries.ToListAsync());
+		Assert.NotEmpty(await harness.DbContext.StateProvinces.ToListAsync());
+		Assert.NotEmpty(await harness.DbContext.Counties.ToListAsync());
+		Assert.NotEmpty(await harness.DbContext.ZipCountyLookups.ToListAsync());
+	}
+
+	[Fact]
+	public async Task DisablePlatformThemeAsync_Replaces_Default_And_Tenant_Theme_When_Theme_Is_In_Use()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		await harness.CompleteInitialSetupAsync(SiteThemePresetCatalog.DefaultPresetKey, "harbor-blue");
+		harness.DbContext.TenantSettings.Add(new TenantSetting(harness.PrimaryTenantId, SiteThemePresetCatalog.DefaultPresetKey));
+		await harness.DbContext.SaveChangesAsync();
+
+		var currentTheme = await harness.DbContext.PlatformThemes.SingleAsync(theme => theme.Key == SiteThemePresetCatalog.DefaultPresetKey);
+		var replacementTheme = await harness.DbContext.PlatformThemes.SingleAsync(theme => theme.Key == "harbor-blue");
+
+		await harness.PlatformAdministrationService.SetPlatformThemeEnabledAsync(currentTheme.Id, false, replacementTheme.Id);
+
+		var siteSetting = await harness.DbContext.SiteSettings.SingleAsync(setting => setting.Id == SiteSetting.DefaultId);
+		var tenantSetting = await harness.DbContext.TenantSettings.SingleAsync();
+		var disabledTheme = await harness.DbContext.PlatformThemes.SingleAsync(theme => theme.Id == currentTheme.Id);
+
+		Assert.Equal("harbor-blue", siteSetting.ThemePresetKey);
+		Assert.Equal("harbor-blue", tenantSetting.ThemePresetKey);
+		Assert.False(disabledTheme.IsEnabled);
+	}
+
+	[Fact]
+	public async Task DeletePlatformThemeAsync_Replaces_Default_And_Tenant_Theme_When_Theme_Is_In_Use()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		await harness.CompleteInitialSetupAsync(SiteThemePresetCatalog.DefaultPresetKey, "harbor-blue");
+		harness.DbContext.TenantSettings.Add(new TenantSetting(harness.PrimaryTenantId, SiteThemePresetCatalog.DefaultPresetKey));
+		await harness.DbContext.SaveChangesAsync();
+
+		var currentTheme = await harness.DbContext.PlatformThemes.SingleAsync(theme => theme.Key == SiteThemePresetCatalog.DefaultPresetKey);
+		var replacementTheme = await harness.DbContext.PlatformThemes.SingleAsync(theme => theme.Key == "harbor-blue");
+
+		await harness.PlatformAdministrationService.DeletePlatformThemeAsync(currentTheme.Id, replacementTheme.Id);
+
+		var siteSetting = await harness.DbContext.SiteSettings.SingleAsync(setting => setting.Id == SiteSetting.DefaultId);
+		var tenantSetting = await harness.DbContext.TenantSettings.SingleAsync();
+
+		Assert.Equal("harbor-blue", siteSetting.ThemePresetKey);
+		Assert.Equal("harbor-blue", tenantSetting.ThemePresetKey);
+		Assert.False(await harness.DbContext.PlatformThemes.AnyAsync(theme => theme.Id == currentTheme.Id));
 	}
 
 	[Fact]
@@ -579,18 +671,19 @@ public class SurveyApplicationServiceTests
 	public async Task CreateTenantInvitationAsync_Reissues_Pending_Invitations_And_Audits_The_Change()
 	{
 		await using var harness = await TestHarness.CreateAsync();
+		const string baseUrl = "https://survey.example.test";
 
 		var firstInvite = await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
 		{
 			Email = "invitee@example.com",
 			Role = TenantRole.User
-		});
+		}, baseUrl);
 
 		var secondInvite = await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
 		{
 			Email = "invitee@example.com",
 			Role = TenantRole.User
-		});
+		}, baseUrl);
 
 		Assert.NotEqual(firstInvite.Token, secondInvite.Token);
 
@@ -605,15 +698,44 @@ public class SurveyApplicationServiceTests
 	}
 
 	[Fact]
+	public async Task CreateTenantInvitationAsync_Queues_Tracked_Email_And_Links_It_To_A_Background_Operation()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		const string baseUrl = "https://survey.example.test";
+
+		await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
+		{
+			Email = "invitee@example.com",
+			Role = TenantRole.User
+		}, baseUrl);
+
+		var invitation = await harness.DbContext.TenantInvitations.SingleAsync(item => item.Email == "invitee@example.com");
+		var email = await harness.DbContext.OutboundEmails.SingleAsync(item =>
+			item.SourceType == OutboundEmailSourceTypes.TenantInvitation
+			&& item.SourceId == invitation.Id.ToString());
+		var operation = await harness.BackgroundOperationsService.GetBackgroundOperationAsync(email.BackgroundOperationId!.Value);
+
+		Assert.Equal("invitee@example.com", email.RecipientEmail);
+		Assert.Equal(harness.PrimaryTenantId, email.TenantId);
+		Assert.False(string.IsNullOrWhiteSpace(email.TrackingToken));
+		Assert.Contains("/email/track/open/", email.HtmlBody, StringComparison.Ordinal);
+		Assert.Contains("/email/track/click/", email.HtmlBody, StringComparison.Ordinal);
+		Assert.NotNull(operation);
+		Assert.Single(operation!.LinkedEmails);
+		Assert.Equal(email.Id, operation.LinkedEmails[0].Id);
+	}
+
+	[Fact]
 	public async Task GetPlatformTenantsAsync_Returns_Pending_Invitation_Counts_On_Sqlite()
 	{
 		await using var harness = await TestHarness.CreateAsync();
+		const string baseUrl = "https://survey.example.test";
 
 		await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
 		{
 			Email = "pending@example.com",
 			Role = TenantRole.User
-		});
+		}, baseUrl);
 
 		var tenants = (await harness.PlatformAdministrationService.GetPlatformTenantsAsync(CreatePagedRequest())).Items;
 		var tenant = Assert.Single(tenants);
@@ -627,12 +749,13 @@ public class SurveyApplicationServiceTests
 	public async Task AcceptTenantInvitationForNewUserAsync_Creates_A_Membership_In_The_Invited_Tenant()
 	{
 		await using var harness = await TestHarness.CreateAsync();
+		const string baseUrl = "https://survey.example.test";
 
 		var invite = await harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
 		{
 			Email = "new.user@example.com",
 			Role = TenantRole.Admin
-		});
+		}, baseUrl);
 
 		var userId = await harness.TenantAdministrationService.AcceptTenantInvitationForNewUserAsync(new TenantInvitationRegistrationModel
 		{
@@ -658,15 +781,186 @@ public class SurveyApplicationServiceTests
 	public async Task CreateTenantInvitationAsync_Throws_When_Inviting_A_Second_Owner()
 	{
 		await using var harness = await TestHarness.CreateAsync();
+		const string baseUrl = "https://survey.example.test";
 
 		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
 			harness.TenantAdministrationService.CreateTenantInvitationAsync(new TenantUserInviteModel
 			{
 				Email = "owner2@example.com",
 				Role = TenantRole.Owner
-			}));
+			}, baseUrl));
 
 		Assert.Contains("only have one owner", exception.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task CreatePlatformUserInvitationAsync_Queues_Tracked_Email()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		const string baseUrl = "https://survey.example.test";
+
+		await harness.PlatformAdministrationService.CreatePlatformUserInvitationAsync(new PlatformUserInviteModel
+		{
+			Email = "platform.invitee@example.com",
+			IsPlatformUserEnabled = true,
+			TenantId = harness.PrimaryTenantId,
+			TenantRole = TenantRole.Admin
+		}, baseUrl);
+
+		var invitation = await harness.DbContext.PlatformUserInvitations.SingleAsync(item => item.Email == "platform.invitee@example.com");
+		var email = await harness.DbContext.OutboundEmails.SingleAsync(item =>
+			item.SourceType == OutboundEmailSourceTypes.PlatformInvitation
+			&& item.SourceId == invitation.Id.ToString());
+
+		Assert.Equal("platform.invitee@example.com", email.RecipientEmail);
+		Assert.Equal(harness.PrimaryTenantId, email.TenantId);
+		Assert.Contains("/email/track/open/", email.HtmlBody, StringComparison.Ordinal);
+		Assert.Contains("/email/track/click/", email.HtmlBody, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task SendAssignmentEmailAsync_Queues_A_Tracked_Email_For_The_Selected_Location_Email()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var seed = await harness.SeedSurveyAsync();
+		const string baseUrl = "https://survey.example.test";
+
+		var result = await harness.TenantAdministrationService.SendAssignmentEmailAsync(seed.AssignmentId, baseUrl);
+		var email = await harness.DbContext.OutboundEmails.SingleAsync(item => item.Id == result.OutboundEmailId);
+		var operation = await harness.BackgroundOperationsService.GetBackgroundOperationAsync(result.BackgroundOperationId);
+
+		Assert.Equal(OutboundEmailSourceTypes.Assignment, email.SourceType);
+		Assert.Equal(seed.AssignmentId.ToString(), email.SourceId);
+		Assert.Equal(harness.PrimaryTenantId, email.TenantId);
+		Assert.Contains($"/survey/{seed.Token}", email.TextBody, StringComparison.Ordinal);
+		Assert.Contains("/email/track/click/", email.HtmlBody, StringComparison.Ordinal);
+		Assert.NotNull(operation);
+		Assert.Single(operation!.LinkedEmails);
+		Assert.Equal(email.Id, operation.LinkedEmails[0].Id);
+	}
+
+	[Fact]
+	public async Task EmailTrackingService_Records_Open_And_Click_Aggregates_And_Click_Events()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var email = new OutboundEmail(
+			"identity-confirm-email",
+			OutboundEmailSourceTypes.IdentityConfirmation,
+			harness.PrimaryUserId,
+			"user@example.com",
+			"Confirm your email",
+			"<p><a href=\"https://survey.example.test/Account/ConfirmEmail?code=abc\">Confirm</a></p>",
+			"Confirm your email",
+			"track-token-123",
+			harness.PrimaryTenantId,
+			harness.PrimaryUserId,
+			"Test User");
+		harness.DbContext.OutboundEmails.Add(email);
+		await harness.DbContext.SaveChangesAsync();
+
+		await harness.EmailTrackingService.TrackOpenAsync(email.TrackingToken, "UnitTest", "127.0.0.1");
+		var redirect = await harness.EmailTrackingService.TrackClickAsync(
+			email.TrackingToken,
+			"confirm-email",
+			"https://survey.example.test/Account/ConfirmEmail?code=abc",
+			"UnitTest",
+			"127.0.0.1");
+
+		var reloaded = await harness.DbContext.OutboundEmails
+			.Include(item => item.ClickEvents)
+			.SingleAsync(item => item.Id == email.Id);
+
+		Assert.True(redirect.IsValid);
+		Assert.Equal("https://survey.example.test/Account/ConfirmEmail?code=abc", redirect.DestinationUrl);
+		Assert.Equal(1, reloaded.OpenCount);
+		Assert.NotNull(reloaded.FirstOpenedUtc);
+		Assert.NotNull(reloaded.LastOpenedUtc);
+		Assert.Equal(1, reloaded.ClickCount);
+		Assert.NotNull(reloaded.FirstClickedUtc);
+		Assert.NotNull(reloaded.LastClickedUtc);
+		var clickEvent = Assert.Single(reloaded.ClickEvents);
+		Assert.Equal("confirm-email", clickEvent.LinkType);
+		Assert.Equal("https://survey.example.test/Account/ConfirmEmail?code=abc", clickEvent.DestinationUrl);
+		Assert.False(string.IsNullOrWhiteSpace(clickEvent.IpAddressHash));
+	}
+
+	[Fact]
+	public async Task InitializeSurveyPlatformAsync_Can_Bootstrap_A_Fresh_Sqlite_Database()
+	{
+		var databasePath = Path.Combine(Path.GetTempPath(), $"survey-fresh-init-{Guid.NewGuid():N}.db");
+		var configuration = new ConfigurationBuilder()
+			.AddInMemoryCollection(new Dictionary<string, string?>
+			{
+				["Database:Provider"] = "Sqlite",
+				["ConnectionStrings:Default"] = $"Data Source={databasePath}"
+			})
+			.Build();
+
+		var services = new ServiceCollection();
+		services.AddDataProtection();
+		services.AddLogging();
+		services.AddSingleton<IConfiguration>(configuration);
+		services.AddSurveyInfrastructure(configuration);
+
+		var provider = services.BuildServiceProvider();
+
+		try
+		{
+			await provider.InitializeSurveyPlatformAsync();
+
+			await using var scope = provider.CreateAsyncScope();
+			var dbContext = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+			await dbContext.Database.OpenConnectionAsync();
+			await using var command = dbContext.Database.GetDbConnection().CreateCommand();
+			command.CommandText = """SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "name" = 'PostalAddresses';""";
+
+			Assert.True(await dbContext.Database.CanConnectAsync());
+			Assert.Equal(1L, (long)(await command.ExecuteScalarAsync() ?? 0L));
+		}
+		finally
+		{
+			await provider.DisposeAsync();
+			TryDeleteSqliteArtifacts(databasePath);
+		}
+	}
+
+	[Fact]
+	public async Task InitializeSurveyPlatformAsync_Does_Not_Seed_Geography_Reference_Data()
+	{
+		var databasePath = Path.Combine(Path.GetTempPath(), $"survey-no-geo-seed-{Guid.NewGuid():N}.db");
+		var configuration = new ConfigurationBuilder()
+			.AddInMemoryCollection(new Dictionary<string, string?>
+			{
+				["Database:Provider"] = "Sqlite",
+				["ConnectionStrings:Default"] = $"Data Source={databasePath}"
+			})
+			.Build();
+
+		var services = new ServiceCollection();
+		services.AddDataProtection();
+		services.AddLogging();
+		services.AddSingleton<IConfiguration>(configuration);
+		services.AddSurveyInfrastructure(configuration);
+
+		var provider = services.BuildServiceProvider();
+
+		try
+		{
+			await provider.InitializeSurveyPlatformAsync();
+
+			await using var scope = provider.CreateAsyncScope();
+			var dbContext = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+
+			Assert.Empty(await dbContext.Countries.ToListAsync());
+			Assert.Empty(await dbContext.StateProvinces.ToListAsync());
+			Assert.Empty(await dbContext.Counties.ToListAsync());
+			Assert.Empty(await dbContext.ZipCountyLookups.ToListAsync());
+		}
+		finally
+		{
+			await provider.DisposeAsync();
+			TryDeleteSqliteArtifacts(databasePath);
+		}
 	}
 
 	[Fact]
@@ -688,9 +982,10 @@ public class SurveyApplicationServiceTests
 		var services = new ServiceCollection();
 		services.AddDataProtection();
 		services.AddLogging();
+		services.AddSingleton<IConfiguration>(configuration);
 		services.AddSurveyInfrastructure(configuration);
 
-		await using var provider = services.BuildServiceProvider();
+		var provider = services.BuildServiceProvider();
 
 		try
 		{
@@ -783,9 +1078,27 @@ public class SurveyApplicationServiceTests
 		}
 		finally
 		{
-			if (File.Exists(databasePath))
+			await provider.DisposeAsync();
+			TryDeleteSqliteArtifacts(databasePath);
+		}
+	}
+
+	private static void TryDeleteSqliteArtifacts(string databasePath)
+	{
+		foreach (var path in new[] { databasePath, $"{databasePath}-wal", $"{databasePath}-shm" })
+		{
+			try
 			{
-				File.Delete(databasePath);
+				if (File.Exists(path))
+				{
+					File.Delete(path);
+				}
+			}
+			catch (IOException)
+			{
+			}
+			catch (UnauthorizedAccessException)
+			{
 			}
 		}
 	}
@@ -1427,7 +1740,10 @@ public class SurveyApplicationServiceTests
 			TenantExecutionContext = _scope.ServiceProvider.GetRequiredService<TenantExecutionContext>();
 			AuthenticationStateProvider = (TestAuthenticationStateProvider)_scope.ServiceProvider.GetRequiredService<AuthenticationStateProvider>();
 			HttpContextAccessor = _scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+			BackgroundOperationsService = _scope.ServiceProvider.GetRequiredService<IBackgroundOperationsService>();
+			EmailTrackingService = _scope.ServiceProvider.GetRequiredService<IEmailTrackingService>();
 			GeographySeeder = _scope.ServiceProvider.GetRequiredService<GeographyDataSeeder>();
+			InitialSetupSeeder = _scope.ServiceProvider.GetRequiredService<InitialSetupSeeder>();
 		}
 
 		public SurveyDbContext DbContext { get; }
@@ -1439,7 +1755,10 @@ public class SurveyApplicationServiceTests
 		public TenantExecutionContext TenantExecutionContext { get; }
 		public TestAuthenticationStateProvider AuthenticationStateProvider { get; }
 		public IHttpContextAccessor HttpContextAccessor { get; }
+		public IBackgroundOperationsService BackgroundOperationsService { get; }
+		public IEmailTrackingService EmailTrackingService { get; }
 		public GeographyDataSeeder GeographySeeder { get; }
+		public InitialSetupSeeder InitialSetupSeeder { get; }
 		public int PrimaryTenantId { get; private set; }
 		public int PrimaryMembershipId { get; private set; }
 		public string PrimaryUserId { get; private set; } = string.Empty;
@@ -1462,11 +1781,15 @@ public class SurveyApplicationServiceTests
 			services.AddScoped<AuthenticationStateProvider, TestAuthenticationStateProvider>();
 
 			var provider = services.BuildServiceProvider();
+			await using (var setupScope = provider.CreateAsyncScope())
+			{
+				var dbContext = setupScope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+				await dbContext.Database.EnsureDeletedAsync();
+				await dbContext.Database.EnsureCreatedAsync();
+			}
+
 			var scope = provider.CreateScope();
 			var harness = new TestHarness(provider, scope, databasePath);
-
-			await harness.DbContext.Database.EnsureDeletedAsync();
-			await harness.DbContext.Database.EnsureCreatedAsync();
 			await harness.InitializeAccessAsync();
 
 			return harness;
@@ -1503,8 +1826,17 @@ public class SurveyApplicationServiceTests
 			PrimaryMembershipId = membership.Id;
 			PrimaryUserId = user.Id;
 			await SetCurrentUserAsync(user, membership.Id);
-			DbContext.TenantSettings.Add(new TenantSetting(tenant.Id, SiteThemePresetCatalog.DefaultPresetKey));
-			await DbContext.SaveChangesAsync();
+		}
+
+		public Task CompleteInitialSetupAsync(string defaultThemeKey, params string[] additionalThemeKeys)
+		{
+			var selectedThemeKeys = additionalThemeKeys
+				.Concat([defaultThemeKey])
+				.Where(static key => !string.IsNullOrWhiteSpace(key))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToArray();
+
+			return InitialSetupSeeder.SeedAsync(selectedThemeKeys, defaultThemeKey, cancellationToken: CancellationToken.None);
 		}
 
 		public async Task SetCurrentUserAsync(ApplicationUser user, int? membershipId = null)

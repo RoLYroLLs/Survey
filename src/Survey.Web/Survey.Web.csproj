@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <ProjectReference Include="..\Survey.Application\Survey.Application.csproj" />
     <ProjectReference Include="..\Survey.Infrastructure\Survey.Infrastructure.csproj" />
     <ProjectReference Include="..\Survey.Migrations.Sqlite\Survey.Migrations.Sqlite.csproj" />

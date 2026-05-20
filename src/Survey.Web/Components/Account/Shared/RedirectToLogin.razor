@@ -1,8 +1,39 @@
-﻿@inject NavigationManager NavigationManager
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITenantContextAccessor TenantContextAccessor
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 @code {
-    protected override void OnInitialized()
-    {
-        NavigationManager.NavigateTo($"Account/Login?returnUrl={Uri.EscapeDataString(NavigationManager.Uri)}", forceLoad: true);
-    }
+	protected override async Task OnInitializedAsync()
+	{
+		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		var principal = authenticationState.User;
+		if (principal.Identity?.IsAuthenticated != true)
+		{
+			NavigationManager.NavigateTo($"Account/Login?returnUrl={Uri.EscapeDataString(NavigationManager.Uri)}", forceLoad: true);
+			return;
+		}
+
+		var accessContext = await TenantContextAccessor.GetCurrentAsync();
+		if (accessContext.HasTenantAccess)
+		{
+			NavigationManager.NavigateTo("/app", forceLoad: true);
+			return;
+		}
+
+		if (accessContext.PlatformPermissions.Count > 0)
+		{
+			NavigationManager.NavigateTo("/admin", forceLoad: true);
+			return;
+		}
+
+		var user = await UserManager.GetUserAsync(principal);
+		if (user?.HasCompletedSelfSignupProfile() == true)
+		{
+			NavigationManager.NavigateTo("/Account/CreateTenant", forceLoad: true);
+			return;
+		}
+
+		NavigationManager.NavigateTo("/Account/CompleteProfile", forceLoad: true);
+	}
 }

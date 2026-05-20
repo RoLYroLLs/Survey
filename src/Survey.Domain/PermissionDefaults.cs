@@ -36,6 +36,7 @@ public static class PermissionDefaults
 		TenantPermissionKeys.AssignmentsDelete,
 		TenantPermissionKeys.AssignmentsArchive,
 		TenantPermissionKeys.AssignmentsFill,
+		TenantPermissionKeys.AssignmentsSend,
 		TenantPermissionKeys.ResponsesView,
 		TenantPermissionKeys.ResponsesExport,
 		TenantPermissionKeys.ReportsView,

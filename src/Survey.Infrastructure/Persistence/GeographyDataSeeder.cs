@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Survey.Application.Models;
 using Survey.Domain;
 using System.Reflection;
 
@@ -11,23 +12,44 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 	private const string GeographySeedKey = "geography.reference-data";
 	private const int GeographySeedVersion = 2;
 
-	public async Task SeedAsync(bool forceRun = false, CancellationToken cancellationToken = default)
+	public Task<bool> IsSeededAsync(CancellationToken cancellationToken = default)
+	{
+		return _dbContext.SeedStates
+			.AnyAsync(state => state.Key == GeographySeedKey && state.Version >= GeographySeedVersion, cancellationToken);
+	}
+
+	public async Task SeedAsync(
+		bool forceRun = false,
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress = null,
+		CancellationToken cancellationToken = default)
 	{
 		var seedState = await _dbContext.SeedStates
 			.FirstOrDefaultAsync(state => state.Key == GeographySeedKey, cancellationToken);
 
 		if (!forceRun && seedState?.Version >= GeographySeedVersion)
 		{
+			await ReportAlreadyCompleteAsync(reportProgress);
 			return;
 		}
 
-		var unitedStates = await UpsertCountryAsync("United States of America", "US", "USA", cancellationToken);
-		var stateLookup = await UpsertStateProvincesAsync(unitedStates.Id, cancellationToken);
-		await UpsertUnitedStatesCountiesAsync(stateLookup, cancellationToken);
+		var countyRows = LoadUnitedStatesCountySeed();
+		var zipRows = LoadFloridaZipCountySeed();
+		var unitedStates = await UpsertCountryAsync("United States of America", "US", "USA", reportProgress, cancellationToken);
+		var stateLookup = await UpsertStateProvincesAsync(unitedStates.Id, reportProgress, cancellationToken);
+		await UpsertUnitedStatesCountiesAsync(stateLookup, countyRows, reportProgress, cancellationToken);
 
 		if (stateLookup.TryGetValue("FL", out var floridaId))
 		{
-			await UpsertFloridaZipCountyMappingsAsync(floridaId, cancellationToken);
+			await UpsertFloridaZipCountyMappingsAsync(floridaId, zipRows, reportProgress, cancellationToken);
+		}
+		else
+		{
+			await ReportStageCompletedAsync(
+				reportProgress,
+				InitialSeedingStages.ZipMappings,
+				GetStageLabel(InitialSeedingStages.ZipMappings),
+				zipRows.Count,
+				"Florida ZIP/FIPS mappings were not required for this run.");
 		}
 
 		if (seedState is null)
@@ -42,8 +64,17 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		await _dbContext.SaveChangesAsync(cancellationToken);
 	}
 
-	private async Task<Country> UpsertCountryAsync(string name, string iso2Code, string iso3Code, CancellationToken cancellationToken)
+	private async Task<Country> UpsertCountryAsync(
+		string name,
+		string iso2Code,
+		string iso3Code,
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress,
+		CancellationToken cancellationToken)
 	{
+		var stageLabel = GetStageLabel(InitialSeedingStages.Countries);
+		var activityMessage = $"Adding country '{name}'.";
+		await ReportStageProgressAsync(reportProgress, InitialSeedingStages.Countries, stageLabel, 0, 1, isComplete: false, activityMessage);
+
 		var entity = await _dbContext.Countries
 			.FirstOrDefaultAsync(country => country.Iso2Code == iso2Code || country.Name == name, cancellationToken);
 
@@ -58,26 +89,42 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		await ReportStageCompletedAsync(reportProgress, InitialSeedingStages.Countries, stageLabel, 1, activityMessage);
 		return entity;
 	}
 
-	private async Task<Dictionary<string, int>> UpsertStateProvincesAsync(int countryId, CancellationToken cancellationToken)
+	private async Task<Dictionary<string, int>> UpsertStateProvincesAsync(
+		int countryId,
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress,
+		CancellationToken cancellationToken)
 	{
+		var stageReporter = new StageReporter(
+			InitialSeedingStages.States,
+			GetStageLabel(InitialSeedingStages.States),
+			UnitedStatesStates.Count,
+			reportProgress);
+		await stageReporter.ReportAsync(0, "Preparing states and territories.", isComplete: false);
+
 		var existingLookup = await _dbContext.StateProvinces
 			.Where(stateProvince => stateProvince.CountryId == countryId)
 			.ToDictionaryAsync(stateProvince => stateProvince.Code, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
+		var processed = 0;
 		foreach (var definition in UnitedStatesStates)
 		{
 			if (existingLookup.TryGetValue(definition.Code, out var existing))
 			{
 				existing.Update(countryId, definition.Name, definition.Code, definition.SubdivisionType);
-				continue;
+			}
+			else
+			{
+				var entity = new StateProvince(countryId, definition.Name, definition.Code, definition.SubdivisionType);
+				_dbContext.StateProvinces.Add(entity);
+				existingLookup[definition.Code] = entity;
 			}
 
-			var entity = new StateProvince(countryId, definition.Name, definition.Code, definition.SubdivisionType);
-			_dbContext.StateProvinces.Add(entity);
-			existingLookup[definition.Code] = entity;
+			processed++;
+			await stageReporter.ReportAsync(processed, $"Adding {definition.SubdivisionType.ToLowerInvariant()} '{definition.Name}'.", isComplete: processed == UnitedStatesStates.Count);
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
@@ -88,8 +135,19 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 			.ToDictionaryAsync(stateProvince => stateProvince.Code, stateProvince => stateProvince.Id, StringComparer.OrdinalIgnoreCase, cancellationToken);
 	}
 
-	private async Task UpsertUnitedStatesCountiesAsync(IReadOnlyDictionary<string, int> stateLookup, CancellationToken cancellationToken)
+	private async Task UpsertUnitedStatesCountiesAsync(
+		IReadOnlyDictionary<string, int> stateLookup,
+		IReadOnlyList<UsCountySeedRow> countyRows,
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress,
+		CancellationToken cancellationToken)
 	{
+		var stageReporter = new StageReporter(
+			InitialSeedingStages.Counties,
+			GetStageLabel(InitialSeedingStages.Counties),
+			countyRows.Count,
+			reportProgress);
+		await stageReporter.ReportAsync(0, "Preparing counties and FIPS records.", isComplete: false);
+
 		var existingLookup = await _dbContext.Counties
 			.ToDictionaryAsync(
 				county => BuildCountyKey(county.StateProvinceId, county.FipsCode),
@@ -98,7 +156,8 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		var stateNameLookup = UnitedStatesStates
 			.ToDictionary(definition => definition.Name, definition => definition.Code, StringComparer.OrdinalIgnoreCase);
 
-		foreach (var definition in LoadUnitedStatesCountySeed())
+		var processed = 0;
+		foreach (var definition in countyRows)
 		{
 			if (!stateNameLookup.TryGetValue(definition.StateName, out var stateCode)
 				|| !stateLookup.TryGetValue(stateCode, out var stateProvinceId))
@@ -110,19 +169,34 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 			if (existingLookup.TryGetValue(key, out var existing))
 			{
 				existing.Update(stateProvinceId, definition.CountyName, definition.FipsCode);
-				continue;
+			}
+			else
+			{
+				var entity = new County(stateProvinceId, definition.CountyName, definition.FipsCode);
+				_dbContext.Counties.Add(entity);
+				existingLookup[key] = entity;
 			}
 
-			var entity = new County(stateProvinceId, definition.CountyName, definition.FipsCode);
-			_dbContext.Counties.Add(entity);
-			existingLookup[key] = entity;
+			processed++;
+			await stageReporter.ReportAsync(processed, $"Adding county '{definition.CountyName}, {definition.StateName}'.", isComplete: processed == countyRows.Count);
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
 	}
 
-	private async Task UpsertFloridaZipCountyMappingsAsync(int floridaStateProvinceId, CancellationToken cancellationToken)
+	private async Task UpsertFloridaZipCountyMappingsAsync(
+		int floridaStateProvinceId,
+		IReadOnlyList<FloridaZipCountySeedRow> zipRows,
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress,
+		CancellationToken cancellationToken)
 	{
+		var stageReporter = new StageReporter(
+			InitialSeedingStages.ZipMappings,
+			GetStageLabel(InitialSeedingStages.ZipMappings),
+			zipRows.Count,
+			reportProgress);
+		await stageReporter.ReportAsync(0, "Preparing ZIP/FIPS mappings.", isComplete: false);
+
 		var countyLookup = await _dbContext.Counties
 			.AsNoTracking()
 			.Where(county => county.StateProvinceId == floridaStateProvinceId)
@@ -139,7 +213,8 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 				StringComparer.OrdinalIgnoreCase,
 				cancellationToken);
 
-		foreach (var row in LoadFloridaZipCountySeed())
+		var processed = 0;
+		foreach (var row in zipRows)
 		{
 			if (!countyLookup.TryGetValue(row.CountyFips, out var county))
 			{
@@ -150,12 +225,16 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 			if (existingLookup.TryGetValue(key, out var existing))
 			{
 				existing.Update(row.ZipCode, county.FipsCode, county.Name, "FL", row.ResidentialRatio);
-				continue;
+			}
+			else
+			{
+				var entity = new ZipCountyLookup(row.ZipCode, county.FipsCode, county.Name, "FL", row.ResidentialRatio);
+				_dbContext.ZipCountyLookups.Add(entity);
+				existingLookup[key] = entity;
 			}
 
-			var entity = new ZipCountyLookup(row.ZipCode, county.FipsCode, county.Name, "FL", row.ResidentialRatio);
-			_dbContext.ZipCountyLookups.Add(entity);
-			existingLookup[key] = entity;
+			processed++;
+			await stageReporter.ReportAsync(processed, $"Adding ZIP mapping '{row.ZipCode} - {county.Name}'.", isComplete: processed == zipRows.Count);
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
@@ -256,6 +335,65 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		return $"{stateProvinceId}|{countyFips.Trim().ToUpperInvariant()}";
 	}
 
+	private static string GetStageLabel(string stageKey)
+	{
+		return InitialSeedingStages.GetLabel(stageKey);
+	}
+
+	private static Task ReportAlreadyCompleteAsync(Func<InitialSeedingProgressUpdate, Task>? reportProgress)
+	{
+		if (reportProgress is null)
+		{
+			return Task.CompletedTask;
+		}
+
+		return Task.WhenAll(InitialSeedingStages.GeographyOrdered.Select(stage =>
+			reportProgress(new InitialSeedingProgressUpdate
+			{
+				StageKey = stage.Key,
+				StageLabel = stage.Label,
+				ActivityMessage = string.Empty,
+				Processed = 1,
+				Total = 1,
+				IsComplete = true
+			})));
+	}
+
+	private static Task ReportStageProgressAsync(
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress,
+		string stageKey,
+		string stageLabel,
+		int processed,
+		int total,
+		bool isComplete,
+		string activityMessage)
+	{
+		if (reportProgress is null)
+		{
+			return Task.CompletedTask;
+		}
+
+		return reportProgress(new InitialSeedingProgressUpdate
+		{
+			StageKey = stageKey,
+			StageLabel = stageLabel,
+			ActivityMessage = activityMessage,
+			Processed = processed,
+			Total = total,
+			IsComplete = isComplete
+		});
+	}
+
+	private static Task ReportStageCompletedAsync(
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress,
+		string stageKey,
+		string stageLabel,
+		int total,
+		string activityMessage)
+	{
+		return ReportStageProgressAsync(reportProgress, stageKey, stageLabel, total, total, isComplete: true, activityMessage);
+	}
+
 	private static readonly IReadOnlyList<(string Code, string Name, string SubdivisionType)> UnitedStatesStates =
 	[
 		("AL", "Alabama", "State"),
@@ -321,4 +459,30 @@ public sealed class GeographyDataSeeder(SurveyDbContext dbContext)
 		string StateName,
 		string FipsCode,
 		string CountyName);
+
+	private sealed class StageReporter(
+		string stageKey,
+		string stageLabel,
+		int total,
+		Func<InitialSeedingProgressUpdate, Task>? reportProgress)
+	{
+		public async Task ReportAsync(int processed, string activityMessage, bool isComplete)
+		{
+			if (reportProgress is null)
+			{
+				return;
+			}
+
+			var safeProcessed = Math.Clamp(processed, 0, total);
+			await reportProgress(new InitialSeedingProgressUpdate
+			{
+				StageKey = stageKey,
+				StageLabel = stageLabel,
+				ActivityMessage = activityMessage,
+				Processed = safeProcessed,
+				Total = total,
+				IsComplete = isComplete
+			});
+		}
+	}
 }

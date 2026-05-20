@@ -33,6 +33,7 @@ public static class TenantPermissionKeys
 	public const string AssignmentsDelete = "assignments.delete";
 	public const string AssignmentsArchive = "assignments.archive";
 	public const string AssignmentsFill = "assignments.fill";
+	public const string AssignmentsSend = "assignments.send";
 	public const string ResponsesView = "responses.view";
 	public const string ResponsesExport = "responses.export";
 	public const string ReportsView = "reports.view";
@@ -80,6 +81,7 @@ public static class TenantPermissionKeys
 		AssignmentsDelete,
 		AssignmentsArchive,
 		AssignmentsFill,
+		AssignmentsSend,
 		ResponsesView,
 		ResponsesExport,
 		ReportsView,

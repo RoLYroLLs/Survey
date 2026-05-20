@@ -2,11 +2,14 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Identity
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
 @inject IdentityRedirectManager RedirectManager
+@inject SurveyDbContext DbContext
 
 <PageTitle>Complete Profile</PageTitle>
 
@@ -26,11 +29,29 @@
 	}
 	else
 	{
-		<EditForm Model="Input" OnValidSubmit="SaveAsync" FormName="complete-profile" method="post">
+		<EditForm EditContext="_editContext" OnSubmit="SubmitAsync" FormName="complete-profile" method="post">
 			<DataAnnotationsValidator />
 			<ValidationSummary />
 
 			<div class="form-grid">
+				<div class="field-stack">
+					<FieldLabel Text="Account Type" Required />
+					<InputSelect class="form-select"
+							 id="Input.AccountType"
+							 name="Input.AccountType"
+							 @bind-Value="Input.AccountType"
+							 data-account-type-select
+							 oninput="window.surveyToggleOrganizationField && window.surveyToggleOrganizationField(this)">
+						<option value="@AccountTypeOptions.Individual">Individual</option>
+						<option value="@AccountTypeOptions.Organization">Organization</option>
+					</InputSelect>
+					<ValidationMessage For="@(() => Input.AccountType)" />
+				</div>
+				<div class="field-stack @(!string.Equals(Input.AccountType, AccountTypeOptions.Organization, StringComparison.Ordinal) ? "field-stack--ghost" : string.Empty)" data-organization-field>
+					<FieldLabel Text="Organization Name" Required />
+					<InputText id="Input.OrganizationName" name="Input.OrganizationName" class="form-control" @bind-Value="Input.OrganizationName" autocomplete="organization" />
+					<ValidationMessage For="@(() => Input.OrganizationName)" />
+				</div>
 				<div class="field-stack">
 					<FieldLabel Text="First Name" Required />
 					<InputText class="form-control" @bind-Value="Input.FirstName" autocomplete="given-name" />
@@ -58,7 +79,13 @@
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="State" Required />
-					<InputText class="form-control" @bind-Value="Input.State" autocomplete="address-level1" />
+					<InputSelect class="form-select" @bind-Value="Input.State" autocomplete="address-level1">
+						<option value="">Select a state</option>
+						@foreach (var option in _stateOptions)
+						{
+							<option value="@option.Value">@option.Label</option>
+						}
+					</InputSelect>
 					<ValidationMessage For="@(() => Input.State)" />
 				</div>
 				<div class="field-stack">
@@ -85,6 +112,9 @@
 	private bool _isSaving;
 	private string? _errorMessage;
 	private ApplicationUser? _user;
+	private EditContext _editContext = default!;
+	private ValidationMessageStore _validationMessageStore = default!;
+	private IReadOnlyList<SelectOption> _stateOptions = Array.Empty<SelectOption>();
 
 	[SupplyParameterFromForm]
 	private CompleteProfileModel Input { get; set; } = default!;
@@ -95,6 +125,7 @@
 	protected override async Task OnInitializedAsync()
 	{
 		Input ??= new();
+		EnsureEditContext();
 
 		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
 		_user = await UserManager.GetUserAsync(authenticationState.User);
@@ -118,13 +149,82 @@
 
 		Input.FirstName = string.IsNullOrWhiteSpace(Input.FirstName) ? (_user.FirstName ?? string.Empty) : Input.FirstName;
 		Input.LastName = string.IsNullOrWhiteSpace(Input.LastName) ? (_user.LastName ?? string.Empty) : Input.LastName;
+		Input.AccountType = string.IsNullOrWhiteSpace(Input.AccountType)
+			? (_user.IsOrganizationAccount ? AccountTypeOptions.Organization : AccountTypeOptions.Individual)
+			: Input.AccountType;
+		Input.OrganizationName = string.IsNullOrWhiteSpace(Input.OrganizationName) ? (_user.OrganizationName ?? string.Empty) : Input.OrganizationName;
 		Input.AddressLine1 = string.IsNullOrWhiteSpace(Input.AddressLine1) ? (_user.AddressLine1 ?? string.Empty) : Input.AddressLine1;
 		Input.AddressLine2 ??= _user.AddressLine2 ?? string.Empty;
 		Input.City = string.IsNullOrWhiteSpace(Input.City) ? (_user.City ?? string.Empty) : Input.City;
 		Input.State = string.IsNullOrWhiteSpace(Input.State) ? (_user.State ?? string.Empty) : Input.State;
 		Input.PostalCode = string.IsNullOrWhiteSpace(Input.PostalCode) ? (_user.PostalCode ?? string.Empty) : Input.PostalCode;
 		Input.PhoneNumber = string.IsNullOrWhiteSpace(Input.PhoneNumber) ? (_user.PhoneNumber ?? string.Empty) : Input.PhoneNumber;
+		_stateOptions = await LoadUnitedStatesStateOptionsAsync(cancellationToken: default);
+		Input.State = ResolveSelectedStateValue(Input.State, _stateOptions);
 		_isReady = true;
+	}
+
+	protected override void OnParametersSet()
+	{
+		Input ??= new();
+		EnsureEditContext();
+	}
+
+	private void EnsureEditContext()
+	{
+		if (_editContext?.Model == Input)
+		{
+			return;
+		}
+
+		_editContext = new EditContext(Input);
+		_validationMessageStore = new ValidationMessageStore(_editContext);
+		_editContext.OnValidationRequested += HandleValidationRequested;
+		_editContext.OnFieldChanged += HandleFieldChanged;
+	}
+
+	private void HandleValidationRequested(object? sender, ValidationRequestedEventArgs e)
+	{
+		_validationMessageStore.Clear();
+		AddConditionalValidationMessages();
+	}
+
+	private void HandleFieldChanged(object? sender, FieldChangedEventArgs e)
+	{
+		if (e.FieldIdentifier.FieldName is nameof(CompleteProfileModel.AccountType) or nameof(CompleteProfileModel.OrganizationName))
+		{
+			_validationMessageStore.Clear(new FieldIdentifier(Input, nameof(CompleteProfileModel.OrganizationName)));
+			AddConditionalValidationMessages();
+		}
+	}
+
+	private void AddConditionalValidationMessages()
+	{
+		if (string.Equals(Input.AccountType, AccountTypeOptions.Organization, StringComparison.Ordinal)
+			&& string.IsNullOrWhiteSpace(Input.OrganizationName))
+		{
+			_validationMessageStore.Add(
+				new FieldIdentifier(Input, nameof(CompleteProfileModel.OrganizationName)),
+				"The Organization Name field is required.");
+		}
+
+		if (string.Equals(Input.AccountType, AccountTypeOptions.Individual, StringComparison.Ordinal)
+			&& !string.IsNullOrWhiteSpace(Input.OrganizationName))
+		{
+			_validationMessageStore.Add(
+				new FieldIdentifier(Input, nameof(CompleteProfileModel.OrganizationName)),
+				"The Organization Name field must be blank when signing up as an individual.");
+		}
+	}
+
+	private async Task SubmitAsync(EditContext editContext)
+	{
+		if (!editContext.Validate())
+		{
+			return;
+		}
+
+		await SaveAsync();
 	}
 
 	private async Task SaveAsync()
@@ -141,6 +241,8 @@
 		{
 			_user.FirstName = Input.FirstName.Trim();
 			_user.LastName = Input.LastName.Trim();
+			_user.IsOrganizationAccount = string.Equals(Input.AccountType, AccountTypeOptions.Organization, StringComparison.Ordinal);
+			_user.OrganizationName = _user.IsOrganizationAccount ? Input.OrganizationName.Trim() : null;
 			_user.AddressLine1 = Input.AddressLine1.Trim();
 			_user.AddressLine2 = string.IsNullOrWhiteSpace(Input.AddressLine2) ? null : Input.AddressLine2.Trim();
 			_user.City = Input.City.Trim();
@@ -180,8 +282,51 @@
 			: $"Account/CreateTenant?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
 	}
 
+	private static class AccountTypeOptions
+	{
+		public const string Individual = "Individual";
+		public const string Organization = "Organization";
+	}
+
+	private async Task<IReadOnlyList<SelectOption>> LoadUnitedStatesStateOptionsAsync(CancellationToken cancellationToken)
+	{
+		return await DbContext.StateProvinces
+			.AsNoTracking()
+			.Where(stateProvince => stateProvince.Country.Iso2Code == "US")
+			.OrderBy(stateProvince => stateProvince.Name)
+			.ThenBy(stateProvince => stateProvince.Id)
+			.Select(stateProvince => new SelectOption
+			{
+				Value = stateProvince.Code,
+				Label = stateProvince.Name
+			})
+			.ToListAsync(cancellationToken);
+	}
+
+	private static string ResolveSelectedStateValue(string? currentValue, IReadOnlyList<SelectOption> options)
+	{
+		if (string.IsNullOrWhiteSpace(currentValue))
+		{
+			return string.Empty;
+		}
+
+		var trimmedValue = currentValue.Trim();
+		var byCode = options.FirstOrDefault(option => string.Equals(option.Value, trimmedValue, StringComparison.OrdinalIgnoreCase));
+		if (byCode is not null)
+		{
+			return byCode.Value;
+		}
+
+		var byName = options.FirstOrDefault(option => string.Equals(option.Label, trimmedValue, StringComparison.OrdinalIgnoreCase));
+		return byName?.Value ?? string.Empty;
+	}
+
 	private sealed class CompleteProfileModel
 	{
+		[Required]
+		[StringLength(50)]
+		public string AccountType { get; set; } = AccountTypeOptions.Individual;
+
 		[Required]
 		[StringLength(100)]
 		public string FirstName { get; set; } = string.Empty;
@@ -189,6 +334,9 @@
 		[Required]
 		[StringLength(100)]
 		public string LastName { get; set; } = string.Empty;
+
+		[StringLength(200)]
+		public string OrganizationName { get; set; } = string.Empty;
 
 		[Required]
 		[StringLength(200)]

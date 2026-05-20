@@ -40,6 +40,7 @@ public static class TenantPermissionCatalog
 		new(TenantPermissionKeys.AssignmentsDelete, "Assignments", "Delete"),
 		new(TenantPermissionKeys.AssignmentsArchive, "Assignments", "Archive"),
 		new(TenantPermissionKeys.AssignmentsFill, "Assignments", "Fill"),
+		new(TenantPermissionKeys.AssignmentsSend, "Assignments", "Send"),
 		new(TenantPermissionKeys.ResponsesView, "Responses", "View"),
 		new(TenantPermissionKeys.ResponsesExport, "Responses", "Export"),
 		new(TenantPermissionKeys.ReportsView, "Reports", "View"),

@@ -1,0 +1,279 @@
+@page "/admin/emails/{Id:int}"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.JobsView)]
+@inject IBackgroundOperationsService BackgroundOperationsService
+
+<PageTitle>Email</PageTitle>
+
+@if (_item is null)
+{
+	<div class="status-card narrow-card">
+		<p class="eyebrow">Outbound Email</p>
+		<h1>Email</h1>
+		<p class="mb-0">We couldn't find that queued email.</p>
+	</div>
+}
+else
+{
+	<div class="page-stack">
+		<div class="page-header">
+			<div>
+				<p class="eyebrow">Outbound Email</p>
+				<h1>Email</h1>
+				<p>Review the snapshot, delivery attempts, and tracked engagement for this email.</p>
+			</div>
+			<div class="toolbar">
+				<a class="btn btn-outline-primary" href="/admin/emails">Back to Emails</a>
+			</div>
+		</div>
+
+		<div class="list-card">
+			<div class="assignment-detail-list">
+				<div class="assignment-detail-row">
+					<strong>Recipient</strong>
+					<span>@_item.RecipientEmail</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Recipient Name</strong>
+					<span>@DisplayOrDash(_item.RecipientName)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Subject</strong>
+					<span>@_item.Subject</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Source</strong>
+					<span>@GetSourceLabel(_item.SourceType)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Status</strong>
+					<span><span class="@GetStatusCssClass(_item.Status)">@GetStatusLabel(_item.Status)</span></span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Tracking Token</strong>
+					<span class="text-break">@_item.TrackingToken</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Tenant</strong>
+					<span>@DisplayOrDash(_item.TenantName)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Requested By</strong>
+					<span>@DisplayOrDash(_item.RequestedByDisplayName)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Created</strong>
+					<span>@_item.CreatedUtc.LocalDateTime.ToString("f")</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Sent</strong>
+					<span>@DisplayUtc(_item.SentUtc)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Provider Message Id</strong>
+					<span>@DisplayOrDash(_item.ProviderMessageId)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Attempts</strong>
+					<span>@_item.AttemptCount</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Opens</strong>
+					<span>@_item.OpenCount</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Clicks</strong>
+					<span>@_item.ClickCount</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>First Opened</strong>
+					<span>@DisplayUtc(_item.FirstOpenedUtc)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Last Opened</strong>
+					<span>@DisplayUtc(_item.LastOpenedUtc)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>First Clicked</strong>
+					<span>@DisplayUtc(_item.FirstClickedUtc)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Last Clicked</strong>
+					<span>@DisplayUtc(_item.LastClickedUtc)</span>
+				</div>
+				@if (!string.IsNullOrWhiteSpace(_item.LastError))
+				{
+					<div class="assignment-detail-row">
+						<strong>Last Error</strong>
+						<span>@_item.LastError</span>
+					</div>
+				}
+				@if (_item.BackgroundOperationId.HasValue)
+				{
+					<div class="assignment-detail-row">
+						<strong>Background Job</strong>
+						<span><a href="/admin/jobs/@_item.BackgroundOperationId.Value">View Job @_item.BackgroundOperationId.Value</a></span>
+					</div>
+				}
+			</div>
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2 class="content-card__title-sm">Text Snapshot</h2>
+					<p>Stored text version used for delivery and retry stability.</p>
+				</div>
+			</div>
+			<textarea class="form-control" rows="10" readonly>@_item.TextBody</textarea>
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2 class="content-card__title-sm">HTML Snapshot</h2>
+					<p>Stored HTML version captured at queue time.</p>
+				</div>
+			</div>
+			<textarea class="form-control" rows="12" readonly>@_item.HtmlBody</textarea>
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2 class="content-card__title-sm">Delivery Attempts</h2>
+					<p>Each retry attempt is recorded for support and troubleshooting.</p>
+				</div>
+			</div>
+
+			@if (_item.Attempts.Count == 0)
+			{
+				<p class="empty-state">No delivery attempts were recorded for this email.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Attempt</th>
+							<th>Status</th>
+							<th>Provider Message Id</th>
+							<th>Started</th>
+							<th>Completed</th>
+							<th>Error</th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var attempt in _item.Attempts)
+						{
+							<tr>
+								<td>@attempt.AttemptNumber</td>
+								<td><span class="@GetStatusCssClass(attempt.Status)">@GetStatusLabel(attempt.Status)</span></td>
+								<td>@DisplayOrDash(attempt.ProviderMessageId)</td>
+								<td>@attempt.StartedUtc.LocalDateTime.ToString("g")</td>
+								<td>@DisplayUtc(attempt.CompletedUtc)</td>
+								<td>@DisplayOrDash(attempt.ErrorMessage)</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2 class="content-card__title-sm">Click Events</h2>
+					<p>Tracked clicks are stored individually for audit and later reporting.</p>
+				</div>
+			</div>
+
+			@if (_item.ClickEvents.Count == 0)
+			{
+				<p class="empty-state">No tracked clicks were recorded for this email.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>When</th>
+							<th>Link Type</th>
+							<th>Destination</th>
+							<th>User Agent</th>
+							<th>IP Hash</th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var clickEvent in _item.ClickEvents)
+						{
+							<tr>
+								<td>@clickEvent.OccurredUtc.LocalDateTime.ToString("g")</td>
+								<td>@clickEvent.LinkType</td>
+								<td class="text-break">@clickEvent.DestinationUrl</td>
+								<td>@DisplayOrDash(clickEvent.UserAgent)</td>
+								<td>@DisplayOrDash(clickEvent.IpAddressHash)</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	</div>
+}
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	private OutboundEmailDetailModel? _item;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_item = await BackgroundOperationsService.GetOutboundEmailAsync(Id);
+	}
+
+	private static string GetSourceLabel(string sourceType)
+	{
+		return sourceType switch
+		{
+			OutboundEmailSourceTypes.IdentityConfirmation => "Account Confirmation",
+			OutboundEmailSourceTypes.IdentityPasswordReset => "Password Reset",
+			OutboundEmailSourceTypes.PlatformInvitation => "Platform Invitation",
+			OutboundEmailSourceTypes.TenantInvitation => "Tenant Invitation",
+			OutboundEmailSourceTypes.Assignment => "Assignment Email",
+			_ => sourceType
+		};
+	}
+
+	private static string GetStatusLabel(string status)
+	{
+		return status switch
+		{
+			OutboundEmailStatuses.Queued => "Queued",
+			OutboundEmailStatuses.Sending => "Sending",
+			OutboundEmailStatuses.Sent => "Sent",
+			OutboundEmailStatuses.Failed => "Failed",
+			_ => status
+		};
+	}
+
+	private static string GetStatusCssClass(string status)
+	{
+		return status switch
+		{
+			OutboundEmailStatuses.Sent => "status-pill status-pill--muted",
+			OutboundEmailStatuses.Failed => "status-pill status-pill--danger",
+			_ => "status-pill"
+		};
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string DisplayUtc(DateTimeOffset? value)
+	{
+		return value.HasValue ? value.Value.LocalDateTime.ToString("f") : "-";
+	}
+}

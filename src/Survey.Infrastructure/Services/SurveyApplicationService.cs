@@ -19,7 +19,9 @@ public sealed partial class SurveyApplicationService(
 	ITenantPermissionEvaluator tenantPermissionEvaluator,
 	IPlatformPermissionEvaluator platformPermissionEvaluator,
 	IAuditWriter auditWriter,
-	TenantExecutionContext tenantExecutionContext) : ITenantAdministrationService, IPlatformAdministrationService, ISurveyExperienceService
+	IQueuedEmailService queuedEmailService,
+	TenantExecutionContext tenantExecutionContext,
+	InitialSetupSeeder initialSetupSeeder) : ITenantAdministrationService, IPlatformAdministrationService, ISurveyExperienceService
 {
 	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 	private readonly SurveyDbContext _dbContext = dbContext;
@@ -28,7 +30,9 @@ public sealed partial class SurveyApplicationService(
 	private readonly ITenantPermissionEvaluator _tenantPermissionEvaluator = tenantPermissionEvaluator;
 	private readonly IPlatformPermissionEvaluator _platformPermissionEvaluator = platformPermissionEvaluator;
 	private readonly IAuditWriter _auditWriter = auditWriter;
+	private readonly IQueuedEmailService _queuedEmailService = queuedEmailService;
 	private readonly TenantExecutionContext _tenantExecutionContext = tenantExecutionContext;
+	private readonly InitialSetupSeeder _initialSetupSeeder = initialSetupSeeder;
 
 	private static PagedQuery NormalizePagedQuery(PagedQuery request)
 	{

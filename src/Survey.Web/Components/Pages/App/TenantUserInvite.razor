@@ -72,7 +72,7 @@
 	{
 		try
 		{
-			var result = await AdministrationService.CreateTenantInvitationAsync(_model);
+			var result = await AdministrationService.CreateTenantInvitationAsync(_model, GetBaseUrl());
 			_inviteUrl = NavigationManager.ToAbsoluteUri($"/Account/AcceptInvite?token={Uri.EscapeDataString(result.Token)}").ToString();
 			_expiresAtLabel = result.ExpiresAtUtc.ToLocalTime().ToString("f");
 			ToastService.ShowSuccess("Invitation created successfully.", "Invitation created");
@@ -81,5 +81,10 @@
 		{
 			ToastService.ShowError(ex.Message, "Invitation failed");
 		}
+	}
+
+	private string GetBaseUrl()
+	{
+		return NavigationManager.ToAbsoluteUri("/").GetLeftPart(UriPartial.Authority);
 	}
 }

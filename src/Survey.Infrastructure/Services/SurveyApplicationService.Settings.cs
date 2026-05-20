@@ -18,7 +18,17 @@ public sealed partial class SurveyApplicationService
 		var entity = await _dbContext.TenantSettings
 			.AsNoTracking()
 			.FirstOrDefaultAsync(setting => setting.TenantId == context.TenantId, cancellationToken);
-		var presetKey = entity?.ThemePresetKey ?? SiteThemePresetCatalog.DefaultPresetKey;
+		var presetKey = entity?.ThemePresetKey
+			?? await _dbContext.SiteSettings
+				.AsNoTracking()
+				.Where(setting => setting.Id == SiteSetting.DefaultId)
+				.Join(
+					_dbContext.PlatformThemes.AsNoTracking(),
+					setting => setting.ThemePresetKey,
+					theme => theme.Key,
+					(setting, _) => setting.ThemePresetKey)
+				.FirstOrDefaultAsync(cancellationToken)
+			?? string.Empty;
 
 		return new SiteSettingsEditModel
 		{
@@ -64,7 +74,21 @@ public sealed partial class SurveyApplicationService
 
 		if (context.TenantRole is TenantRole.Owner or TenantRole.Admin)
 		{
-			if (!SiteThemePresetCatalog.IsValidPresetKey(model.ThemePresetKey))
+			var currentThemeKey = await _dbContext.TenantSettings
+				.AsNoTracking()
+				.Where(setting => setting.TenantId == context.TenantId)
+				.Select(setting => setting.ThemePresetKey)
+				.FirstOrDefaultAsync(cancellationToken)
+				?? await _dbContext.SiteSettings
+					.AsNoTracking()
+					.Where(setting => setting.Id == SiteSetting.DefaultId)
+					.Select(setting => setting.ThemePresetKey)
+					.FirstOrDefaultAsync(cancellationToken)
+				?? string.Empty;
+			var shouldChangeTheme = !string.IsNullOrWhiteSpace(model.ThemePresetKey)
+				&& !string.Equals(currentThemeKey, model.ThemePresetKey, StringComparison.OrdinalIgnoreCase);
+
+			if (shouldChangeTheme)
 			{
 				var exists = await _dbContext.PlatformThemes
 					.AsNoTracking()
@@ -75,19 +99,22 @@ public sealed partial class SurveyApplicationService
 				}
 			}
 
-			var entity = await _dbContext.TenantSettings
-				.FirstOrDefaultAsync(setting => setting.TenantId == context.TenantId, cancellationToken);
-
-			if (entity is null)
+			if (shouldChangeTheme)
 			{
-				entity = new TenantSetting(context.TenantId!.Value, model.ThemePresetKey);
-				_dbContext.TenantSettings.Add(entity);
-			}
+				var entity = await _dbContext.TenantSettings
+					.FirstOrDefaultAsync(setting => setting.TenantId == context.TenantId, cancellationToken);
 
-			if (!string.Equals(entity.ThemePresetKey, model.ThemePresetKey, StringComparison.OrdinalIgnoreCase))
-			{
-				entity.UpdateThemePreset(model.ThemePresetKey);
-				auditDetails.Add($"Theme preset changed to '{model.ThemePresetKey}'.");
+				if (entity is null)
+				{
+					entity = new TenantSetting(context.TenantId!.Value, model.ThemePresetKey);
+					_dbContext.TenantSettings.Add(entity);
+				}
+
+				if (!string.Equals(entity.ThemePresetKey, model.ThemePresetKey, StringComparison.OrdinalIgnoreCase))
+				{
+					entity.UpdateThemePreset(model.ThemePresetKey);
+					auditDetails.Add($"Theme preset changed to '{model.ThemePresetKey}'.");
+				}
 			}
 		}
 
@@ -100,6 +127,11 @@ public sealed partial class SurveyApplicationService
 
 	public async Task<IReadOnlyList<ThemePresetOption>> GetTenantThemeOptionsAsync(CancellationToken cancellationToken = default)
 	{
+		if (!await _initialSetupSeeder.IsSeededAsync(cancellationToken))
+		{
+			return Array.Empty<ThemePresetOption>();
+		}
+
 		var options = await _dbContext.PlatformThemes
 			.AsNoTracking()
 			.Where(theme => theme.IsEnabled && !theme.IsArchived)
@@ -117,9 +149,7 @@ public sealed partial class SurveyApplicationService
 			})
 			.ToListAsync(cancellationToken);
 
-		return options.Count > 0
-			? options
-			: SiteThemePresetCatalog.GetOptions();
+		return options;
 	}
 
 	public async Task<SiteAppearanceModel> GetSiteAppearanceAsync(CancellationToken cancellationToken = default)

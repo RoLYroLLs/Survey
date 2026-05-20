@@ -18,6 +18,8 @@ public static class PlatformPermissionCatalog
 		new(PlatformPermissionKeys.GeographyView, "Geography", "View"),
 		new(PlatformPermissionKeys.GeographyManage, "Geography", "Manage"),
 		new(PlatformPermissionKeys.AuditView, "Audit", "View"),
+		new(PlatformPermissionKeys.JobsView, "Jobs", "View"),
+		new(PlatformPermissionKeys.JobsManage, "Jobs", "Manage"),
 		new(PlatformPermissionKeys.SettingsManage, "Settings", "Manage")
 	];
 

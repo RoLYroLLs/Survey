@@ -63,6 +63,42 @@
   padding: 1.5rem 2rem 2rem;
 }
 
+.shell--setup {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell--setup::before {
+  display: none;
+}
+
+.shell--setup .shell__content {
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 1.5rem;
+}
+
+.shell__main--setup {
+  width: min(100%, 62rem);
+  margin: 0 auto;
+  display: block;
+  min-height: auto;
+  padding-top: 0.5rem;
+  padding-bottom: 2rem;
+}
+
+.shell--setup-center .shell__content {
+  justify-content: flex-start;
+  padding-top: clamp(3rem, 12vh, 7rem);
+}
+
+.shell__main--setup-center {
+  display: block;
+  width: min(100%, 44rem);
+  min-height: auto;
+  padding-top: 0;
+  padding-bottom: 2rem;
+}
+
 .eyebrow {
   margin: 0 0 0.55rem;
   color: var(--app-primary);

@@ -11,6 +11,8 @@ public static class PlatformPermissionKeys
 	public const string GeographyView = "platform.geography.view";
 	public const string GeographyManage = "platform.geography.manage";
 	public const string AuditView = "platform.audit.view";
+	public const string JobsView = "platform.jobs.view";
+	public const string JobsManage = "platform.jobs.manage";
 	public const string SettingsManage = "platform.settings.manage";
 
 	public static readonly IReadOnlyList<string> All =
@@ -24,6 +26,8 @@ public static class PlatformPermissionKeys
 		GeographyView,
 		GeographyManage,
 		AuditView,
+		JobsView,
+		JobsManage,
 		SettingsManage
 	];
 }

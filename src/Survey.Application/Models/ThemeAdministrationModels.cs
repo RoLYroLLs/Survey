@@ -13,6 +13,8 @@ public sealed class PlatformThemeListItem
 	public string BackgroundColor { get; set; } = string.Empty;
 	public bool IsEnabled { get; set; }
 	public bool IsArchived { get; set; }
+	public bool IsDefaultTheme { get; set; }
+	public int TenantUsageCount { get; set; }
 	public DateTimeOffset UpdatedUtc { get; set; }
 }
 
@@ -50,8 +52,13 @@ public sealed class PlatformThemeEditModel
 
 	public bool IsEnabled { get; set; } = true;
 	public bool IsArchived { get; set; }
+	public bool IsDefaultTheme { get; set; }
+	public int TenantUsageCount { get; set; }
+	public int? ReplacementThemeId { get; set; }
+	public IReadOnlyList<SelectOption> ReplacementThemeOptions { get; set; } = Array.Empty<SelectOption>();
 	public DateTimeOffset? UpdatedUtc { get; set; }
 	public bool IsNew => !Id.HasValue;
+	public bool RequiresReplacement => IsDefaultTheme || TenantUsageCount > 0;
 }
 
 public sealed class ThemeSeedModel

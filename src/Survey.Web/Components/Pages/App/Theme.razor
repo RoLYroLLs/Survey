@@ -32,6 +32,10 @@
 		{
 			<p class="empty-state">Theme management is not available for this tenant membership.</p>
 		}
+		else if (_model.PresetOptions.Count == 0)
+		{
+			<p class="empty-state">No tenant themes have been enabled yet. A platform super admin needs to finish setup and choose the allowed themes first.</p>
+		}
 		else
 		{
 			<div class="theme-preset-grid">

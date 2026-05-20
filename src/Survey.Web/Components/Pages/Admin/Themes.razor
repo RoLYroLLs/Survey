@@ -50,6 +50,7 @@
 						<th><SortableHeader Label="Key" SortKey="key" CurrentSort="@Sort" Href="@GetSortUrl("key")" /></th>
 						<th>Description</th>
 						<th><SortableHeader Label="Status" SortKey="status" CurrentSort="@Sort" Href="@GetSortUrl("status")" /></th>
+						<th><SortableHeader Label="Usage" SortKey="usage" CurrentSort="@Sort" Href="@GetSortUrl("usage")" /></th>
 						<th>Preview</th>
 						<th><SortableHeader Label="Updated" SortKey="updated" CurrentSort="@Sort" Href="@GetSortUrl("updated")" /></th>
 						<th></th>
@@ -59,12 +60,13 @@
 					@foreach (var item in _items)
 					{
 						<tr>
-							<td>@item.Name</td>
+							<td>@GetThemeName(item)</td>
 							<td><code>@item.Key</code></td>
 							<td>@item.Description</td>
 							<td>
 								<span class="@GetStatusCssClass(item)">@GetStatusLabel(item)</span>
 							</td>
+							<td>@GetUsageLabel(item)</td>
 							<td>
 								<span class="theme-preset-card__swatch" style="@BuildPreviewStyle(item)"></span>
 							</td>
@@ -78,7 +80,6 @@
 									}
 									else if (item.IsEnabled)
 									{
-										<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => DisableAsync(item.Id)">Disable</button>
 										<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => ArchiveAsync(item.Id)">Archive</button>
 									}
 									else
@@ -188,13 +189,6 @@
 			"Theme enabled successfully.");
 	}
 
-	private async Task DisableAsync(int id)
-	{
-		await ExecuteThemeActionAsync(
-			() => AdministrationService.SetPlatformThemeEnabledAsync(id, false),
-			"Theme disabled successfully.");
-	}
-
 	private async Task ArchiveAsync(int id)
 	{
 		await ExecuteThemeActionAsync(
@@ -243,6 +237,26 @@
 		}
 
 		return item.IsEnabled ? "status-pill" : "status-pill status-pill--muted";
+	}
+
+	private static string GetThemeName(PlatformThemeListItem item)
+	{
+		return item.IsDefaultTheme ? $"{item.Name} (Default)" : item.Name;
+	}
+
+	private static string GetUsageLabel(PlatformThemeListItem item)
+	{
+		if (item.IsDefaultTheme && item.TenantUsageCount > 0)
+		{
+			return $"Default + {item.TenantUsageCount} tenant(s)";
+		}
+
+		if (item.IsDefaultTheme)
+		{
+			return "Default";
+		}
+
+		return item.TenantUsageCount > 0 ? $"{item.TenantUsageCount} tenant(s)" : "Not assigned";
 	}
 
 	private static string BuildUrl(string? search, int pageSize, string? sort)

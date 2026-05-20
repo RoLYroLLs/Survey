@@ -1,0 +1,38 @@
+@page "/setup"
+@attribute [ExcludeFromInteractiveRouting]
+@inject global::Survey.Infrastructure.Persistence.InitialSetupStateService InitialSetupStateService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Initial Setup</PageTitle>
+
+<div class="status-card narrow-card">
+	<p class="eyebrow">Initial Setup</p>
+	<h1>Review the initial setup</h1>
+	<p class="mb-4">Before anyone can use the app, the platform needs one bootstrap admin account and one intentional reference-data import.</p>
+
+	<div class="form-card seed-step-card">
+		<p>This guided setup will help you:</p>
+		<ul class="feature-list mb-4">
+			<li>Create the initial platform super admin account</li>
+			<li>Create the initial tenant named <strong>Initial Platform Tenant</strong></li>
+			<li>Choose which predefined themes are available</li>
+			<li>Select the default theme for new tenants</li>
+			<li>Import countries, states, counties, and ZIP/FIPS mappings</li>
+		</ul>
+
+		<div class="form-footer">
+			<a class="btn btn-primary" href="/setup/platform-admin">Continue</a>
+		</div>
+	</div>
+</div>
+
+@code {
+	protected override async Task OnInitializedAsync()
+	{
+		var setupState = await InitialSetupStateService.GetStatusAsync();
+		if (setupState.HasUsers)
+		{
+			NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
+		}
+	}
+}

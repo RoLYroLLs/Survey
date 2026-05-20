@@ -32,15 +32,15 @@ public interface IPlatformAdministrationService
 	Task<PlatformUserEditModel> GetPlatformUserAsync(string? id, CancellationToken cancellationToken = default);
 	Task<string> SavePlatformUserAsync(PlatformUserEditModel model, CancellationToken cancellationToken = default);
 	Task<PlatformUserInviteModel> GetPlatformUserInviteAsync(CancellationToken cancellationToken = default);
-	Task<PlatformUserInviteResultModel> CreatePlatformUserInvitationAsync(PlatformUserInviteModel model, CancellationToken cancellationToken = default);
+	Task<PlatformUserInviteResultModel> CreatePlatformUserInvitationAsync(PlatformUserInviteModel model, string baseUrl, CancellationToken cancellationToken = default);
 	Task<PlatformUserInvitationAcceptanceContextModel> GetPlatformUserInvitationAcceptanceAsync(string token, CancellationToken cancellationToken = default);
 	Task<string> AcceptPlatformUserInvitationAsync(string token, string userId, CancellationToken cancellationToken = default);
 	Task<PagedResult<PlatformThemeListItem>> GetPlatformThemesAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default);
 	Task<PlatformThemeEditModel> GetPlatformThemeAsync(int? id, CancellationToken cancellationToken = default);
 	Task<int> SavePlatformThemeAsync(PlatformThemeEditModel model, CancellationToken cancellationToken = default);
-	Task SetPlatformThemeEnabledAsync(int id, bool isEnabled, CancellationToken cancellationToken = default);
+	Task SetPlatformThemeEnabledAsync(int id, bool isEnabled, int? replacementThemeId = null, CancellationToken cancellationToken = default);
 	Task SetPlatformThemeArchivedAsync(int id, bool isArchived, CancellationToken cancellationToken = default);
-	Task DeletePlatformThemeAsync(int id, CancellationToken cancellationToken = default);
+	Task DeletePlatformThemeAsync(int id, int? replacementThemeId = null, CancellationToken cancellationToken = default);
 	Task<PagedResult<PlatformTenantListItem>> GetPlatformTenantsAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default);
 	Task<PlatformTenantDetailModel> GetPlatformTenantAsync(int tenantId, CancellationToken cancellationToken = default);
 	Task<PlatformTenantEditModel> GetPlatformTenantEditAsync(int tenantId, CancellationToken cancellationToken = default);

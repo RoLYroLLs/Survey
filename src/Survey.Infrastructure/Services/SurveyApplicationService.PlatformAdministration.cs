@@ -246,7 +246,7 @@ public sealed partial class SurveyApplicationService
 		return user.Id;
 	}
 
-	public async Task<PlatformUserInviteResultModel> CreatePlatformUserInvitationAsync(PlatformUserInviteModel model, CancellationToken cancellationToken = default)
+	public async Task<PlatformUserInviteResultModel> CreatePlatformUserInvitationAsync(PlatformUserInviteModel model, string baseUrl, CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.UsersManage, cancellationToken);
 
@@ -298,6 +298,14 @@ public sealed partial class SurveyApplicationService
 		await _dbContext.SaveChangesAsync(cancellationToken);
 
 		await _auditWriter.WriteAsync("platform", "platform.user-invited", nameof(PlatformUserInvitation), entity.Id.ToString(), $"Platform invitation created for '{entity.Email}'.", true, cancellationToken);
+		if (entity.TenantId.HasValue)
+		{
+			await _dbContext.Entry(entity)
+				.Reference(item => item.Tenant)
+				.LoadAsync(cancellationToken);
+		}
+
+		await QueuePlatformInvitationEmailAsync(baseUrl, entity, rawToken, cancellationToken);
 
 		return new PlatformUserInviteResultModel
 		{
@@ -426,9 +434,21 @@ public sealed partial class SurveyApplicationService
 				theme.Description.Contains(term));
 		}
 
-		var itemsQuery = query
+		var defaultThemeKey = await GetCurrentDefaultThemeKeyAsync(cancellationToken);
+		var tenantUsageLookup = await _dbContext.TenantSettings
+			.AsNoTracking()
+			.GroupBy(setting => setting.ThemePresetKey)
+			.Select(group => new
+			{
+				ThemePresetKey = group.Key,
+				Count = group.Count()
+			})
+			.ToDictionaryAsync(item => item.ThemePresetKey, item => item.Count, StringComparer.OrdinalIgnoreCase, cancellationToken);
+		var themes = await query
 			.OrderBy(theme => theme.Name)
 			.ThenBy(theme => theme.Key)
+			.ToListAsync(cancellationToken);
+		var items = themes
 			.Select(theme => new PlatformThemeListItem
 			{
 				Id = theme.Id,
@@ -440,8 +460,11 @@ public sealed partial class SurveyApplicationService
 				BackgroundColor = theme.BackgroundColor,
 				IsEnabled = theme.IsEnabled,
 				IsArchived = theme.IsArchived,
+				IsDefaultTheme = string.Equals(theme.Key, defaultThemeKey, StringComparison.OrdinalIgnoreCase),
+				TenantUsageCount = tenantUsageLookup.GetValueOrDefault(theme.Key),
 				UpdatedUtc = theme.UpdatedUtc
-			});
+			})
+			.ToList();
 		var sortMap = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
 		{
 			["name"] = [nameof(PlatformThemeListItem.Name)],
@@ -451,10 +474,17 @@ public sealed partial class SurveyApplicationService
 			["primary"] = [nameof(PlatformThemeListItem.PrimaryColor)],
 			["accent"] = [nameof(PlatformThemeListItem.AccentColor)],
 			["background"] = [nameof(PlatformThemeListItem.BackgroundColor)],
+			["usage"] = [nameof(PlatformThemeListItem.TenantUsageCount)],
 			["updated"] = [nameof(PlatformThemeListItem.UpdatedUtc)]
 		};
+		var orderedItems = ApplyRequestedSorts(items.AsQueryable(), request, sortMap, nameof(PlatformThemeListItem.Id)).ToList();
+		var normalizedRequest = NormalizePagedQuery(request);
+		var pagedItems = orderedItems
+			.Skip(normalizedRequest.Offset)
+			.Take(normalizedRequest.Limit)
+			.ToList();
 
-		return await BuildPagedResultAsync(itemsQuery, request, sortMap, nameof(PlatformThemeListItem.Id), cancellationToken);
+		return CreatePagedResult(pagedItems, orderedItems.Count, normalizedRequest.Offset);
 	}
 
 	public async Task<PlatformThemeEditModel> GetPlatformThemeAsync(int? id, CancellationToken cancellationToken = default)
@@ -481,6 +511,11 @@ public sealed partial class SurveyApplicationService
 			.AsNoTracking()
 			.FirstOrDefaultAsync(item => item.Id == id.Value, cancellationToken)
 			?? throw new InvalidOperationException("The requested theme was not found.");
+		var defaultThemeKey = await GetCurrentDefaultThemeKeyAsync(cancellationToken);
+		var tenantUsageCount = await _dbContext.TenantSettings
+			.AsNoTracking()
+			.CountAsync(setting => setting.ThemePresetKey == theme.Key, cancellationToken);
+		var replacementThemeOptions = await BuildReplacementThemeOptionsAsync(theme.Id, defaultThemeKey, cancellationToken);
 
 		return new PlatformThemeEditModel
 		{
@@ -494,6 +529,9 @@ public sealed partial class SurveyApplicationService
 			CssVariablesBlock = theme.CssVariablesBlock,
 			IsEnabled = theme.IsEnabled,
 			IsArchived = theme.IsArchived,
+			IsDefaultTheme = string.Equals(theme.Key, defaultThemeKey, StringComparison.OrdinalIgnoreCase),
+			TenantUsageCount = tenantUsageCount,
+			ReplacementThemeOptions = replacementThemeOptions,
 			UpdatedUtc = theme.UpdatedUtc
 		};
 	}
@@ -568,7 +606,7 @@ public sealed partial class SurveyApplicationService
 		return entity.Id;
 	}
 
-	public async Task SetPlatformThemeEnabledAsync(int id, bool isEnabled, CancellationToken cancellationToken = default)
+	public async Task SetPlatformThemeEnabledAsync(int id, bool isEnabled, int? replacementThemeId = null, CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
 
@@ -576,22 +614,32 @@ public sealed partial class SurveyApplicationService
 			.FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
 			?? throw new InvalidOperationException("The requested theme was not found.");
 
+		PlatformTheme? replacementTheme = null;
+		var replacedSiteDefault = false;
+		var replacedTenantCount = 0;
 		if (isEnabled)
 		{
 			theme.Enable();
 		}
 		else
 		{
+			(replacementTheme, replacedSiteDefault, replacedTenantCount) = await ReplaceThemeUsageAsync(theme, replacementThemeId, cancellationToken);
 			theme.Disable();
 		}
 
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		var details = $"Global theme '{theme.Name}' ({theme.Key}) was {(isEnabled ? "enabled" : "disabled")}.";
+		if (!isEnabled && replacementTheme is not null)
+		{
+			details = $"{details} Replaced with '{replacementTheme.Name}' for {(replacedSiteDefault ? "the site default and " : string.Empty)}{replacedTenantCount} tenant assignment(s).";
+		}
+
 		await _auditWriter.WriteAsync(
 			"platform",
 			isEnabled ? "platform.theme.enabled" : "platform.theme.disabled",
 			nameof(PlatformTheme),
 			theme.Id.ToString(),
-			$"Global theme '{theme.Name}' ({theme.Key}) was {(isEnabled ? "enabled" : "disabled")}.",
+			details,
 			true,
 			cancellationToken);
 	}
@@ -624,40 +672,111 @@ public sealed partial class SurveyApplicationService
 			cancellationToken);
 	}
 
-	public async Task DeletePlatformThemeAsync(int id, CancellationToken cancellationToken = default)
+	public async Task DeletePlatformThemeAsync(int id, int? replacementThemeId = null, CancellationToken cancellationToken = default)
 	{
 		await RequirePlatformPermissionAsync(PlatformPermissionKeys.SettingsManage, cancellationToken);
 
 		var theme = await _dbContext.PlatformThemes
 			.FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
 			?? throw new InvalidOperationException("The requested theme was not found.");
-
-		var isReferencedBySite = await _dbContext.SiteSettings
-			.AsNoTracking()
-			.AnyAsync(setting => setting.ThemePresetKey == theme.Key, cancellationToken);
-		if (isReferencedBySite)
-		{
-			throw new InvalidOperationException("This theme is currently used by the site default and cannot be deleted.");
-		}
-
-		var isReferencedByTenant = await _dbContext.TenantSettings
-			.AsNoTracking()
-			.AnyAsync(setting => setting.ThemePresetKey == theme.Key, cancellationToken);
-		if (isReferencedByTenant)
-		{
-			throw new InvalidOperationException("This theme is currently assigned to one or more tenants and cannot be deleted.");
-		}
+		var (replacementTheme, replacedSiteDefault, replacedTenantCount) = await ReplaceThemeUsageAsync(theme, replacementThemeId, cancellationToken);
 
 		_dbContext.PlatformThemes.Remove(theme);
 		await _dbContext.SaveChangesAsync(cancellationToken);
+		var details = $"Global theme '{theme.Name}' ({theme.Key}) was deleted.";
+		if (replacementTheme is not null)
+		{
+			details = $"{details} Replaced with '{replacementTheme.Name}' for {(replacedSiteDefault ? "the site default and " : string.Empty)}{replacedTenantCount} tenant assignment(s).";
+		}
+
 		await _auditWriter.WriteAsync(
 			"platform",
 			"platform.theme.deleted",
 			nameof(PlatformTheme),
 			theme.Id.ToString(),
-			$"Global theme '{theme.Name}' ({theme.Key}) was deleted.",
+			details,
 			true,
 			cancellationToken);
+	}
+
+	private async Task<string?> GetCurrentDefaultThemeKeyAsync(CancellationToken cancellationToken)
+	{
+		return await _dbContext.SiteSettings
+			.AsNoTracking()
+			.Where(setting => setting.Id == SiteSetting.DefaultId)
+			.Select(setting => setting.ThemePresetKey)
+			.FirstOrDefaultAsync(cancellationToken);
+	}
+
+	private async Task<IReadOnlyList<SelectOption>> BuildReplacementThemeOptionsAsync(int excludedThemeId, string? defaultThemeKey, CancellationToken cancellationToken)
+	{
+		var themes = await _dbContext.PlatformThemes
+			.AsNoTracking()
+			.Where(theme => theme.Id != excludedThemeId && theme.IsEnabled && !theme.IsArchived)
+			.Select(theme => new
+			{
+				theme.Id,
+				theme.Key,
+				theme.Name
+			})
+			.ToListAsync(cancellationToken);
+
+		return themes
+			.OrderBy(theme => string.Equals(theme.Key, defaultThemeKey, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+			.ThenBy(theme => theme.Name)
+			.ThenBy(theme => theme.Key)
+			.Select(theme => new SelectOption
+			{
+				Value = theme.Id.ToString(),
+				Label = string.Equals(theme.Key, defaultThemeKey, StringComparison.OrdinalIgnoreCase)
+					? $"{theme.Name} (Default)"
+					: theme.Name
+			})
+			.ToArray();
+	}
+
+	private async Task<(PlatformTheme? ReplacementTheme, bool ReplacedSiteDefault, int ReplacedTenantCount)> ReplaceThemeUsageAsync(PlatformTheme theme, int? replacementThemeId, CancellationToken cancellationToken)
+	{
+		var siteSettings = await _dbContext.SiteSettings
+			.Where(setting => setting.ThemePresetKey == theme.Key)
+			.ToListAsync(cancellationToken);
+		var tenantSettings = await _dbContext.TenantSettings
+			.Where(setting => setting.ThemePresetKey == theme.Key)
+			.ToListAsync(cancellationToken);
+		if (siteSettings.Count == 0 && tenantSettings.Count == 0)
+		{
+			return (null, false, 0);
+		}
+
+		if (!replacementThemeId.HasValue)
+		{
+			throw new InvalidOperationException("Select a replacement theme before disabling or deleting a theme that is currently in use.");
+		}
+
+		var replacementTheme = await _dbContext.PlatformThemes
+			.FirstOrDefaultAsync(item => item.Id == replacementThemeId.Value, cancellationToken)
+			?? throw new InvalidOperationException("The replacement theme was not found.");
+		if (replacementTheme.Id == theme.Id)
+		{
+			throw new InvalidOperationException("The replacement theme must be different from the theme being changed.");
+		}
+
+		if (!replacementTheme.IsEnabled || replacementTheme.IsArchived)
+		{
+			throw new InvalidOperationException("The replacement theme must be active before it can be assigned to the site or tenants.");
+		}
+
+		foreach (var setting in siteSettings)
+		{
+			setting.UpdateThemePreset(replacementTheme.Key);
+		}
+
+		foreach (var setting in tenantSettings)
+		{
+			setting.UpdateThemePreset(replacementTheme.Key);
+		}
+
+		return (replacementTheme, siteSettings.Count > 0, tenantSettings.Count);
 	}
 
 	public async Task<PagedResult<PlatformTenantListItem>> GetPlatformTenantsAsync(PagedQuery request, string? search = null, CancellationToken cancellationToken = default)

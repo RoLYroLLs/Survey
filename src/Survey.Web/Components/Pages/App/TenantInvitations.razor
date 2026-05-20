@@ -152,7 +152,7 @@
 	{
 		try
 		{
-			var result = await AdministrationService.ReissueTenantInvitationAsync(invitationId);
+			var result = await AdministrationService.ReissueTenantInvitationAsync(invitationId, GetBaseUrl());
 			_inviteUrl = NavigationManager.ToAbsoluteUri($"/Account/AcceptInvite?token={Uri.EscapeDataString(result.Token)}").ToString();
 			_expiresAtLabel = result.ExpiresAtUtc.ToLocalTime().ToString("f");
 			ToastService.ShowSuccess("Invitation reissued successfully.", "Invitation reissued");
@@ -244,5 +244,10 @@
 	private Task RefreshAsync()
 	{
 		return LoadAsync();
+	}
+
+	private string GetBaseUrl()
+	{
+		return NavigationManager.ToAbsoluteUri("/").GetLeftPart(UriPartial.Authority);
 	}
 }

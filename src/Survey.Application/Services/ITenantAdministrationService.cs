@@ -57,13 +57,14 @@ public interface ITenantAdministrationService
 	Task<TenantUserEditModel> GetTenantUserAsync(int membershipId, CancellationToken cancellationToken = default);
 	Task<int> SaveTenantUserAsync(TenantUserEditModel model, CancellationToken cancellationToken = default);
 	Task RemoveTenantUserAsync(int membershipId, CancellationToken cancellationToken = default);
-	Task<TenantInvitationCreateResultModel> CreateTenantInvitationAsync(TenantUserInviteModel model, CancellationToken cancellationToken = default);
+	Task<TenantInvitationCreateResultModel> CreateTenantInvitationAsync(TenantUserInviteModel model, string baseUrl, CancellationToken cancellationToken = default);
 	Task<PagedResult<TenantInvitationListItem>> GetTenantInvitationsAsync(PagedQuery request, bool includeHistory = true, CancellationToken cancellationToken = default);
-	Task<TenantInvitationCreateResultModel> ReissueTenantInvitationAsync(int invitationId, CancellationToken cancellationToken = default);
+	Task<TenantInvitationCreateResultModel> ReissueTenantInvitationAsync(int invitationId, string baseUrl, CancellationToken cancellationToken = default);
 	Task RevokeTenantInvitationAsync(int invitationId, CancellationToken cancellationToken = default);
 	Task<TenantInvitationAcceptanceContextModel> GetTenantInvitationAcceptanceAsync(string token, CancellationToken cancellationToken = default);
 	Task<string> AcceptTenantInvitationForExistingUserAsync(string token, string userId, CancellationToken cancellationToken = default);
 	Task<string> AcceptTenantInvitationForNewUserAsync(TenantInvitationRegistrationModel model, CancellationToken cancellationToken = default);
 	Task<TenantSearchResultModel> SearchTenantAsync(string query, CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<ThemePresetOption>> GetTenantThemeOptionsAsync(CancellationToken cancellationToken = default);
+	Task<QueuedEmailResult> SendAssignmentEmailAsync(int assignmentId, string baseUrl, CancellationToken cancellationToken = default);
 }

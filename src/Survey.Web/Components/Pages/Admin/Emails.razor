@@ -1,0 +1,320 @@
+@page "/admin/emails"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.JobsView)]
+@inject IBackgroundOperationsService BackgroundOperationsService
+@inject IPlatformAdministrationService PlatformAdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Emails</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Outbound Email</p>
+			<h1>Emails</h1>
+			<p>Review delivery status, engagement signals, and tracked email activity.</p>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Filters</h2>
+				<p>Narrow email rows by status, source flow, tenant, or search text.</p>
+			</div>
+		</div>
+
+		<div class="form-grid">
+			<div class="field-stack">
+				<label>Status</label>
+				<InputSelect class="form-select" @bind-Value="_status">
+					<option value="">All statuses</option>
+					@foreach (var option in _statusOptions)
+					{
+						<option value="@option.Value">@option.Label</option>
+					}
+				</InputSelect>
+			</div>
+			<div class="field-stack">
+				<label>Source</label>
+				<InputSelect class="form-select" @bind-Value="_sourceType">
+					<option value="">All sources</option>
+					@foreach (var option in _sourceOptions)
+					{
+						<option value="@option.Value">@option.Label</option>
+					}
+				</InputSelect>
+			</div>
+			<div class="field-stack">
+				<label>Tenant</label>
+				<InputSelect class="form-select" @bind-Value="_tenantId">
+					<option value="">All tenants</option>
+					@foreach (var option in _tenantOptions)
+					{
+						<option value="@option.Value">@option.Label</option>
+					}
+				</InputSelect>
+			</div>
+			<div class="field-stack">
+				<label>Search</label>
+				<input class="form-control" placeholder="Recipient or subject" @bind="_searchText" />
+			</div>
+		</div>
+
+		<div class="form-footer">
+			<button class="btn btn-primary" type="button" @onclick="ApplyFilters">Apply Filters</button>
+			<button class="btn btn-outline-primary" type="button" @onclick="ClearFilters">Clear</button>
+		</div>
+	</div>
+
+	<div class="list-card">
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No emails matched the current filters.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Recipient</th>
+						<th>Subject</th>
+						<th>Source</th>
+						<th>Status</th>
+						<th>Attempts</th>
+						<th>Opens</th>
+						<th>Clicks</th>
+						<th>Sent</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>
+								<div>@item.RecipientEmail</div>
+								@if (!string.IsNullOrWhiteSpace(item.RecipientName))
+								{
+									<div class="helper-copy">@item.RecipientName</div>
+								}
+							</td>
+							<td>@item.Subject</td>
+							<td>@GetSourceLabel(item.SourceType)</td>
+							<td><span class="@GetStatusCssClass(item.Status)">@GetStatusLabel(item.Status)</span></td>
+							<td>@item.AttemptCount</td>
+							<td>@item.OpenCount</td>
+							<td>@item.ClickCount</td>
+							<td>@DisplayUtc(item.SentUtc)</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="/admin/emails/@item.Id">View</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Status { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? TenantId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public string? SourceType { get; set; }
+
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	private IReadOnlyList<OutboundEmailListItem> _items = Array.Empty<OutboundEmailListItem>();
+	private IReadOnlyList<SelectOption> _tenantOptions = Array.Empty<SelectOption>();
+	private string? _status;
+	private int? _tenantId;
+	private string? _sourceType;
+	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
+
+	private static readonly IReadOnlyList<SelectOption> _statusOptions =
+	[
+		new() { Value = OutboundEmailStatuses.Queued, Label = "Queued" },
+		new() { Value = OutboundEmailStatuses.Sending, Label = "Sending" },
+		new() { Value = OutboundEmailStatuses.Sent, Label = "Sent" },
+		new() { Value = OutboundEmailStatuses.Failed, Label = "Failed" }
+	];
+
+	private static readonly IReadOnlyList<SelectOption> _sourceOptions =
+	[
+		new() { Value = OutboundEmailSourceTypes.IdentityConfirmation, Label = "Account Confirmation" },
+		new() { Value = OutboundEmailSourceTypes.IdentityPasswordReset, Label = "Password Reset" },
+		new() { Value = OutboundEmailSourceTypes.PlatformInvitation, Label = "Platform Invitation" },
+		new() { Value = OutboundEmailSourceTypes.TenantInvitation, Label = "Tenant Invitation" },
+		new() { Value = OutboundEmailSourceTypes.Assignment, Label = "Assignment Email" }
+	];
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_tenantOptions = (await LoadTenantOptionsAsync())
+			.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
+			.ToArray();
+		_status = Status;
+		_tenantId = TenantId;
+		_sourceType = SourceType;
+		_searchText = Search ?? string.Empty;
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
+	}
+
+	private void ApplyFilters()
+	{
+		NavigationManager.NavigateTo(BuildUrl(_status, _tenantId, _sourceType, _searchText, _pageSize));
+	}
+
+	private void ClearFilters()
+	{
+		_status = null;
+		_tenantId = null;
+		_sourceType = null;
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo(BuildUrl(null, null, null, null, _pageSize));
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await BackgroundOperationsService.GetOutboundEmailsAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0),
+			Status,
+			TenantId,
+			SourceType,
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Status, TenantId, SourceType, Search, pageSize));
+		return Task.CompletedTask;
+	}
+
+	private async Task<IReadOnlyList<PlatformTenantListItem>> LoadTenantOptionsAsync()
+	{
+		var items = new List<PlatformTenantListItem>();
+		var offset = 0;
+		while (true)
+		{
+			var result = await PlatformAdministrationService.GetPlatformTenantsAsync(
+				new PagedQuery
+				{
+					Offset = offset,
+					Limit = PagedQuery.MaxLimit
+				});
+			items.AddRange(result.Items);
+			if (!result.HasMore)
+			{
+				return items;
+			}
+
+			offset += result.Items.Count;
+		}
+	}
+
+	private static string BuildUrl(string? status, int? tenantId, string? sourceType, string? search, int pageSize)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(status))
+		{
+			queryParts.Add($"status={Uri.EscapeDataString(status)}");
+		}
+		if (tenantId.HasValue)
+		{
+			queryParts.Add($"tenantId={tenantId.Value}");
+		}
+		if (!string.IsNullOrWhiteSpace(sourceType))
+		{
+			queryParts.Add($"sourceType={Uri.EscapeDataString(sourceType)}");
+		}
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+
+		return $"/admin/emails?{string.Join("&", queryParts)}";
+	}
+
+	private static string GetSourceLabel(string sourceType)
+	{
+		return sourceType switch
+		{
+			OutboundEmailSourceTypes.IdentityConfirmation => "Account Confirmation",
+			OutboundEmailSourceTypes.IdentityPasswordReset => "Password Reset",
+			OutboundEmailSourceTypes.PlatformInvitation => "Platform Invitation",
+			OutboundEmailSourceTypes.TenantInvitation => "Tenant Invitation",
+			OutboundEmailSourceTypes.Assignment => "Assignment Email",
+			_ => sourceType
+		};
+	}
+
+	private static string GetStatusLabel(string status)
+	{
+		return status switch
+		{
+			OutboundEmailStatuses.Queued => "Queued",
+			OutboundEmailStatuses.Sending => "Sending",
+			OutboundEmailStatuses.Sent => "Sent",
+			OutboundEmailStatuses.Failed => "Failed",
+			_ => status
+		};
+	}
+
+	private static string GetStatusCssClass(string status)
+	{
+		return status switch
+		{
+			OutboundEmailStatuses.Sent => "status-pill status-pill--muted",
+			OutboundEmailStatuses.Failed => "status-pill status-pill--danger",
+			_ => "status-pill"
+		};
+	}
+
+	private static string DisplayUtc(DateTimeOffset? value)
+	{
+		return value.HasValue ? value.Value.LocalDateTime.ToString("g") : "-";
+	}
+}

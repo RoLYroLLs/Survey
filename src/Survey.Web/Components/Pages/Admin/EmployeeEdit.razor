@@ -351,7 +351,7 @@
 	{
 		try
 		{
-			_inviteResult = await AdministrationService.CreatePlatformUserInvitationAsync(_inviteModel);
+			_inviteResult = await AdministrationService.CreatePlatformUserInvitationAsync(_inviteModel, GetBaseUrl());
 			_errorMessage = null;
 			ToastService.ShowSuccess("Invitation created successfully.", "Invitation ready");
 		}
@@ -408,6 +408,11 @@
 		return _inviteResult is null
 			? string.Empty
 			: NavigationManager.ToAbsoluteUri(_inviteResult.InvitationUrl).AbsoluteUri;
+	}
+
+	private string GetBaseUrl()
+	{
+		return NavigationManager.ToAbsoluteUri("/").GetLeftPart(UriPartial.Authority);
 	}
 
 	private static string DisplayOrDash(string? value)

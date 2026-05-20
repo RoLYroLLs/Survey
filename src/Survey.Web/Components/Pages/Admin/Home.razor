@@ -1,5 +1,6 @@
 @page "/admin"
 @attribute [PlatformAuthorize]
+@inject Microsoft.Extensions.Options.IOptions<global::Survey.Infrastructure.Configuration.BackgroundJobsOptions> BackgroundJobsOptionsAccessor
 
 <PageTitle>Admin</PageTitle>
 
@@ -29,7 +30,7 @@
 					<p>Review tenant directories, membership counts, and tenant-wide usage.</p>
 					<div class="toolbar">
 						<a class="btn btn-outline-primary" href="/admin/tenants">Open Tenants</a>
-						<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.UsersManage)">
+						<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.TenantsManage)">
 							<Authorized Context="tenantCreateAccess">
 								<a class="btn btn-outline-primary" href="/admin/tenants/new">Create Tenant</a>
 							</Authorized>
@@ -44,6 +45,26 @@
 					<h2>Audit</h2>
 					<p>Review platform and tenant security-sensitive activity and denied access attempts.</p>
 					<a class="btn btn-outline-primary" href="/admin/audit">Open Audit</a>
+				</section>
+			</Authorized>
+		</AuthorizeView>
+		<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.JobsView)">
+			<Authorized>
+				<section class="content-card">
+					<h2>Jobs</h2>
+					<p>Review durable background operations for setup seeding and queued email dispatch.</p>
+					<div class="toolbar">
+						<a class="btn btn-outline-primary" href="/admin/jobs">Open Jobs</a>
+						<a class="btn btn-outline-primary" href="/admin/emails">Open Emails</a>
+						<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.JobsManage)">
+							<Authorized Context="jobsManageAccess">
+								@if (BackgroundJobsOptionsAccessor.Value.Enabled)
+								{
+									<a class="btn btn-outline-primary" href="@BackgroundJobsOptionsAccessor.Value.DashboardPath">Open Hangfire</a>
+								}
+							</Authorized>
+						</AuthorizeView>
+					</div>
 				</section>
 			</Authorized>
 		</AuthorizeView>

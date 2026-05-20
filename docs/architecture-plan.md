@@ -36,6 +36,7 @@
 - A user may belong to multiple tenants. One active tenant membership is selected server-side for the current session, and the UI provides a tenant switcher when needed.
 - Self-serve onboarding is phased: first collect email, username, and password; then require email confirmation; then collect name, address, and phone; then create the first tenant. The first membership becomes the initial `Owner`.
 - Self-serve onboarding should prefill the first tenant name as `Default Tenant` until the user changes it.
+- The very first platform bootstrap account is separate from self-serve onboarding and creates an initial tenant named `Initial Platform Tenant`.
 - Tenant admins can invite users into their tenant with secure invitation tokens. Existing accounts can accept an invite after signing in, and new accounts can be created directly from the invitation flow.
 - Tenant membership management must prevent privilege escalation, disallow changing one’s own tenant role/status/permissions through normal tenant-admin flows, and block removal, disablement, or demotion of the final enabled `Owner` or the final enabled admin-capable membership.
 - Sensitive authorization denials and tenant-admin security changes should be audit logged.
@@ -85,19 +86,29 @@
 - Database provider is selected per deployment with `Database:Provider` and `ConnectionStrings:Default`.
 - `Sqlite` is the default provider for local development and lightweight deployments.
 - `SqlServer` is supported through a separate migration assembly for production-style deployments.
+- Hangfire is the shared durable background-job engine for first-run setup seeding and queued outbound email work.
+- Hangfire storage should use the same configured application database/provider as the main app during this phase, with separate queues for `setup`, `email`, and `default`.
 - Tenant-owned entities use server-enforced tenant scoping in the EF Core layer through tenant context, query filtering, and save-time tenant stamping/cross-tenant write rejection.
 - Multi-tenant schema support adds `Tenant`, `TenantMembership`, `TenantInvitation`, `TenantSetting`, `PlatformUserPermission`, and `AuditLog` as first-class persistence types.
+- Durable job and email audit persistence adds `BackgroundOperation`, `BackgroundOperationEvent`, `OutboundEmail`, `OutboundEmailAttempt`, and `OutboundEmailClickEvent` as first-class records.
 - SQLite startup repair remains part of the deployment strategy so older local databases can be brought forward safely when schema drift exists.
 - Expensive reference-data seeding should use version-tracked seed state instead of replaying the full seed pipeline on every boot.
-- Seed routines may be forced manually by configuration for one-off rebuilds, but normal reseeding should happen by incrementing the seed version for the affected routine.
+- Schema initialization may create the database, migrations, roles, and other minimal platform prerequisites, but heavy reference datasets such as geography should not be imported automatically during normal app startup.
 
 ## Deployment Notes
 
 - The web host is structured for Azure hosting and Aspire-managed local orchestration.
 - Production should use a durable shared database and external secret storage.
 - First-run setup should create the bootstrap platform admin interactively instead of relying on seeded administrator credentials in configuration.
-- Tenant bootstrap should remain self-serve, while invitation delivery can use copied secure links until outbound email delivery is introduced.
+- After the first platform admin account is created, the app should force an intentional initial seeding flow before normal app usage begins.
+- Until the initial seeding flow completes, every route in the app should be blocked by a global setup gate; the bootstrap platform owner is sent to continue setup, while all other users are redirected away from the app.
+- First-run setup-state checks should use a centralized cached status service so route enforcement and public/auth screens do not re-query the database on every request or navigation event.
+- The initial seeding flow should run only when the platform admin explicitly starts it, enqueue one durable Hangfire setup job, show stage-by-stage progress for all first-run seed data, and expose a `Done` action only after the full setup completes.
+- The first-run seed log should include at minimum: roles, countries, states / territories, counties / FIPS, ZIP / FIPS mappings, platform themes, and site settings.
+- Platform themes should not be auto-seeded at startup. During initial setup, the platform super admin should explicitly choose which predefined themes are allowed, and those chosen themes should be the last reference data seeded before final site settings are written.
+- Queued outbound email should run through Hangfire-backed jobs, while the concrete external provider may remain a no-op or placeholder transport until production delivery infrastructure is chosen.
 - Platform administration now exposes dedicated `/admin/users`, `/admin/tenants`, and `/admin/audit` surfaces for platform-user management, tenant oversight, and audit review.
+- Platform administration should also expose `/admin/jobs`, `/admin/jobs/{id}`, `/admin/emails`, and a protected Hangfire dashboard link for operational oversight of setup and email work.
 - Application service dependencies should stay split between `ITenantAdministrationService` and `IPlatformAdministrationService`; callers should not depend on a combined admin service contract.
 
 ## UX Notes
@@ -108,10 +119,12 @@
 - Toast visual treatment should communicate severity consistently: success uses green, warning uses yellow, and error uses red.
 - The shared toast host should support multiple simultaneous toasts, stack them oldest-first near the top edge of the screen, and animate remaining toasts upward when one is dismissed or expires.
 - The authenticated app shell should use a shared top bar across `/app` and `/admin`, with `Survey` branding on the left, a centered tenant-wide search entry point, and tenant/profile controls on the right.
+- First-run setup screens should not show the normal tenant shell controls; the setup experience should hide the left navigation, search, tenant switcher, and profile menu, and center the setup/admin-bootstrap content inside the remaining shell.
 - The tenant-wide top-bar search should search across the current tenant's accessible records and return only sections the current membership is authorized to view.
 - The authenticated shell should expose tenant switching as a top-bar control rather than a standalone navigation-only action.
 - User profile entry in the shell should render as a colored circular avatar with the user's initial; avatar color is assigned once at account creation and reused until a future profile editor changes it.
 - Sidebar menu icons should use a consistent outlined icon style rather than colored emoji-style glyphs.
+- Assignment email delivery should be an explicit user action in v1 rather than an automatic side effect of assignment creation or save.
 - Standalone routed list pages should use progressive server-side paging rather than loading the full dataset at once.
 - The standard list batch size is `10` by default, with supported view-count options of `10`, `25`, `50`, and `100`.
 - Standalone routed list pages should use a `Load More` pattern that appends the next batch beneath the current rows instead of replacing the view with discrete previous/next pages.
@@ -134,22 +147,25 @@
 - Tenant administration now also exposes `/app/users/invitations` for reviewing pending/history invitation links and reissuing or revoking them safely inside the current tenant.
 - Invitation acceptance should support both existing users and newly created users, with the invited tenant becoming the active tenant after acceptance.
 - The tenant navigation should expose a visible `Platform Admin` entry point for users who also hold platform access, so platform-capable users do not have to discover `/admin` manually.
+- Platform jobs and email pages should surface progress, retries, delivery attempts, opens, and click activity as engagement telemetry, while making it clear that open tracking is best-effort rather than proof of a human read.
 - Tenant owners should have an `/app/geography` settings surface where they can choose which countries, states / territories, and counties their tenant can see and use.
 - Tenant geography visibility must be backend-enforced, not UI-only. Address dropdowns, area county assignment, ZIP-to-county inference, and other tenant-facing geography lookups must all respect the owner-managed visibility scope.
-- Tenant theme management is tenant-scoped and owner-only; non-owner memberships should neither see the theme action in `/app` navigation nor pass backend theme-update authorization.
+- Tenant theme management is tenant-scoped and limited to `Owner` and `Admin` memberships, but tenant theme choices must come only from the platform-managed theme library selected during setup or later platform administration.
 - Tenant pages may still deep-link into platform maintenance tools where no tenant-safe equivalent exists yet, but those controls should only be shown to users who also hold the required platform permission.
 - Platform reference pages that surface tenant-owned records must only offer tenant navigation when the operator's active tenant context matches the referenced tenant; otherwise, cross-tenant navigation should stay blocked in the UI and the backend.
 
 ## Geography Seed Data
 
+- First-run databases and empty databases should remain free of geography reference data until the initial platform-admin seeding flow is started intentionally.
 - The platform should seed the full United States county list, including county equivalents such as the District of Columbia, Alaska boroughs / census areas, independent cities, and Louisiana parishes.
 - Florida ZIP-to-county seed data remains a separate reference dataset and should continue to load after the full county reference list is in place.
 
 ## Open Work
 
 - Tenant billing, plan tiers, subscription state, and payment enforcement are not implemented yet; tenant details currently manage only the tenant name while leaving room for later commercial fields.
-- Outbound email delivery is still a placeholder workflow; account confirmation, password reset, and invitation flows need a real email sender/provider before hosted environments can rely on email-driven onboarding.
+- Outbound email queueing, auditing, and engagement tracking are now wired, but hosted environments still need a real email sender/provider before production delivery can replace the current placeholder transport.
+- Password-reset code emails still need a production-ready public-origin strategy so tracking links and pixels can be generated correctly when the flow does not already provide an absolute app link.
 - Public pricing is still a mockup and is not connected to enforceable tenant limits, checkout, invoicing, or plan provisioning.
 - Passkey support is build-wired, but the browser registration and sign-in flow still needs live end-to-end verification across supported devices and browsers.
 - Account-management pages have been brought closer to the main shell, but the remaining manage screens should continue to be reviewed so every account/settings page matches the main app styling and navigation consistently.
-- The current automated coverage is still lighter than the target security plan; tenant-switching, protected-owner rules, invitation flows, first-run setup, and public/auth navigation regressions would benefit from broader web and integration tests.
+- The current automated coverage is still lighter than the target security plan; tenant-switching, protected-owner rules, invitation flows, first-run setup, queued email dispatch, and public/auth navigation regressions would benefit from broader web and integration tests.

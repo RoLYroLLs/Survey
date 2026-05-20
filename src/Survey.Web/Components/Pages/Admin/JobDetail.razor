@@ -1,0 +1,348 @@
+@page "/admin/jobs/{Id:int}"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.JobsView)]
+@inject IBackgroundOperationsService BackgroundOperationsService
+
+<PageTitle>Job</PageTitle>
+
+@if (_item is null)
+{
+	<div class="status-card narrow-card">
+		<p class="eyebrow">Platform Jobs</p>
+		<h1>Job</h1>
+		<p class="mb-0">We couldn't find that background job.</p>
+	</div>
+}
+else
+{
+	<div class="page-stack">
+		<div class="page-header">
+			<div>
+				<p class="eyebrow">Platform Jobs</p>
+				<h1>Job</h1>
+				<p>Review the current state, detailed progress, and event history for this background operation.</p>
+			</div>
+			<div class="toolbar">
+				<button class="btn btn-outline-primary" type="button" @onclick="RefreshAsync">Refresh</button>
+				<a class="btn btn-outline-primary" href="/admin/jobs">Back to Jobs</a>
+			</div>
+		</div>
+
+		<div class="list-card">
+			<div class="assignment-detail-list">
+				<div class="assignment-detail-row">
+					<strong>Summary</strong>
+					<span>@_item.Summary</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Kind</strong>
+					<span>@GetKindLabel(_item.Kind)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Status</strong>
+					<span><span class="@GetStatusCssClass(_item.Status)">@GetStatusLabel(_item.Status)</span></span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Queue</strong>
+					<span>@_item.QueueName</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Hangfire Job Id</strong>
+					<span>@DisplayOrDash(_item.HangfireJobId)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Tenant</strong>
+					<span>@DisplayOrDash(_item.TenantName)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Requested By</strong>
+					<span>@DisplayOrDash(_item.RequestedByDisplayName)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Created</strong>
+					<span>@_item.CreatedUtc.LocalDateTime.ToString("f")</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Started</strong>
+					<span>@DisplayUtc(_item.StartedUtc)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Completed</strong>
+					<span>@DisplayUtc(_item.CompletedUtc)</span>
+				</div>
+				<div class="assignment-detail-row">
+					<strong>Current Activity</strong>
+					<span>@DisplayOrDash(_item.CurrentItemMessage)</span>
+				</div>
+				@if (!string.IsNullOrWhiteSpace(_item.ErrorMessage))
+				{
+					<div class="assignment-detail-row">
+						<strong>Error</strong>
+						<span>@_item.ErrorMessage</span>
+					</div>
+				}
+			</div>
+		</div>
+
+		@if (_item.Stages.Count > 0)
+		{
+			<div class="list-card seed-progress-card">
+				<div class="page-header">
+					<div>
+						<h2 class="content-card__title-sm">Stage Progress</h2>
+						<p>Each setup stage is tracked independently and stored with the job.</p>
+					</div>
+				</div>
+
+				<div class="seed-progress">
+					@foreach (var stage in _item.Stages)
+					{
+						var percent = GetStagePercent(stage);
+						<div class="seed-progress__row">
+							<div class="seed-progress__header">
+								<div class="seed-progress__label">@stage.StageLabel: <span class="@GetStageStatusCssClass(stage)">@GetStageStatusLabel(stage)</span></div>
+								<div class="seed-progress__percent">@percent%</div>
+							</div>
+							<div class="seed-progress__bar">
+								<span class="seed-progress__fill" style="width:@($"{percent}%")"></span>
+							</div>
+							<div class="seed-progress__activity">@GetStageActivity(stage)</div>
+						</div>
+					}
+				</div>
+			</div>
+		}
+
+		@if (_item.LinkedEmails.Count > 0)
+		{
+			<div class="list-card">
+				<div class="page-header">
+					<div>
+						<h2 class="content-card__title-sm">Linked Emails</h2>
+						<p>These queued emails were created by this background operation.</p>
+					</div>
+				</div>
+
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>Recipient</th>
+							<th>Subject</th>
+							<th>Status</th>
+							<th>Created</th>
+							<th>Sent</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var email in _item.LinkedEmails)
+						{
+							<tr>
+								<td>@email.RecipientEmail</td>
+								<td>@email.Subject</td>
+								<td><span class="@GetEmailStatusCssClass(email.Status)">@GetEmailStatusLabel(email.Status)</span></td>
+								<td>@email.CreatedUtc.LocalDateTime.ToString("g")</td>
+								<td>@DisplayUtc(email.SentUtc)</td>
+								<td>
+									<div class="table-actions">
+										<a class="btn btn-sm btn-outline-primary" href="/admin/emails/@email.Id">View</a>
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+
+		<div class="list-card">
+			<div class="page-header">
+				<div>
+					<h2 class="content-card__title-sm">Event Timeline</h2>
+					<p>Detailed log entries captured as the background operation moved through its stages.</p>
+				</div>
+			</div>
+
+			@if (_item.Events.Count == 0)
+			{
+				<p class="empty-state">No event entries were recorded for this job.</p>
+			}
+			else
+			{
+				<table class="admin-table">
+					<thead>
+						<tr>
+							<th>When</th>
+							<th>Stage</th>
+							<th>Status</th>
+							<th>Progress</th>
+							<th>Message</th>
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var item in _item.Events)
+						{
+							<tr>
+								<td>@item.CreatedUtc.LocalDateTime.ToString("g")</td>
+								<td>@item.StageLabel</td>
+								<td><span class="@GetEventStatusCssClass(item.Status)">@GetEventStatusLabel(item.Status)</span></td>
+								<td>@item.ProgressPercent%</td>
+								<td>@item.Message</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	</div>
+}
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	private BackgroundOperationDetailModel? _item;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		await LoadAsync();
+	}
+
+	private Task RefreshAsync()
+	{
+		return LoadAsync();
+	}
+
+	private async Task LoadAsync()
+	{
+		_item = await BackgroundOperationsService.GetBackgroundOperationAsync(Id);
+	}
+
+	private static int GetStagePercent(BackgroundOperationStageSnapshotModel stage)
+	{
+		if (stage.IsComplete)
+		{
+			return 100;
+		}
+
+		if (stage.Total <= 0)
+		{
+			return 0;
+		}
+
+		return Math.Clamp((int)Math.Floor(stage.Processed * 100d / stage.Total), 0, 100);
+	}
+
+	private static string GetStageStatusLabel(BackgroundOperationStageSnapshotModel stage)
+	{
+		if (stage.IsComplete)
+		{
+			return "Done";
+		}
+
+		return stage.IsStarted ? "In Progress" : "Pending";
+	}
+
+	private static string GetStageStatusCssClass(BackgroundOperationStageSnapshotModel stage)
+	{
+		return stage.IsComplete ? "seed-progress__status--done" : string.Empty;
+	}
+
+	private static string GetStageActivity(BackgroundOperationStageSnapshotModel stage)
+	{
+		if (!string.IsNullOrWhiteSpace(stage.ActivityMessage))
+		{
+			return stage.ActivityMessage;
+		}
+
+		return stage.IsComplete
+			? "Completed."
+			: stage.IsStarted
+				? "Running..."
+				: "Pending.";
+	}
+
+	private static string GetKindLabel(string kind)
+	{
+		return kind switch
+		{
+			BackgroundOperationKinds.InitialSetupSeeding => "Initial Setup Seeding",
+			BackgroundOperationKinds.OutboundEmailDispatch => "Outbound Email Dispatch",
+			_ => kind
+		};
+	}
+
+	private static string GetStatusLabel(string status)
+	{
+		return status switch
+		{
+			BackgroundOperationStatuses.Queued => "Queued",
+			BackgroundOperationStatuses.Running => "Running",
+			BackgroundOperationStatuses.Completed => "Completed",
+			BackgroundOperationStatuses.Failed => "Failed",
+			_ => status
+		};
+	}
+
+	private static string GetStatusCssClass(string status)
+	{
+		return status switch
+		{
+			BackgroundOperationStatuses.Completed => "status-pill status-pill--muted",
+			BackgroundOperationStatuses.Failed => "status-pill status-pill--danger",
+			_ => "status-pill"
+		};
+	}
+
+	private static string GetEventStatusLabel(string status)
+	{
+		return status switch
+		{
+			BackgroundOperationStatuses.Completed => "Done",
+			BackgroundOperationStatuses.Running => "Running",
+			BackgroundOperationStatuses.Failed => "Failed",
+			_ => "Queued"
+		};
+	}
+
+	private static string GetEventStatusCssClass(string status)
+	{
+		return status switch
+		{
+			BackgroundOperationStatuses.Completed => "status-pill status-pill--muted",
+			BackgroundOperationStatuses.Failed => "status-pill status-pill--danger",
+			_ => "status-pill"
+		};
+	}
+
+	private static string GetEmailStatusLabel(string status)
+	{
+		return status switch
+		{
+			OutboundEmailStatuses.Queued => "Queued",
+			OutboundEmailStatuses.Sending => "Sending",
+			OutboundEmailStatuses.Sent => "Sent",
+			OutboundEmailStatuses.Failed => "Failed",
+			_ => status
+		};
+	}
+
+	private static string GetEmailStatusCssClass(string status)
+	{
+		return status switch
+		{
+			OutboundEmailStatuses.Sent => "status-pill status-pill--muted",
+			OutboundEmailStatuses.Failed => "status-pill status-pill--danger",
+			_ => "status-pill"
+		};
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string DisplayUtc(DateTimeOffset? value)
+	{
+		return value.HasValue ? value.Value.LocalDateTime.ToString("f") : "-";
+	}
+}

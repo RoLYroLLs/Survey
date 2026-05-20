@@ -1,0 +1,316 @@
+@page "/admin/jobs"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.JobsView)]
+@inject IBackgroundOperationsService BackgroundOperationsService
+@inject IPlatformAdministrationService PlatformAdministrationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Jobs</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Platform Jobs</p>
+			<h1>Jobs</h1>
+			<p>Review background setup and email work across the application job system.</p>
+		</div>
+	</div>
+
+	<div class="list-card">
+		<div class="page-header">
+			<div>
+				<h2>Filters</h2>
+				<p>Narrow jobs by type, status, tenant, or search text.</p>
+			</div>
+		</div>
+
+		<div class="form-grid">
+			<div class="field-stack">
+				<label>Kind</label>
+				<InputSelect class="form-select" @bind-Value="_kind">
+					<option value="">All job types</option>
+					@foreach (var option in _kindOptions)
+					{
+						<option value="@option.Value">@option.Label</option>
+					}
+				</InputSelect>
+			</div>
+			<div class="field-stack">
+				<label>Status</label>
+				<InputSelect class="form-select" @bind-Value="_status">
+					<option value="">All statuses</option>
+					@foreach (var option in _statusOptions)
+					{
+						<option value="@option.Value">@option.Label</option>
+					}
+				</InputSelect>
+			</div>
+			<div class="field-stack">
+				<label>Tenant</label>
+				<InputSelect class="form-select" @bind-Value="_tenantId">
+					<option value="">All tenants</option>
+					@foreach (var option in _tenantOptions)
+					{
+						<option value="@option.Value">@option.Label</option>
+					}
+				</InputSelect>
+			</div>
+			<div class="field-stack">
+				<label>Search</label>
+				<input class="form-control" placeholder="Summary or current activity" @bind="_searchText" />
+			</div>
+		</div>
+
+		<div class="form-footer">
+			<button class="btn btn-primary" type="button" @onclick="ApplyFilters">Apply Filters</button>
+			<button class="btn btn-outline-primary" type="button" @onclick="ClearFilters">Clear</button>
+		</div>
+	</div>
+
+	<div class="list-card">
+		@if (_items.Count == 0)
+		{
+			<p class="empty-state">No background jobs matched the current filters.</p>
+		}
+		else
+		{
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>Kind</th>
+						<th>Summary</th>
+						<th>Status</th>
+						<th>Progress</th>
+						<th>Queue</th>
+						<th>Tenant</th>
+						<th>Requested By</th>
+						<th>Created</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var item in _items)
+					{
+						<tr>
+							<td>@GetKindLabel(item.Kind)</td>
+							<td>
+								<div>@item.Summary</div>
+								@if (!string.IsNullOrWhiteSpace(item.CurrentItemMessage))
+								{
+									<div class="helper-copy">@item.CurrentItemMessage</div>
+								}
+							</td>
+							<td>
+								<span class="@GetStatusCssClass(item.Status)">@GetStatusLabel(item.Status)</span>
+							</td>
+							<td>@item.ProgressPercent%</td>
+							<td>@item.QueueName</td>
+							<td>@DisplayOrDash(item.TenantName)</td>
+							<td>@DisplayOrDash(item.RequestedByDisplayName)</td>
+							<td>@item.CreatedUtc.LocalDateTime.ToString("g")</td>
+							<td>
+								<div class="table-actions">
+									<a class="btn btn-sm btn-outline-primary" href="/admin/jobs/@item.Id">View</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+
+		<ListPager ShownCount="_items.Count"
+				   TotalCount="_totalCount"
+				   PageSize="_pageSize"
+				   HasMore="_hasMore"
+				   IsLoadingMore="_isLoadingMore"
+				   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
+				   PageSizeChanged="OnPageSizeChangedAsync"
+				   OnLoadMore="LoadMoreAsync" />
+	</div>
+</div>
+
+@code {
+	[SupplyParameterFromQuery]
+	public string? Kind { get; set; }
+
+	[SupplyParameterFromQuery]
+	public string? Status { get; set; }
+
+	[SupplyParameterFromQuery]
+	public int? TenantId { get; set; }
+
+	[SupplyParameterFromQuery]
+	public string? Search { get; set; }
+
+	[SupplyParameterFromQuery(Name = "pageSize")]
+	public int? PageSize { get; set; }
+
+	private IReadOnlyList<BackgroundOperationListItem> _items = Array.Empty<BackgroundOperationListItem>();
+	private IReadOnlyList<SelectOption> _tenantOptions = Array.Empty<SelectOption>();
+	private string? _kind;
+	private string? _status;
+	private int? _tenantId;
+	private string _searchText = string.Empty;
+	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _totalCount;
+	private bool _hasMore;
+	private bool _isLoadingMore;
+
+	private static readonly IReadOnlyList<SelectOption> _kindOptions =
+	[
+		new() { Value = BackgroundOperationKinds.InitialSetupSeeding, Label = "Initial Setup Seeding" },
+		new() { Value = BackgroundOperationKinds.OutboundEmailDispatch, Label = "Outbound Email Dispatch" }
+	];
+
+	private static readonly IReadOnlyList<SelectOption> _statusOptions =
+	[
+		new() { Value = BackgroundOperationStatuses.Queued, Label = "Queued" },
+		new() { Value = BackgroundOperationStatuses.Running, Label = "Running" },
+		new() { Value = BackgroundOperationStatuses.Completed, Label = "Completed" },
+		new() { Value = BackgroundOperationStatuses.Failed, Label = "Failed" }
+	];
+
+	protected override async Task OnParametersSetAsync()
+	{
+		_tenantOptions = (await LoadTenantOptionsAsync())
+			.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
+			.ToArray();
+		_kind = Kind;
+		_status = Status;
+		_tenantId = TenantId;
+		_searchText = Search ?? string.Empty;
+		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+		await LoadAsync();
+	}
+
+	private void ApplyFilters()
+	{
+		NavigationManager.NavigateTo(BuildUrl(_kind, _status, _tenantId, _searchText, _pageSize));
+	}
+
+	private void ClearFilters()
+	{
+		_kind = null;
+		_status = null;
+		_tenantId = null;
+		_searchText = string.Empty;
+		NavigationManager.NavigateTo(BuildUrl(null, null, null, null, _pageSize));
+	}
+
+	private async Task LoadAsync(bool append = false)
+	{
+		var result = await BackgroundOperationsService.GetBackgroundOperationsAsync(
+			ListPagingDefaults.CreateRequest(_pageSize, append ? _items.Count : 0),
+			Kind,
+			Status,
+			TenantId,
+			Search);
+		_items = append ? _items.Concat(result.Items).ToArray() : result.Items;
+		_totalCount = result.TotalCount;
+		_hasMore = result.HasMore;
+	}
+
+	private async Task LoadMoreAsync()
+	{
+		_isLoadingMore = true;
+		try
+		{
+			await LoadAsync(append: true);
+		}
+		finally
+		{
+			_isLoadingMore = false;
+		}
+	}
+
+	private Task OnPageSizeChangedAsync(int pageSize)
+	{
+		NavigationManager.NavigateTo(BuildUrl(Kind, Status, TenantId, Search, pageSize));
+		return Task.CompletedTask;
+	}
+
+	private async Task<IReadOnlyList<PlatformTenantListItem>> LoadTenantOptionsAsync()
+	{
+		var items = new List<PlatformTenantListItem>();
+		var offset = 0;
+		while (true)
+		{
+			var result = await PlatformAdministrationService.GetPlatformTenantsAsync(
+				new PagedQuery
+				{
+					Offset = offset,
+					Limit = PagedQuery.MaxLimit
+				});
+			items.AddRange(result.Items);
+			if (!result.HasMore)
+			{
+				return items;
+			}
+
+			offset += result.Items.Count;
+		}
+	}
+
+	private static string BuildUrl(string? kind, string? status, int? tenantId, string? search, int pageSize)
+	{
+		var queryParts = new List<string>
+		{
+			$"pageSize={pageSize}"
+		};
+		if (!string.IsNullOrWhiteSpace(kind))
+		{
+			queryParts.Add($"kind={Uri.EscapeDataString(kind)}");
+		}
+		if (!string.IsNullOrWhiteSpace(status))
+		{
+			queryParts.Add($"status={Uri.EscapeDataString(status)}");
+		}
+		if (tenantId.HasValue)
+		{
+			queryParts.Add($"tenantId={tenantId.Value}");
+		}
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			queryParts.Add($"search={Uri.EscapeDataString(search)}");
+		}
+
+		return $"/admin/jobs?{string.Join("&", queryParts)}";
+	}
+
+	private static string GetKindLabel(string kind)
+	{
+		return kind switch
+		{
+			BackgroundOperationKinds.InitialSetupSeeding => "Initial Setup Seeding",
+			BackgroundOperationKinds.OutboundEmailDispatch => "Outbound Email Dispatch",
+			_ => kind
+		};
+	}
+
+	private static string GetStatusLabel(string status)
+	{
+		return status switch
+		{
+			BackgroundOperationStatuses.Queued => "Queued",
+			BackgroundOperationStatuses.Running => "Running",
+			BackgroundOperationStatuses.Completed => "Completed",
+			BackgroundOperationStatuses.Failed => "Failed",
+			_ => status
+		};
+	}
+
+	private static string GetStatusCssClass(string status)
+	{
+		return status switch
+		{
+			BackgroundOperationStatuses.Completed => "status-pill status-pill--muted",
+			BackgroundOperationStatuses.Failed => "status-pill status-pill--danger",
+			_ => "status-pill"
+		};
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+}

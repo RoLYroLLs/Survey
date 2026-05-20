@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Survey.Application.Models;
 using Survey.Domain;
 using Survey.Infrastructure.Persistence;
 using Survey.Infrastructure.Security;
@@ -80,8 +79,19 @@ internal sealed class TenantBootstrapSeeder(
 			.AsNoTracking()
 			.Where(setting => setting.Id == SiteSetting.DefaultId)
 			.Select(setting => setting.ThemePresetKey)
-			.FirstOrDefaultAsync(cancellationToken)
-			?? SiteThemePresetCatalog.DefaultPresetKey;
+			.FirstOrDefaultAsync(cancellationToken);
+		if (string.IsNullOrWhiteSpace(presetKey))
+		{
+			return;
+		}
+
+		var themeExists = await _dbContext.PlatformThemes
+			.AsNoTracking()
+			.AnyAsync(theme => theme.Key == presetKey, cancellationToken);
+		if (!themeExists)
+		{
+			return;
+		}
 
 		_dbContext.TenantSettings.Add(new TenantSetting(tenantId, presetKey));
 		await _dbContext.SaveChangesAsync(cancellationToken);
