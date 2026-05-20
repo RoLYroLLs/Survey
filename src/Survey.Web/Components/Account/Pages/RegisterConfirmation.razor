@@ -1,22 +1,33 @@
 @page "/Account/RegisterConfirmation"
 
+@using System.Text
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
 
 @inject UserManager<ApplicationUser> UserManager
-@inject IEmailSender<ApplicationUser> EmailSender
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Register confirmation</PageTitle>
+<PageTitle>Register Confirmation</PageTitle>
 
-<h1>Verify your email</h1>
+<div class="form-card narrow-card">
+	<div class="page-stack">
+		<h1>Verify Your Email</h1>
 
-<StatusMessage Message="@statusMessage" />
+		<StatusMessage Message="@statusMessage" />
 
-<p role="alert">Please check your email to confirm your account. After confirmation, you’ll finish your profile and then name your tenant.</p>
+		<p role="alert">Confirm your email before continuing. After confirmation, you'll finish your profile and then name your tenant.</p>
+
+		@if (!string.IsNullOrWhiteSpace(_confirmationUrl))
+		{
+			<a class="w-100 btn btn-lg btn-primary" href="@_confirmationUrl">Confirm Email</a>
+		}
+	</div>
+</div>
 
 @code {
 	private string? statusMessage;
+	private string? _confirmationUrl;
 
 	[CascadingParameter]
 	private HttpContext HttpContext { get; set; } = default!;
@@ -39,7 +50,25 @@
 		if (user is null)
 		{
 			HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
-			statusMessage = "Error finding user for unspecified email";
+			statusMessage = "Error finding user for the specified email.";
+			return;
 		}
+
+		if (await UserManager.IsEmailConfirmedAsync(user))
+		{
+			statusMessage = "Your email is already confirmed.";
+			return;
+		}
+
+		var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+		code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+		_confirmationUrl = NavigationManager.GetUriWithQueryParameters(
+			NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+			new Dictionary<string, object?>
+			{
+				["userId"] = user.Id,
+				["code"] = code,
+				["returnUrl"] = ReturnUrl
+			});
 	}
 }

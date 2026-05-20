@@ -36,7 +36,7 @@
 			<div class="form-grid">
 				<div class="field-stack">
 					<FieldLabel Text="Account Type" Required />
-					<InputSelect class="form-select"
+					<InputSelect class="form-select form-select-lg"
 							 id="Input.AccountType"
 							 name="Input.AccountType"
 							 @bind-Value="Input.AccountType"
@@ -49,37 +49,37 @@
 				</div>
 				<div class="field-stack @(!string.Equals(Input.AccountType, AccountTypeOptions.Organization, StringComparison.Ordinal) ? "field-stack--ghost" : string.Empty)" data-organization-field>
 					<FieldLabel Text="Organization Name" Required />
-					<InputText id="Input.OrganizationName" name="Input.OrganizationName" class="form-control" @bind-Value="Input.OrganizationName" autocomplete="organization" />
+					<InputText id="Input.OrganizationName" name="Input.OrganizationName" class="form-control form-control-lg" @bind-Value="Input.OrganizationName" autocomplete="organization" />
 					<ValidationMessage For="@(() => Input.OrganizationName)" />
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="First Name" Required />
-					<InputText class="form-control" @bind-Value="Input.FirstName" autocomplete="given-name" />
+					<InputText class="form-control form-control-lg" @bind-Value="Input.FirstName" autocomplete="given-name" />
 					<ValidationMessage For="@(() => Input.FirstName)" />
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="Last Name" Required />
-					<InputText class="form-control" @bind-Value="Input.LastName" autocomplete="family-name" />
+					<InputText class="form-control form-control-lg" @bind-Value="Input.LastName" autocomplete="family-name" />
 					<ValidationMessage For="@(() => Input.LastName)" />
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="Address 1" Required />
-					<InputText class="form-control" @bind-Value="Input.AddressLine1" autocomplete="address-line1" />
+					<InputText class="form-control form-control-lg" @bind-Value="Input.AddressLine1" autocomplete="address-line1" />
 					<ValidationMessage For="@(() => Input.AddressLine1)" />
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="Address 2" />
-					<InputText class="form-control" @bind-Value="Input.AddressLine2" autocomplete="address-line2" />
+					<InputText class="form-control form-control-lg" @bind-Value="Input.AddressLine2" autocomplete="address-line2" />
 					<ValidationMessage For="@(() => Input.AddressLine2)" />
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="City" Required />
-					<InputText class="form-control" @bind-Value="Input.City" autocomplete="address-level2" />
+					<InputText class="form-control form-control-lg" @bind-Value="Input.City" autocomplete="address-level2" />
 					<ValidationMessage For="@(() => Input.City)" />
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="State" Required />
-					<InputSelect class="form-select" @bind-Value="Input.State" autocomplete="address-level1">
+					<InputSelect class="form-select form-select-lg" @bind-Value="Input.State" autocomplete="address-level1">
 						<option value="">Select a state</option>
 						@foreach (var option in _stateOptions)
 						{
@@ -90,18 +90,18 @@
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="Zip" Required />
-					<InputText class="form-control" @bind-Value="Input.PostalCode" autocomplete="postal-code" />
+					<InputText class="form-control form-control-lg" @bind-Value="Input.PostalCode" autocomplete="postal-code" />
 					<ValidationMessage For="@(() => Input.PostalCode)" />
 				</div>
 				<div class="field-stack">
 					<FieldLabel Text="Phone Number" Required />
-					<InputText class="form-control" @bind-Value="Input.PhoneNumber" autocomplete="tel" />
+					<InputText class="form-control form-control-lg" @bind-Value="Input.PhoneNumber" autocomplete="tel" />
 					<ValidationMessage For="@(() => Input.PhoneNumber)" />
 				</div>
 			</div>
 
 			<div class="form-footer">
-				<button class="btn btn-primary" type="submit" disabled="@_isSaving">Continue</button>
+				<button class="btn btn-lg btn-primary" type="submit" disabled="@_isSaving">Continue</button>
 			</div>
 		</EditForm>
 	}

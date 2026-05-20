@@ -83,7 +83,7 @@ else
 			</div>
 		</div>
 
-		@if (_item.Stages.Count > 0)
+		@if (ShowStageProgress(_item))
 		{
 			<div class="list-card seed-progress-card">
 				<div class="page-header">
@@ -344,5 +344,11 @@ else
 	private static string DisplayUtc(DateTimeOffset? value)
 	{
 		return value.HasValue ? value.Value.LocalDateTime.ToString("f") : "-";
+	}
+
+	private static bool ShowStageProgress(BackgroundOperationDetailModel item)
+	{
+		return item.Kind == BackgroundOperationKinds.InitialSetupSeeding
+			&& item.Stages.Count > 0;
 	}
 }

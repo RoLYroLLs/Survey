@@ -2,7 +2,7 @@
 @implements IDisposable
 @inject NavigationManager NavigationManager
 
-<div class="shell @(IsSinglePaneShellRoute ? "shell--setup" : string.Empty) @(IsFocusedShellRoute ? "shell--setup-center" : string.Empty)">
+<div class="shell @(IsSinglePaneShellRoute ? "shell--setup" : string.Empty) @(IsFocusedShellRoute ? "shell--setup-center" : string.Empty) @(IsAuthFocusRoute ? "shell--auth-focus" : string.Empty)">
 	<header class="shell__topbar">
 		<TopBar />
 	</header>
@@ -17,7 +17,7 @@
 	<div class="shell__content">
 		<ToastHost />
 
-		<main class="shell__main @(IsSinglePaneShellRoute ? "shell__main--setup" : string.Empty) @(IsFocusedShellRoute ? "shell__main--setup-center" : string.Empty)">
+		<main class="shell__main @(IsSinglePaneShellRoute ? "shell__main--setup" : string.Empty) @(IsFocusedShellRoute ? "shell__main--setup-center" : string.Empty) @(IsAuthFocusRoute ? "shell__main--auth-focus" : string.Empty) @(IsWideAuthFocusRoute ? "shell__main--auth-wide" : string.Empty)">
 			@Body
 		</main>
 	</div>
@@ -25,19 +25,41 @@
 
 @code {
 	private string _currentUrl = string.Empty;
+	private string CurrentPathOnly => _currentUrl.Split('?', '#')[0].Trim('/');
 
 	private bool IsAuthFocusRoute =>
-		string.Equals(_currentUrl, "Account/Login", StringComparison.OrdinalIgnoreCase)
-		|| string.Equals(_currentUrl, "Account/Register", StringComparison.OrdinalIgnoreCase);
+		string.Equals(CurrentPathOnly, "Account/Login", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/Register", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ForgotPassword", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/RegisterConfirmation", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ConfirmEmail", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ConfirmEmailChange", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ForgotPasswordConfirmation", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ResetPassword", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ResetPasswordConfirmation", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ResendEmailConfirmation", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/LoginWith2fa", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/LoginWithRecoveryCode", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/Lockout", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/AccessDenied", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/InvalidPasswordReset", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/InvalidUser", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/ExternalLogin", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/CompleteProfile", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/CreateTenant", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "Account/AcceptPlatformInvite", StringComparison.OrdinalIgnoreCase);
+
+	private bool IsWideAuthFocusRoute =>
+		string.Equals(CurrentPathOnly, "Account/CompleteProfile", StringComparison.OrdinalIgnoreCase);
 
 	private bool IsSetupFocusRoute =>
-		string.Equals(_currentUrl, "setup", StringComparison.OrdinalIgnoreCase)
-		|| string.Equals(_currentUrl, "setup/platform-admin", StringComparison.OrdinalIgnoreCase);
+		string.Equals(CurrentPathOnly, "setup", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "setup/platform-admin", StringComparison.OrdinalIgnoreCase);
 
 	private bool IsSetupShellRoute =>
-		string.Equals(_currentUrl, "setup", StringComparison.OrdinalIgnoreCase)
-		|| (!string.IsNullOrWhiteSpace(_currentUrl)
-			&& _currentUrl.StartsWith("setup/", StringComparison.OrdinalIgnoreCase));
+		string.Equals(CurrentPathOnly, "setup", StringComparison.OrdinalIgnoreCase)
+		|| (!string.IsNullOrWhiteSpace(CurrentPathOnly)
+			&& CurrentPathOnly.StartsWith("setup/", StringComparison.OrdinalIgnoreCase));
 
 	private bool IsSinglePaneShellRoute => IsSetupShellRoute || IsAuthFocusRoute;
 

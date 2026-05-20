@@ -91,12 +91,24 @@
   padding-top: clamp(3rem, 12vh, 7rem);
 }
 
+.shell--auth-focus .shell__content {
+  padding-top: clamp(1.25rem, 4vh, 2.5rem);
+}
+
 .shell__main--setup-center {
   display: block;
   width: min(100%, 44rem);
   min-height: auto;
   padding-top: 0;
   padding-bottom: 2rem;
+}
+
+.shell__main--auth-focus {
+  width: min(100%, 36rem);
+}
+
+.shell__main--auth-wide {
+  width: min(100%, 44rem);
 }
 
 .eyebrow {

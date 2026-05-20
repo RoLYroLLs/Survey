@@ -15,55 +15,37 @@
 <PageTitle>Log in</PageTitle>
 
 <div class="page-stack">
-	<div class="page-header">
-		<div>
-			<h1>Log in</h1>
-			<p>Sign in with your password or use a saved passkey on this device.</p>
-		</div>
-	</div>
-
 	<div class="form-card narrow-card">
 		<StatusMessage Message="@errorMessage" />
 		<EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
 			<DataAnnotationsValidator />
 			<div class="page-stack">
-				<div class="page-header">
-					<div>
-						<h2>Use your account</h2>
-						<p>Enter your email or username, then choose your preferred sign-in method.</p>
-					</div>
-				</div>
+				<h1>Log in</h1>
 				<ValidationSummary class="text-danger" role="alert" />
 				<div class="mb-3">
-					<label for="Input.Identifier" class="form-label">Email or username</label>
-					<InputText @bind-Value="Input.Identifier" id="Input.Identifier" class="form-control form-control-lg" autocomplete="username webauthn" aria-required="true" placeholder="name@example.com or username" />
+					<label for="Input.Identifier" class="form-label">Username or Email</label>
+					<InputText @bind-Value="Input.Identifier" id="Input.Identifier" class="form-control form-control-lg" autocomplete="username webauthn" aria-required="true" placeholder="Username or name@example.com" />
 					<ValidationMessage For="() => Input.Identifier" class="text-danger" />
 				</div>
 				<div class="mb-3">
 					<label for="Input.Password" class="form-label">Password</label>
-					<SecretInput @bind-Value="Input.Password" Id="Input.Password" class="form-control form-control-lg" autocomplete="current-password" aria-required="true" placeholder="password" />
+					<SecretInput @bind-Value="Input.Password" Id="Input.Password" class="form-control form-control-lg" autocomplete="current-password" aria-required="true" placeholder="Password" />
 					<ValidationMessage For="() => Input.Password" class="text-danger" />
 				</div>
-				<div class="checkbox mb-3">
-					<label class="form-label">
+				<div class="toolbar toolbar--between toolbar--auth-options mb-3">
+					<label class="form-label mb-0">
 						<InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
 						Remember me
 					</label>
+					<a href="Account/ForgotPassword">Forgot Password?</a>
 				</div>
 				<div class="page-stack">
 					<button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
 					<PasskeySubmit Operation="PasskeyOperation.Request" Name="PasskeyInput" EmailName="Input.Identifier" class="w-100 btn btn-lg btn-outline-secondary">Log in with passkey</PasskeySubmit>
-					<div class="form-footer form-footer--split">
 					@if (_canCreateAccount)
 					{
-							<a class="btn btn-lg btn-outline-primary" href="@GetRegisterUrl()">Create account</a>
+						<p class="text-center mb-0">Don't have an account? <a href="@GetRegisterUrl()">Sign up</a></p>
 					}
-						<a class="btn btn-lg btn-outline-primary" href="/">Cancel</a>
-					</div>
-				</div>
-				<div class="toolbar">
-					<a href="Account/ForgotPassword">Forgot your password?</a>
-					<a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
 				</div>
 			</div>
 		</EditForm>

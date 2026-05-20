@@ -407,6 +407,26 @@ h4 {
   align-items: center;
 }
 
+.toolbar--between {
+  justify-content: space-between;
+}
+
+.toolbar--auth-options {
+  width: 100%;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.toolbar--auth-options .form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.toolbar--auth-options .form-check-input {
+  margin-top: 0;
+}
+
 .toolbar--assignments {
   align-items: center;
 }

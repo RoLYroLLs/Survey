@@ -13,23 +13,21 @@
 
 <PageTitle>Resend email confirmation</PageTitle>
 
-<h1>Resend email confirmation</h1>
-<h2>Enter your email.</h2>
-<hr />
-<StatusMessage Message="@message" />
-<div class="row">
-    <div class="col-md-4">
-        <EditForm Model="Input" FormName="resend-email-confirmation" OnValidSubmit="OnValidSubmitAsync" method="post">
-            <DataAnnotationsValidator />
-            <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" aria-required="true" placeholder="name@example.com" />
-                <label for="Input.Email" class="form-label">Email</label>
-                <ValidationMessage For="() => Input.Email" class="text-danger" />
-            </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Resend</button>
-        </EditForm>
-    </div>
+<div class="form-card narrow-card">
+	<StatusMessage Message="@message" />
+	<EditForm Model="Input" FormName="resend-email-confirmation" OnValidSubmit="OnValidSubmitAsync" method="post">
+		<DataAnnotationsValidator />
+		<div class="page-stack">
+			<h1>Resend Email Confirmation</h1>
+			<ValidationSummary class="text-danger" role="alert" />
+			<div class="mb-3">
+				<label for="Input.Email" class="form-label">Email</label>
+				<InputText @bind-Value="Input.Email" id="Input.Email" class="form-control form-control-lg" aria-required="true" placeholder="Name@example.com" />
+				<ValidationMessage For="() => Input.Email" class="text-danger" />
+			</div>
+			<button type="submit" class="w-100 btn btn-lg btn-primary">Resend</button>
+		</div>
+	</EditForm>
 </div>
 
 @code {

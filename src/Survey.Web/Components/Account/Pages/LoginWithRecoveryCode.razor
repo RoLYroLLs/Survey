@@ -10,26 +10,22 @@
 
 <PageTitle>Recovery code verification</PageTitle>
 
-<h1>Recovery code verification</h1>
-<hr />
-<StatusMessage Message="@message" />
-<p>
-    You have requested to log in with a recovery code. This login will not be remembered until you provide
-    an authenticator app code at log in or disable 2FA and log in again.
-</p>
-<div class="row">
-    <div class="col-md-4">
-        <EditForm Model="Input" FormName="login-with-recovery-code" OnValidSubmit="OnValidSubmitAsync" method="post">
-            <DataAnnotationsValidator />
-            <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.RecoveryCode" id="Input.RecoveryCode" class="form-control" autocomplete="off" placeholder="RecoveryCode" />
-                <label for="Input.RecoveryCode" class="form-label">Recovery Code</label>
-                <ValidationMessage For="() => Input.RecoveryCode" class="text-danger" />
-            </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-        </EditForm>
-    </div>
+<div class="form-card narrow-card">
+	<StatusMessage Message="@message" />
+	<EditForm Model="Input" FormName="login-with-recovery-code" OnValidSubmit="OnValidSubmitAsync" method="post">
+		<DataAnnotationsValidator />
+		<div class="page-stack">
+			<h1>Recovery Code Verification</h1>
+			<p>You have requested to log in with a recovery code. This login will not be remembered until you provide an authenticator app code at log in or disable 2FA and log in again.</p>
+			<ValidationSummary class="text-danger" role="alert" />
+			<div class="mb-3">
+				<label for="Input.RecoveryCode" class="form-label">Recovery Code</label>
+				<InputText @bind-Value="Input.RecoveryCode" id="Input.RecoveryCode" class="form-control form-control-lg" autocomplete="off" placeholder="Recovery Code" />
+				<ValidationMessage For="() => Input.RecoveryCode" class="text-danger" />
+			</div>
+			<button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
+		</div>
+	</EditForm>
 </div>
 
 @code {
