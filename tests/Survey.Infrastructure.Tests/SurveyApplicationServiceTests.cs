@@ -241,6 +241,29 @@ public class SurveyApplicationServiceTests
 	}
 
 	[Fact]
+	public async Task InitialSetup_Remains_Incomplete_Until_Bootstrap_Admin_Clicks_Done()
+	{
+		await using var harness = await TestHarness.CreateAsync();
+		var selectedThemeKeys = new[] { SiteThemePresetCatalog.DefaultPresetKey, "harbor-blue" };
+
+		await harness.InitialSetupSeeder.SeedAsync(selectedThemeKeys, SiteThemePresetCatalog.DefaultPresetKey, cancellationToken: CancellationToken.None);
+
+		var seededState = await harness.InitialSetupStateService.GetStatusAsync();
+		Assert.True(seededState.HasUsers);
+		Assert.True(seededState.IsSeeded);
+		Assert.False(seededState.IsComplete);
+
+		await harness.InitialSetupSeeder.MarkSetupCompleteAsync();
+
+		var completedState = await harness.InitialSetupStateService.GetStatusAsync();
+		Assert.True(completedState.HasUsers);
+		Assert.True(completedState.IsSeeded);
+		Assert.True(completedState.IsComplete);
+		var siteSetting = await harness.DbContext.SiteSettings.SingleAsync(setting => setting.Id == SiteSetting.DefaultId);
+		Assert.NotNull(siteSetting.InitialSetupCompletedUtc);
+	}
+
+	[Fact]
 	public async Task DisablePlatformThemeAsync_Replaces_Default_And_Tenant_Theme_When_Theme_Is_In_Use()
 	{
 		await using var harness = await TestHarness.CreateAsync();
@@ -1744,6 +1767,7 @@ public class SurveyApplicationServiceTests
 			EmailTrackingService = _scope.ServiceProvider.GetRequiredService<IEmailTrackingService>();
 			GeographySeeder = _scope.ServiceProvider.GetRequiredService<GeographyDataSeeder>();
 			InitialSetupSeeder = _scope.ServiceProvider.GetRequiredService<InitialSetupSeeder>();
+			InitialSetupStateService = _scope.ServiceProvider.GetRequiredService<InitialSetupStateService>();
 		}
 
 		public SurveyDbContext DbContext { get; }
@@ -1759,6 +1783,7 @@ public class SurveyApplicationServiceTests
 		public IEmailTrackingService EmailTrackingService { get; }
 		public GeographyDataSeeder GeographySeeder { get; }
 		public InitialSetupSeeder InitialSetupSeeder { get; }
+		public InitialSetupStateService InitialSetupStateService { get; }
 		public int PrimaryTenantId { get; private set; }
 		public int PrimaryMembershipId { get; private set; }
 		public string PrimaryUserId { get; private set; } = string.Empty;

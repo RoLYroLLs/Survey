@@ -21,6 +21,14 @@ public sealed class SiteSettingsSeeder(SurveyDbContext dbContext)
 			.AnyAsync(cancellationToken);
 	}
 
+	public Task<bool> IsInitialSetupCompletedAsync(CancellationToken cancellationToken = default)
+	{
+		return _dbContext.SiteSettings
+			.AsNoTracking()
+			.Where(setting => setting.Id == SiteSetting.DefaultId && setting.InitialSetupCompletedUtc.HasValue)
+			.AnyAsync(cancellationToken);
+	}
+
 	public async Task SeedAsync(
 		IReadOnlyCollection<string> selectedThemeKeys,
 		string defaultThemeKey,

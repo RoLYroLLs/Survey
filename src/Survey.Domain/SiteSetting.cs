@@ -6,6 +6,7 @@ public class SiteSetting
 
 	public int Id { get; private set; } = DefaultId;
 	public string ThemePresetKey { get; private set; } = string.Empty;
+	public DateTimeOffset? InitialSetupCompletedUtc { get; private set; }
 	public DateTimeOffset UpdatedUtc { get; private set; }
 
 	private SiteSetting()
@@ -20,6 +21,18 @@ public class SiteSetting
 	public void UpdateThemePreset(string themePresetKey)
 	{
 		ThemePresetKey = RequireValue(themePresetKey, nameof(themePresetKey), 100);
+		UpdatedUtc = DateTimeOffset.UtcNow;
+	}
+
+	public void MarkInitialSetupComplete()
+	{
+		InitialSetupCompletedUtc ??= DateTimeOffset.UtcNow;
+		UpdatedUtc = DateTimeOffset.UtcNow;
+	}
+
+	public void ResetInitialSetupComplete()
+	{
+		InitialSetupCompletedUtc = null;
 		UpdatedUtc = DateTimeOffset.UtcNow;
 	}
 

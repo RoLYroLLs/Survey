@@ -547,6 +547,7 @@ public class SurveyDbContext(
 		{
 			entity.Property(setting => setting.Id).ValueGeneratedNever();
 			entity.Property(setting => setting.ThemePresetKey).HasMaxLength(100).IsRequired();
+			entity.Property(setting => setting.InitialSetupCompletedUtc);
 		});
 
 		builder.Entity<SeedState>(entity =>

@@ -122,6 +122,7 @@
 				<button class="btn btn-outline-primary" type="button" disabled="@_isSeeding" @onclick="GoToThemeSelection">Back</button>
 				@if (_hasFailedOperation)
 				{
+					<button class="btn btn-outline-danger" type="button" disabled="@_isSeeding" @onclick="StartOverSeedingAsync">Start Over</button>
 					<button class="btn btn-primary" type="button" disabled="@_isSeeding" @onclick="RetrySeedingAsync">Retry Setup</button>
 				}
 				else
@@ -131,7 +132,7 @@
 			</div>
 		</div>
 	}
-	else if (_isComplete)
+	else if (_displayIsComplete)
 	{
 		<div class="seed-progress">
 			@foreach (var stage in _stages)
@@ -148,21 +149,6 @@
 				</div>
 			}
 		</div>
-		@if (_activityEntries.Count > 0)
-		{
-			<div class="form-card seed-activity-log mt-4">
-				<h2>Live Activity</h2>
-				<div class="seed-activity-log__entries">
-					@foreach (var entry in _activityEntries)
-					{
-						<div class="seed-activity-log__entry">
-							<strong>@entry.StageLabel</strong>
-							<span>@entry.Message</span>
-						</div>
-					}
-				</div>
-			</div>
-		}
 		<div class="form-footer mt-4">
 			<button class="btn btn-primary" type="button" @onclick="ContinueAsync">Done</button>
 		</div>
@@ -191,21 +177,6 @@
 				</div>
 			}
 		</div>
-		@if (_activityEntries.Count > 0)
-		{
-			<div class="form-card seed-activity-log mt-4">
-				<h2>Live Activity</h2>
-				<div class="seed-activity-log__entries">
-					@foreach (var entry in _activityEntries)
-					{
-						<div class="seed-activity-log__entry">
-							<strong>@entry.StageLabel</strong>
-							<span>@entry.Message</span>
-						</div>
-					}
-				</div>
-			</div>
-		}
 		<p class="seed-progress__help mt-4">The initial import is running. Please keep this page open until all stages are marked done.</p>
 	}
 </div>
@@ -215,12 +186,15 @@
 	private bool _isReady;
 	private bool _isSeeding;
 	private bool _isComplete;
+	private bool _displayIsComplete;
 	private bool _canSeed;
 	private bool _hasFailedOperation;
 	private int? _currentOperationId;
 	private string? _errorMessage;
 	private PeriodicTimer? _progressTimer;
 	private CancellationTokenSource? _progressPollingCancellation;
+	private PeriodicTimer? _playbackTimer;
+	private CancellationTokenSource? _playbackCancellation;
 	private readonly IReadOnlyList<ThemePresetOption> _themeOptions = SiteThemePresetCatalog.GetOptions();
 	private readonly HashSet<string> _selectedThemeKeys = new(StringComparer.OrdinalIgnoreCase)
 	{
@@ -230,8 +204,8 @@
 	private readonly List<SeedStageViewModel> _stages = InitialSeedingStages.Ordered
 		.Select(stage => new SeedStageViewModel(stage.Key, stage.Label))
 		.ToList();
-	private readonly List<InitialSeedingActivityEntry> _activityEntries = [];
-	private long _lastActivitySequence;
+	private readonly Queue<InitialSeedingPlaybackEntry> _pendingPlaybackEntries = new();
+	private long _lastPlaybackSequence;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -248,10 +222,12 @@
 
 		var jobStatus = await BackgroundOperationsService.GetInitialSetupJobStatusAsync();
 		ApplyJobStatus(jobStatus);
-		AppendActivityEntries();
+		_lastPlaybackSequence = InitialSeedingProgressService.GetLatestPlaybackSequence();
+		InitialSeedingProgressService.Updated += OnProgressUpdated;
 		if (_isSeeding)
 		{
 			EnsureProgressPolling();
+			EnsurePlaybackTimer();
 		}
 
 		_isReady = true;
@@ -266,12 +242,17 @@
 
 		_errorMessage = null;
 		_hasFailedOperation = false;
+		_pendingPlaybackEntries.Clear();
+		_lastPlaybackSequence = 0;
+		ResetStages();
 		var accessContext = await TenantContextAccessor.GetCurrentAsync();
 		var result = await InitialSetupJobService.StartOrResumeAsync(_selectedThemeKeys.ToArray(), _defaultThemeKey, accessContext.UserId);
 		_currentOperationId = result.OperationId;
 		_isSeeding = true;
+		_displayIsComplete = false;
 		_currentStep = SetupStep.Seeding;
 		EnsureProgressPolling();
+		EnsurePlaybackTimer();
 		await RefreshJobStatusAsync();
 	}
 
@@ -284,12 +265,40 @@
 
 		_errorMessage = null;
 		_hasFailedOperation = false;
+		_pendingPlaybackEntries.Clear();
+		_lastPlaybackSequence = 0;
+		ResetStages();
 		var accessContext = await TenantContextAccessor.GetCurrentAsync();
 		var result = await InitialSetupJobService.RetryAsync(_selectedThemeKeys.ToArray(), _defaultThemeKey, accessContext.UserId);
 		_currentOperationId = result.OperationId;
 		_isSeeding = true;
+		_displayIsComplete = false;
 		_currentStep = SetupStep.Seeding;
 		EnsureProgressPolling();
+		EnsurePlaybackTimer();
+		await RefreshJobStatusAsync();
+	}
+
+	private async Task StartOverSeedingAsync()
+	{
+		if (_isSeeding || _isComplete || !_canSeed)
+		{
+			return;
+		}
+
+		_errorMessage = null;
+		_hasFailedOperation = false;
+		_pendingPlaybackEntries.Clear();
+		_lastPlaybackSequence = 0;
+		ResetStages();
+		var accessContext = await TenantContextAccessor.GetCurrentAsync();
+		var result = await InitialSetupJobService.StartOverAsync(_selectedThemeKeys.ToArray(), _defaultThemeKey, accessContext.UserId);
+		_currentOperationId = result.OperationId;
+		_isSeeding = true;
+		_displayIsComplete = false;
+		_currentStep = SetupStep.Seeding;
+		EnsureProgressPolling();
+		EnsurePlaybackTimer();
 		await RefreshJobStatusAsync();
 	}
 
@@ -349,8 +358,13 @@
 
 	private Task ContinueAsync()
 	{
+		return CompleteSetupAndContinueAsync();
+	}
+
+	private async Task CompleteSetupAndContinueAsync()
+	{
+		await InitialSetupJobService.MarkSetupCompleteAsync();
 		NavigationManager.NavigateTo("/", forceLoad: true);
-		return Task.CompletedTask;
 	}
 
 	private void EnsureProgressPolling()
@@ -361,8 +375,20 @@
 		}
 
 		_progressPollingCancellation = new CancellationTokenSource();
-		_progressTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(750));
+		_progressTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(150));
 		_ = PollProgressAsync(_progressPollingCancellation.Token);
+	}
+
+	private void EnsurePlaybackTimer()
+	{
+		if (_playbackCancellation is not null)
+		{
+			return;
+		}
+
+		_playbackCancellation = new CancellationTokenSource();
+		_playbackTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(10));
+		_ = PumpPlaybackAsync(_playbackCancellation.Token);
 	}
 
 	private async Task PollProgressAsync(CancellationToken cancellationToken)
@@ -388,15 +414,74 @@
 		}
 	}
 
+	private async Task PumpPlaybackAsync(CancellationToken cancellationToken)
+	{
+		if (_playbackTimer is null)
+		{
+			return;
+		}
+
+		try
+		{
+			while (await _playbackTimer.WaitForNextTickAsync(cancellationToken))
+			{
+				var shouldRender = false;
+				if (_pendingPlaybackEntries.TryDequeue(out var entry))
+				{
+					ApplyPlaybackEntry(entry);
+					shouldRender = true;
+				}
+
+				if (TryFinalizeDisplayState())
+				{
+					shouldRender = true;
+				}
+
+				if (shouldRender)
+				{
+					await InvokeAsync(StateHasChanged);
+				}
+
+				if (!_isSeeding && _pendingPlaybackEntries.Count == 0 && _displayIsComplete)
+				{
+					break;
+				}
+			}
+		}
+		catch (OperationCanceledException)
+		{
+		}
+	}
+
 	private async Task RefreshJobStatusAsync()
 	{
 		var jobStatus = await BackgroundOperationsService.GetInitialSetupJobStatusAsync();
-		ApplyJobStatus(jobStatus);
-		AppendActivityEntries();
+		ApplyJobStatus(jobStatus, applyDisplayState: !_isSeeding && _pendingPlaybackEntries.Count == 0);
 		await InvokeAsync(StateHasChanged);
 	}
 
-	private void ApplyJobStatus(InitialSetupJobStatusModel status)
+	private void OnProgressUpdated()
+	{
+		_ = InvokeAsync(() =>
+		{
+			var snapshot = InitialSeedingProgressService.GetSnapshot();
+			EnqueuePlaybackEntries();
+			_isSeeding = snapshot.IsRunning;
+			_isComplete = snapshot.IsComplete;
+			_hasFailedOperation = !snapshot.IsRunning && !snapshot.IsComplete && !string.IsNullOrWhiteSpace(snapshot.ErrorMessage);
+			_errorMessage = string.IsNullOrWhiteSpace(snapshot.ErrorMessage) ? _errorMessage : snapshot.ErrorMessage;
+
+			if (_isSeeding)
+			{
+				_currentStep = SetupStep.Seeding;
+				EnsurePlaybackTimer();
+			}
+
+			return Task.CompletedTask;
+		});
+	}
+
+	private void ApplyJobStatus(InitialSetupJobStatusModel status, bool applyDisplayState = true)
 	{
 		_currentOperationId = status.OperationId;
 		_isComplete = status.IsComplete;
@@ -418,9 +503,13 @@
 			_defaultThemeKey = status.DefaultThemeKey;
 		}
 
-		ApplyStageSnapshots(status.Stages);
+		if (applyDisplayState)
+		{
+			ApplyStageSnapshots(status.Stages);
+			_displayIsComplete = _isComplete;
+		}
 
-		if (_isComplete)
+		if (_displayIsComplete)
 		{
 			_currentStep = SetupStep.Complete;
 			return;
@@ -467,16 +556,46 @@
 		}
 	}
 
-	private void AppendActivityEntries()
+	private void EnqueuePlaybackEntries()
 	{
-		var entries = InitialSeedingProgressService.GetActivityEntriesAfter(_lastActivitySequence);
+		var entries = InitialSeedingProgressService.GetPlaybackEntriesAfter(_lastPlaybackSequence);
 		if (entries.Count == 0)
 		{
 			return;
 		}
 
-		_activityEntries.AddRange(entries);
-		_lastActivitySequence = _activityEntries[^1].Sequence;
+		foreach (var entry in entries)
+		{
+			_pendingPlaybackEntries.Enqueue(entry);
+			_lastPlaybackSequence = entry.Sequence;
+		}
+	}
+
+	private void ApplyPlaybackEntry(InitialSeedingPlaybackEntry entry)
+	{
+		var stage = _stages.FirstOrDefault(item => string.Equals(item.Key, entry.StageKey, StringComparison.Ordinal));
+		if (stage is null)
+		{
+			return;
+		}
+
+		stage.IsStarted = true;
+		stage.Processed = entry.Processed;
+		stage.Total = entry.Total;
+		stage.IsComplete = entry.IsComplete;
+		stage.ActivityMessage = entry.IsComplete ? string.Empty : entry.ActivityMessage ?? string.Empty;
+	}
+
+	private bool TryFinalizeDisplayState()
+	{
+		if (_isComplete && _pendingPlaybackEntries.Count == 0 && !_displayIsComplete)
+		{
+			_displayIsComplete = true;
+			_currentStep = SetupStep.Complete;
+			return true;
+		}
+
+		return false;
 	}
 
 	private string BuildStageStatus(SeedStageViewModel stage)
@@ -491,9 +610,7 @@
 			return "In Progress";
 		}
 
-		return HasStartedAnyStage() && IsNextStageToStart(stage)
-			? "Starting..."
-			: "Pending";
+		return "Pending";
 	}
 
 	private int GetStagePercent(SeedStageViewModel stage)
@@ -530,27 +647,7 @@
 				: "Processing...";
 		}
 
-		return HasStartedAnyStage() && IsNextStageToStart(stage)
-			? "Warming up..."
-			: "Waiting to begin.";
-	}
-
-	private bool HasStartedAnyStage()
-	{
-		return _stages.Any(stage => stage.IsStarted || stage.IsComplete);
-	}
-
-	private bool IsNextStageToStart(SeedStageViewModel stage)
-	{
-		foreach (var candidate in _stages)
-		{
-			if (!candidate.IsStarted && !candidate.IsComplete)
-			{
-				return ReferenceEquals(candidate, stage);
-			}
-		}
-
-		return false;
+		return "Waiting to begin.";
 	}
 
 	private void ResetStages()
@@ -608,9 +705,13 @@
 
 	public ValueTask DisposeAsync()
 	{
+		InitialSeedingProgressService.Updated -= OnProgressUpdated;
 		_progressPollingCancellation?.Cancel();
+		_playbackCancellation?.Cancel();
 		_progressTimer?.Dispose();
+		_playbackTimer?.Dispose();
 		_progressPollingCancellation?.Dispose();
+		_playbackCancellation?.Dispose();
 		return ValueTask.CompletedTask;
 	}
 }

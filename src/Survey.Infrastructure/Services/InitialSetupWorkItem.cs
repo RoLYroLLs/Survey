@@ -7,4 +7,6 @@ public sealed class InitialSetupWorkItem
 	public string[] SelectedThemeKeys { get; init; } = [];
 
 	public string DefaultThemeKey { get; init; } = string.Empty;
+
+	public bool ResetBeforeRun { get; init; }
 }

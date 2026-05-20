@@ -1418,6 +1418,9 @@ namespace Survey.Migrations.SqlServer.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("int");
 
+                    b.Property<DateTimeOffset?>("InitialSetupCompletedUtc")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("ThemePresetKey")
                         .IsRequired()
                         .HasMaxLength(100)

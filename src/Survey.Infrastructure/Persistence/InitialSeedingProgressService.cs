@@ -11,7 +11,9 @@ public sealed class InitialSeedingProgressService
 	private string? _errorMessage;
 	private long _nextSequence;
 	private readonly ConcurrentDictionary<string, InitialSeedingStageSnapshot> _stages = new(StringComparer.Ordinal);
-	private readonly List<InitialSeedingActivityEntry> _activityEntries = [];
+	private readonly List<InitialSeedingPlaybackEntry> _playbackEntries = [];
+
+	public event Action? Updated;
 
 	public InitialSeedingProgressSnapshot GetSnapshot()
 	{
@@ -30,20 +32,27 @@ public sealed class InitialSeedingProgressService
 							StageKey = stage.Key,
 							StageLabel = stage.Label
 						})
-					.ToArray(),
-				ActivityEntries = _activityEntries.ToArray()
+					.ToArray()
 			};
 		}
 	}
 
-	public IReadOnlyList<InitialSeedingActivityEntry> GetActivityEntriesAfter(long lastSequence)
+	public IReadOnlyList<InitialSeedingPlaybackEntry> GetPlaybackEntriesAfter(long lastSequence)
 	{
 		lock (_sync)
 		{
-			return _activityEntries
+			return _playbackEntries
 				.Where(entry => entry.Sequence > lastSequence)
-				.Select(CloneActivityEntry)
+				.Select(ClonePlaybackEntry)
 				.ToArray();
+		}
+	}
+
+	public long GetLatestPlaybackSequence()
+	{
+		lock (_sync)
+		{
+			return _nextSequence;
 		}
 	}
 
@@ -56,8 +65,10 @@ public sealed class InitialSeedingProgressService
 			_errorMessage = null;
 			_nextSequence = 0;
 			_stages.Clear();
-			_activityEntries.Clear();
+			_playbackEntries.Clear();
 		}
+
+		Updated?.Invoke();
 	}
 
 	public void Start()
@@ -69,7 +80,7 @@ public sealed class InitialSeedingProgressService
 			_errorMessage = null;
 			_nextSequence = 0;
 			_stages.Clear();
-			_activityEntries.Clear();
+			_playbackEntries.Clear();
 
 			foreach (var stage in InitialSeedingStages.Ordered)
 			{
@@ -80,6 +91,8 @@ public sealed class InitialSeedingProgressService
 				};
 			}
 		}
+
+		Updated?.Invoke();
 	}
 
 	public void Report(InitialSeedingProgressUpdate update)
@@ -99,17 +112,19 @@ public sealed class InitialSeedingProgressService
 				IsComplete = update.IsComplete
 			};
 
-			if (!string.IsNullOrWhiteSpace(update.ActivityMessage))
+			_playbackEntries.Add(new InitialSeedingPlaybackEntry
 			{
-				_activityEntries.Add(new InitialSeedingActivityEntry
-				{
-					Sequence = ++_nextSequence,
-					StageKey = update.StageKey,
-					StageLabel = string.IsNullOrWhiteSpace(update.StageLabel) ? InitialSeedingStages.GetLabel(update.StageKey) : update.StageLabel,
-					Message = update.ActivityMessage
-				});
-			}
+				Sequence = ++_nextSequence,
+				StageKey = update.StageKey,
+				StageLabel = string.IsNullOrWhiteSpace(update.StageLabel) ? InitialSeedingStages.GetLabel(update.StageKey) : update.StageLabel,
+				ActivityMessage = update.ActivityMessage ?? string.Empty,
+				Processed = update.Processed,
+				Total = update.Total,
+				IsComplete = update.IsComplete
+			});
 		}
+
+		Updated?.Invoke();
 	}
 
 	public void Complete()
@@ -148,6 +163,8 @@ public sealed class InitialSeedingProgressService
 				};
 			}
 		}
+
+		Updated?.Invoke();
 	}
 
 	public void Fail(string? errorMessage)
@@ -158,6 +175,8 @@ public sealed class InitialSeedingProgressService
 			_isComplete = false;
 			_errorMessage = errorMessage;
 		}
+
+		Updated?.Invoke();
 	}
 
 	private static InitialSeedingStageSnapshot CloneStage(InitialSeedingStageSnapshot stage)
@@ -174,14 +193,17 @@ public sealed class InitialSeedingProgressService
 		};
 	}
 
-	private static InitialSeedingActivityEntry CloneActivityEntry(InitialSeedingActivityEntry entry)
+	private static InitialSeedingPlaybackEntry ClonePlaybackEntry(InitialSeedingPlaybackEntry entry)
 	{
-		return new InitialSeedingActivityEntry
+		return new InitialSeedingPlaybackEntry
 		{
 			Sequence = entry.Sequence,
 			StageKey = entry.StageKey,
 			StageLabel = entry.StageLabel,
-			Message = entry.Message
+			ActivityMessage = entry.ActivityMessage,
+			Processed = entry.Processed,
+			Total = entry.Total,
+			IsComplete = entry.IsComplete
 		};
 	}
 }

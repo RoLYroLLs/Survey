@@ -32,7 +32,7 @@
 		var setupState = await InitialSetupStateService.GetStatusAsync();
 		if (setupState.HasUsers)
 		{
-			NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
+			NavigationManager.NavigateTo(setupState.IsComplete ? "/Account/Login" : "/setup/initial-seeding", forceLoad: true);
 		}
 	}
 }

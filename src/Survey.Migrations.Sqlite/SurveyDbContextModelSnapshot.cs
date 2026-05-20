@@ -1364,6 +1364,9 @@ namespace Survey.Migrations.Sqlite.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTimeOffset?>("InitialSetupCompletedUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ThemePresetKey")
                         .IsRequired()
                         .HasMaxLength(100)

@@ -33,7 +33,12 @@ public sealed class InitialSetupStateService(
 
 	public void SetStatus(bool hasUsers, bool isComplete)
 	{
-		_memoryCache.Set(CacheKey, new InitialSetupState(hasUsers, isComplete), CacheOptions);
+		_memoryCache.Set(CacheKey, new InitialSetupState(hasUsers, isComplete, isComplete), CacheOptions);
+	}
+
+	public void SetStatus(bool hasUsers, bool isSeeded, bool isComplete)
+	{
+		_memoryCache.Set(CacheKey, new InitialSetupState(hasUsers, isSeeded, isComplete), CacheOptions);
 	}
 
 	public void Invalidate()
@@ -49,20 +54,21 @@ public sealed class InitialSetupStateService(
 		var hasUsers = await userManager.Users.AnyAsync(cancellationToken);
 		if (!hasUsers)
 		{
-			return new InitialSetupState(false, false);
+			return new InitialSetupState(false, false, false);
 		}
 
 		var identityDataSeeder = serviceProvider.GetRequiredService<IdentityDataSeeder>();
 		var siteSettingsSeeder = serviceProvider.GetRequiredService<SiteSettingsSeeder>();
 		var geographyDataSeeder = serviceProvider.GetRequiredService<GeographyDataSeeder>();
-		var isComplete = await identityDataSeeder.IsSeededAsync(cancellationToken)
+		var isSeeded = await identityDataSeeder.IsSeededAsync(cancellationToken)
 			&& await siteSettingsSeeder.IsSeededAsync(cancellationToken)
 			&& await geographyDataSeeder.IsSeededAsync(cancellationToken);
-		return new InitialSetupState(true, isComplete);
+		var isComplete = isSeeded && await siteSettingsSeeder.IsInitialSetupCompletedAsync(cancellationToken);
+		return new InitialSetupState(true, isSeeded, isComplete);
 	}
 }
 
-public readonly record struct InitialSetupState(bool HasUsers, bool IsComplete)
+public readonly record struct InitialSetupState(bool HasUsers, bool IsSeeded, bool IsComplete)
 {
 	public bool IsInProgress => HasUsers && !IsComplete;
 }

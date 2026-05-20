@@ -15,6 +15,8 @@ internal sealed class InitialSetupBackgroundWorker(
 
 	protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 	{
+		await RequeueRecoverableOperationsAsync(stoppingToken);
+
 		while (!stoppingToken.IsCancellationRequested)
 		{
 			InitialSetupWorkItem workItem;
@@ -32,7 +34,7 @@ internal sealed class InitialSetupBackgroundWorker(
 
 			try
 			{
-				await runner.RunAsync(workItem.OperationId, workItem.SelectedThemeKeys, workItem.DefaultThemeKey, stoppingToken);
+				await runner.RunAsync(workItem.OperationId, workItem.SelectedThemeKeys, workItem.DefaultThemeKey, workItem.ResetBeforeRun, stoppingToken);
 			}
 			catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
 			{
@@ -42,6 +44,21 @@ internal sealed class InitialSetupBackgroundWorker(
 			{
 				_logger.LogError(ex, "Initial setup background work item {OperationId} failed.", workItem.OperationId);
 			}
+		}
+	}
+
+	private async Task RequeueRecoverableOperationsAsync(CancellationToken cancellationToken)
+	{
+		using var scope = _serviceScopeFactory.CreateScope();
+		var jobService = scope.ServiceProvider.GetRequiredService<InitialSetupJobService>();
+
+		try
+		{
+			await jobService.ResumePendingOperationsAsync(cancellationToken);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Unable to requeue recoverable initial setup operations on startup.");
 		}
 	}
 }

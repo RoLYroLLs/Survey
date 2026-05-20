@@ -67,8 +67,6 @@ public sealed class InitialSeedingProgressSnapshot
 	public string? ErrorMessage { get; init; }
 
 	public IReadOnlyList<InitialSeedingStageSnapshot> Stages { get; init; } = Array.Empty<InitialSeedingStageSnapshot>();
-
-	public IReadOnlyList<InitialSeedingActivityEntry> ActivityEntries { get; init; } = Array.Empty<InitialSeedingActivityEntry>();
 }
 
 public sealed class InitialSeedingStageSnapshot
@@ -97,4 +95,21 @@ public sealed class InitialSeedingActivityEntry
 	public string StageLabel { get; init; } = string.Empty;
 
 	public string Message { get; init; } = string.Empty;
+}
+
+public sealed class InitialSeedingPlaybackEntry
+{
+	public long Sequence { get; init; }
+
+	public string StageKey { get; init; } = string.Empty;
+
+	public string StageLabel { get; init; } = string.Empty;
+
+	public string ActivityMessage { get; init; } = string.Empty;
+
+	public int Processed { get; init; }
+
+	public int Total { get; init; }
+
+	public bool IsComplete { get; init; }
 }

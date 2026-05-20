@@ -86,8 +86,9 @@
 - Database provider is selected per deployment with `Database:Provider` and `ConnectionStrings:Default`.
 - `Sqlite` is the default provider for local development and lightweight deployments.
 - `SqlServer` is supported through a separate migration assembly for production-style deployments.
-- Hangfire is the shared durable background-job engine for first-run setup seeding and queued outbound email work.
-- Hangfire storage should use the same configured application database/provider as the main app during this phase, with separate queues for `setup`, `email`, and `default`.
+- Hangfire is used for queued outbound email work during this phase.
+- First-run setup seeding should use an app-owned background worker so the setup pipeline can continue after the user leaves the page without paying the extra Hangfire-plus-SQLite overhead of item-by-item progress tracking.
+- Hangfire storage should use the same configured application database/provider as the main app during this phase, with separate queues for `email` and `default`.
 - Tenant-owned entities use server-enforced tenant scoping in the EF Core layer through tenant context, query filtering, and save-time tenant stamping/cross-tenant write rejection.
 - Multi-tenant schema support adds `Tenant`, `TenantMembership`, `TenantInvitation`, `TenantSetting`, `PlatformUserPermission`, and `AuditLog` as first-class persistence types.
 - Durable job and email audit persistence adds `BackgroundOperation`, `BackgroundOperationEvent`, `OutboundEmail`, `OutboundEmailAttempt`, and `OutboundEmailClickEvent` as first-class records.
@@ -103,7 +104,8 @@
 - After the first platform admin account is created, the app should force an intentional initial seeding flow before normal app usage begins.
 - Until the initial seeding flow completes, every route in the app should be blocked by a global setup gate; the bootstrap platform owner is sent to continue setup, while all other users are redirected away from the app.
 - First-run setup-state checks should use a centralized cached status service so route enforcement and public/auth screens do not re-query the database on every request or navigation event.
-- The initial seeding flow should run only when the platform admin explicitly starts it, enqueue one durable Hangfire setup job, show stage-by-stage progress for all first-run seed data, and expose a `Done` action only after the full setup completes.
+- The initial seeding flow should run only when the platform admin explicitly starts it, enqueue one app-owned background setup run, show stage-by-stage progress for all first-run seed data, and expose a `Done` action only after the full setup completes.
+- If setup seeding is interrupted by app shutdown or failure, reopening the app should force the bootstrap admin back into setup, resume or retry the background run safely, and keep the site locked until the final `Done` acknowledgment is saved.
 - The first-run seed log should include at minimum: roles, countries, states / territories, counties / FIPS, ZIP / FIPS mappings, platform themes, and site settings.
 - Platform themes should not be auto-seeded at startup. During initial setup, the platform super admin should explicitly choose which predefined themes are allowed, and those chosen themes should be the last reference data seeded before final site settings are written.
 - Queued outbound email should run through Hangfire-backed jobs, while the concrete external provider may remain a no-op or placeholder transport until production delivery infrastructure is chosen.
@@ -164,7 +166,8 @@
 
 - Tenant billing, plan tiers, subscription state, and payment enforcement are not implemented yet; tenant details currently manage only the tenant name while leaving room for later commercial fields.
 - Outbound email queueing, auditing, and engagement tracking are now wired, but hosted environments still need a real email sender/provider before production delivery can replace the current placeholder transport.
-- Password-reset code emails still need a production-ready public-origin strategy so tracking links and pixels can be generated correctly when the flow does not already provide an absolute app link.
+- Background email dispatch now derives public origins from the current request when available and falls back to per-environment `App:PublicOrigin` configuration, but hosted environments still need those environment-specific values set correctly before production email links are trusted.
+- First-run seeding playback is intentionally UI-paced and may lag behind the true background import state by design; if that experience needs to feel more real-time later, the playback model and buffering rules should be tuned without slowing the underlying import.
 - Public pricing is still a mockup and is not connected to enforceable tenant limits, checkout, invoicing, or plan provisioning.
 - Passkey support is build-wired, but the browser registration and sign-in flow still needs live end-to-end verification across supported devices and browsers.
 - Account-management pages have been brought closer to the main shell, but the remaining manage screens should continue to be reviewed so every account/settings page matches the main app styling and navigation consistently.

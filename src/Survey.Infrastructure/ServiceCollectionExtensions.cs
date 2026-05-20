@@ -74,7 +74,8 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<IAuditWriter, AuditWriter>();
 		services.AddScoped<BackgroundOperationsService>();
 		services.AddScoped<IBackgroundOperationsService>(serviceProvider => serviceProvider.GetRequiredService<BackgroundOperationsService>());
-		services.AddScoped<IInitialSetupJobService, InitialSetupJobService>();
+		services.AddScoped<InitialSetupJobService>();
+		services.AddScoped<IInitialSetupJobService>(serviceProvider => serviceProvider.GetRequiredService<InitialSetupJobService>());
 		services.AddScoped<IQueuedEmailService, QueuedEmailService>();
 		services.AddScoped<IEmailTrackingService, EmailTrackingService>();
 		services.AddScoped<IPublicOriginResolver, PublicOriginResolver>();
@@ -632,6 +633,7 @@ public static class ServiceCollectionExtensions
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlatformThemes_Key" ON "PlatformThemes" ("Key");""", cancellationToken);
 		await EnsureSqliteColumnExistsAsync(connection, "PlatformThemes", "IsEnabled", """ALTER TABLE "PlatformThemes" ADD COLUMN "IsEnabled" INTEGER NOT NULL DEFAULT 1;""", cancellationToken);
 		await EnsureSqliteColumnExistsAsync(connection, "PlatformThemes", "IsArchived", """ALTER TABLE "PlatformThemes" ADD COLUMN "IsArchived" INTEGER NOT NULL DEFAULT 0;""", cancellationToken);
+		await EnsureSqliteColumnExistsAsync(connection, "SiteSettings", "InitialSetupCompletedUtc", """ALTER TABLE "SiteSettings" ADD COLUMN "InitialSetupCompletedUtc" TEXT NULL;""", cancellationToken);
 		await ExecuteSqliteNonQueryAsync(connection, """CREATE INDEX IF NOT EXISTS "IX_AuditLogs_TenantId_CreatedUtc" ON "AuditLogs" ("TenantId", "CreatedUtc");""", cancellationToken);
 		if (await SqliteTableExistsAsync(connection, "PostalAddresses", cancellationToken))
 		{

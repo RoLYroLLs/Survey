@@ -13,13 +13,15 @@ public sealed class InitialSetupJobService(
 	SurveyDbContext dbContext,
 	BackgroundOperationsService backgroundOperationsService,
 	InitialSetupTaskQueue initialSetupTaskQueue,
-	IOptions<BackgroundJobsOptions> options) : IInitialSetupJobService
+	IOptions<BackgroundJobsOptions> options,
+	InitialSetupSeeder initialSetupSeeder) : IInitialSetupJobService
 {
 	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 	private readonly SurveyDbContext _dbContext = dbContext;
 	private readonly BackgroundOperationsService _backgroundOperationsService = backgroundOperationsService;
 	private readonly InitialSetupTaskQueue _initialSetupTaskQueue = initialSetupTaskQueue;
 	private readonly BackgroundJobsOptions _options = options.Value;
+	private readonly InitialSetupSeeder _initialSetupSeeder = initialSetupSeeder;
 
 	public async Task<InitialSetupJobStartResult> StartOrResumeAsync(
 		IReadOnlyCollection<string> selectedThemeKeys,
@@ -43,7 +45,7 @@ public sealed class InitialSetupJobService(
 			};
 		}
 
-		return await QueueInitialSetupAsync(selectedThemeKeys, defaultThemeKey, requestedByUserId, cancellationToken);
+		return await QueueInitialSetupAsync(selectedThemeKeys, defaultThemeKey, requestedByUserId, resetBeforeRun: false, cancellationToken);
 	}
 
 	public Task<InitialSetupJobStartResult> RetryAsync(
@@ -52,13 +54,55 @@ public sealed class InitialSetupJobService(
 		string? requestedByUserId,
 		CancellationToken cancellationToken = default)
 	{
-		return QueueInitialSetupAsync(selectedThemeKeys, defaultThemeKey, requestedByUserId, cancellationToken);
+		return QueueInitialSetupAsync(selectedThemeKeys, defaultThemeKey, requestedByUserId, resetBeforeRun: false, cancellationToken);
+	}
+
+	public Task<InitialSetupJobStartResult> StartOverAsync(
+		IReadOnlyCollection<string> selectedThemeKeys,
+		string defaultThemeKey,
+		string? requestedByUserId,
+		CancellationToken cancellationToken = default)
+	{
+		return QueueInitialSetupAsync(selectedThemeKeys, defaultThemeKey, requestedByUserId, resetBeforeRun: true, cancellationToken);
+	}
+
+	public Task MarkSetupCompleteAsync(CancellationToken cancellationToken = default)
+	{
+		return _initialSetupSeeder.MarkSetupCompleteAsync(cancellationToken);
+	}
+
+	internal async Task ResumePendingOperationsAsync(CancellationToken cancellationToken = default)
+	{
+		var recoverableOperations = await _dbContext.BackgroundOperations
+			.AsNoTracking()
+			.Where(operation => operation.Kind == BackgroundOperationKinds.InitialSetupSeeding
+				&& (operation.Status == BackgroundOperationStatuses.Queued || operation.Status == BackgroundOperationStatuses.Running))
+			.OrderBy(operation => operation.Id)
+			.ToListAsync(cancellationToken);
+
+		foreach (var operation in recoverableOperations)
+		{
+			var metadata = BackgroundOperationsService.DeserializeMetadata(operation.MetadataJson);
+			if (metadata.SelectedThemeKeys.Count == 0 || string.IsNullOrWhiteSpace(metadata.DefaultThemeKey))
+			{
+				continue;
+			}
+
+			await _initialSetupTaskQueue.QueueAsync(new InitialSetupWorkItem
+			{
+				OperationId = operation.Id,
+				SelectedThemeKeys = metadata.SelectedThemeKeys.ToArray(),
+				DefaultThemeKey = metadata.DefaultThemeKey,
+				ResetBeforeRun = false
+			}, cancellationToken);
+		}
 	}
 
 	private async Task<InitialSetupJobStartResult> QueueInitialSetupAsync(
 		IReadOnlyCollection<string> selectedThemeKeys,
 		string defaultThemeKey,
 		string? requestedByUserId,
+		bool resetBeforeRun,
 		CancellationToken cancellationToken)
 	{
 		var normalizedSelectedThemeKeys = selectedThemeKeys
@@ -91,7 +135,8 @@ public sealed class InitialSetupJobService(
 		{
 			OperationId = operationId,
 			SelectedThemeKeys = normalizedSelectedThemeKeys,
-			DefaultThemeKey = normalizedDefaultThemeKey
+			DefaultThemeKey = normalizedDefaultThemeKey,
+			ResetBeforeRun = resetBeforeRun
 		}, cancellationToken);
 
 		return new InitialSetupJobStartResult
