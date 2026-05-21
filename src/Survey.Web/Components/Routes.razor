@@ -1,11 +1,26 @@
 @using Survey.Web.Components.Account.Shared
+@using Microsoft.AspNetCore.Authorization
 
 <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
 	<Found Context="routeData">
-		<AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
-			<NotAuthorized>
-				<RedirectToLogin />
-			</NotAuthorized>
-		</AuthorizeRouteView>
+		@if (AllowsAnonymous(routeData.PageType))
+		{
+			<RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+		}
+		else
+		{
+			<AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+				<NotAuthorized>
+					<RedirectToLogin />
+				</NotAuthorized>
+			</AuthorizeRouteView>
+		}
 	</Found>
 </Router>
+
+@code {
+	private static bool AllowsAnonymous(Type pageType)
+	{
+		return pageType.IsDefined(typeof(AllowAnonymousAttribute), inherit: true);
+	}
+}
