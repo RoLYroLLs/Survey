@@ -204,7 +204,8 @@ app.MapGet("/email/track/click/{token}", async (string token, string? url, strin
 	})
 	.AllowAnonymous();
 app.MapRazorComponents<App>()
-	.AddInteractiveServerRenderMode();
+	.AddInteractiveServerRenderMode()
+	.AllowAnonymous();
 app.MapAdditionalIdentityEndpoints();
 
 app.Run();
