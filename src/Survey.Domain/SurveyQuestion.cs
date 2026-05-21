@@ -43,6 +43,11 @@ public class SurveyQuestion : ITenantOwned
 		SortOrder = sortOrder < 0 ? 0 : sortOrder;
 	}
 
+	public void SetSortOrder(int sortOrder)
+	{
+		SortOrder = sortOrder < 0 ? 0 : sortOrder;
+	}
+
 	private static string RequireValue(string? value, string paramName, int maxLength)
 	{
 		var trimmed = value?.Trim();

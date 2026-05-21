@@ -112,6 +112,7 @@
 					<div class="field-stack">
 						<label>Sort Order</label>
 						<InputNumber class="form-control" @bind-Value="_model.SortOrder" disabled="@_model.IsLocked" />
+						<ValidationMessage For="@(() => _model.SortOrder)" />
 					</div>
 				</div>
 

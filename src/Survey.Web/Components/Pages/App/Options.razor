@@ -1,7 +1,9 @@
 @page "/app/options"
 @attribute [TenantAuthorize(TenantPermissionKeys.SurveysView)]
 @inject ITenantAdministrationService AdministrationService
+@inject ITenantPermissionEvaluator TenantPermissionEvaluator
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
 <PageTitle>Options</PageTitle>
 
@@ -43,6 +45,16 @@
 	}
 	else
 	{
+		@if (!string.IsNullOrWhiteSpace(_reorderErrorMessage))
+		{
+			<div class="inline-banner inline-banner--danger">@_reorderErrorMessage</div>
+		}
+
+		@if (_canReorder)
+		{
+			<div class="inline-banner">Drag a row by its handle to reorder options. Changes save automatically when you drop.</div>
+		}
+
 		<div class="list-card">
 			@if (_items.Count == 0)
 			{
@@ -50,19 +62,38 @@
 			}
 			else
 			{
-				<table class="admin-table">
+				<table class="admin-table admin-table--reorderable">
 					<thead>
 						<tr>
-							<th><SortableHeader Label="Label" SortKey="label" CurrentSort="@Sort" Href="@GetSortUrl("label")" /></th>
-							<th><SortableHeader Label="Order" SortKey="order" CurrentSort="@Sort" Href="@GetSortUrl("order")" /></th>
-							<th><SortableHeader Label="Locked" SortKey="locked" CurrentSort="@Sort" Href="@GetSortUrl("locked")" /></th>
+							<th class="admin-table__drag-column"></th>
+							<th>Label</th>
+							<th>Order</th>
+							<th>Locked</th>
 							<th></th>
 						</tr>
 					</thead>
 					<tbody>
 						@foreach (var item in _items)
 						{
-							<tr>
+							<tr class="@GetRowClass(item.Id)"
+								@ondragenter="@(() => SetDropTarget(item.Id))"
+								@ondragover:preventDefault="true"
+								@ondrop="@(() => DropAsync(item.Id))"
+								@ondragend="ClearDragState">
+								<td class="admin-table__drag-column">
+									@if (CanDragRow(item))
+									{
+										<button class="reorder-handle"
+												type="button"
+												draggable="true"
+												title="Drag to reorder option"
+												aria-label="Drag to reorder option"
+												@ondragstart="@(args => BeginDrag(args, item.Id))"
+												@ondragend="ClearDragState">
+											<span aria-hidden="true">::</span>
+										</button>
+									}
+								</td>
 								<td>@item.Label</td>
 								<td>@item.SortOrder</td>
 								<td>@(item.IsLocked ? "Yes" : "No")</td>
@@ -77,14 +108,6 @@
 				</table>
 			}
 
-			<ListPager ShownCount="_items.Count"
-					   TotalCount="_totalCount"
-					   PageSize="_pageSize"
-					   HasMore="_hasMore"
-					   IsLoadingMore="_isLoadingMore"
-					   PageSizeOptions="ListPagingDefaults.PageSizeOptions"
-					   PageSizeChanged="OnPageSizeChangedAsync"
-					   OnLoadMore="LoadMoreAsync" />
 		</div>
 	}
 </div>
@@ -102,48 +125,51 @@
 	[SupplyParameterFromQuery]
 	public int? SurveyDefinitionId { get; set; }
 
-	[SupplyParameterFromQuery(Name = "pageSize")]
-	public int? PageSize { get; set; }
-
-	[SupplyParameterFromQuery(Name = "sort")]
-	public string? Sort { get; set; }
-
 	private IReadOnlyList<QuestionOptionListItem> _items = Array.Empty<QuestionOptionListItem>();
 	private QuestionOptionEditModel _context = new();
-	private int _pageSize = PagedQuery.DefaultLimit;
+	private int _pageSize = PagedQuery.MaxLimit;
 	private int _totalCount;
-	private bool _hasMore;
-	private bool _isLoadingMore;
+	private bool _canReorder;
+	private bool _isSavingOrder;
+	private int? _draggedOptionId;
+	private int? _dropTargetOptionId;
+	private string? _reorderErrorMessage;
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
 		if (!SurveyQuestionId.HasValue)
 		{
 			_context = new();
 			_items = Array.Empty<QuestionOptionListItem>();
 			_totalCount = 0;
-			_hasMore = false;
+			_canReorder = false;
 			return;
 		}
 
 		_context = await AdministrationService.GetQuestionOptionAsync(null, SurveyQuestionId.Value);
 		if (_context.SupportsOptions)
 		{
-			var result = await AdministrationService.GetQuestionOptionsAsync(ListPagingDefaults.CreateRequest(_pageSize, 0, Sort), SurveyQuestionId.Value);
+			var result = await AdministrationService.GetQuestionOptionsAsync(new PagedQuery
+			{
+				Limit = PagedQuery.MaxLimit
+			}, SurveyQuestionId.Value);
 			_items = result.Items;
 			_totalCount = result.TotalCount;
-			_hasMore = result.HasMore;
+			_canReorder = await TenantPermissionEvaluator.HasPermissionAsync(TenantPermissionKeys.SurveysEdit)
+				&& _items.Count == _totalCount
+				&& _items.Count > 1
+				&& !_items.Any(item => item.IsLocked);
 		}
 		else
 		{
 			_items = Array.Empty<QuestionOptionListItem>();
 			_totalCount = 0;
-			_hasMore = false;
+			_canReorder = false;
 		}
 		SurveySectionId ??= _context.SurveySectionId;
 		SurveyVersionId ??= _context.SurveyVersionId;
 		SurveyDefinitionId ??= _context.SurveyDefinitionId;
+		_reorderErrorMessage = null;
 	}
 
 	private bool CanAddOptions()
@@ -203,64 +229,138 @@
 			: $"{baseUrl}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
-	private async Task LoadMoreAsync()
+	private bool CanDragRow(QuestionOptionListItem item)
 	{
-		if (!_context.SupportsOptions || !SurveyQuestionId.HasValue)
+		return _canReorder && !_isSavingOrder && !item.IsLocked;
+	}
+
+	private void BeginDrag(DragEventArgs args, int optionId)
+	{
+		if (!_canReorder || _isSavingOrder)
 		{
 			return;
 		}
 
-		_isLoadingMore = true;
+		if (args.DataTransfer is not null)
+		{
+			args.DataTransfer.DropEffect = "move";
+			args.DataTransfer.EffectAllowed = "move";
+		}
+
+		_draggedOptionId = optionId;
+		_dropTargetOptionId = optionId;
+		_reorderErrorMessage = null;
+	}
+
+	private void SetDropTarget(int optionId)
+	{
+		if (_draggedOptionId.HasValue && _draggedOptionId.Value != optionId)
+		{
+			_dropTargetOptionId = optionId;
+		}
+	}
+
+	private async Task DropAsync(int optionId)
+	{
+		if (!_draggedOptionId.HasValue || !SurveyQuestionId.HasValue || _isSavingOrder)
+		{
+			return;
+		}
+
+		var sourceId = _draggedOptionId.Value;
+		ClearDragState();
+		if (sourceId == optionId)
+		{
+			return;
+		}
+
+		var reorderedItems = ReorderItems(sourceId, optionId);
+		if (reorderedItems is null)
+		{
+			return;
+		}
+
+		var originalItems = _items.Select(CloneItem).ToArray();
+		_items = reorderedItems.Select(CloneItem).ToArray();
+		_isSavingOrder = true;
+		_reorderErrorMessage = null;
+
 		try
 		{
-			var result = await AdministrationService.GetQuestionOptionsAsync(
-				ListPagingDefaults.CreateRequest(_pageSize, _items.Count, Sort),
-				SurveyQuestionId.Value);
-			_items = _items.Concat(result.Items).ToArray();
-			_totalCount = result.TotalCount;
-			_hasMore = result.HasMore;
+			await AdministrationService.ReorderQuestionOptionsAsync(SurveyQuestionId.Value, reorderedItems.Select(item => item.Id).ToArray());
+			ToastService.ShowSuccess("Option order updated.", "Saved");
+		}
+		catch (Exception ex)
+		{
+			_items = originalItems;
+			_reorderErrorMessage = ex.Message;
+			ToastService.ShowError(ex.Message, "Reorder failed");
 		}
 		finally
 		{
-			_isLoadingMore = false;
+			_isSavingOrder = false;
 		}
 	}
 
-	private Task OnPageSizeChangedAsync(int pageSize)
+	private List<QuestionOptionListItem>? ReorderItems(int sourceId, int targetId)
 	{
-		NavigationManager.NavigateTo(BuildUrl(pageSize, Sort));
-		return Task.CompletedTask;
-	}
-
-	private string GetSortUrl(string key)
-	{
-		return BuildUrl(_pageSize, PagingSort.Toggle(Sort, key));
-	}
-
-	private string BuildUrl(int pageSize, string? sort)
-	{
-		var queryParts = new List<string>
+		var reorderedItems = _items.Select(CloneItem).ToList();
+		var sourceIndex = reorderedItems.FindIndex(item => item.Id == sourceId);
+		var targetIndex = reorderedItems.FindIndex(item => item.Id == targetId);
+		if (sourceIndex < 0 || targetIndex < 0)
 		{
-			$"surveyQuestionId={SurveyQuestionId ?? 0}",
-			$"pageSize={pageSize}"
+			return null;
+		}
+
+		var sourceItem = reorderedItems[sourceIndex];
+		reorderedItems.RemoveAt(sourceIndex);
+		reorderedItems.Insert(targetIndex, sourceItem);
+
+		for (var index = 0; index < reorderedItems.Count; index++)
+		{
+			reorderedItems[index].SortOrder = index + 1;
+		}
+
+		return reorderedItems;
+	}
+
+	private string GetRowClass(int optionId)
+	{
+		var classes = new List<string>();
+		if (_draggedOptionId == optionId)
+		{
+			classes.Add("admin-table__row--dragging");
+		}
+
+		if (_dropTargetOptionId == optionId)
+		{
+			classes.Add("admin-table__row--drop-target");
+		}
+
+		if (_isSavingOrder)
+		{
+			classes.Add("admin-table__row--saving");
+		}
+
+		return string.Join(" ", classes);
+	}
+
+	private void ClearDragState()
+	{
+		_draggedOptionId = null;
+		_dropTargetOptionId = null;
+	}
+
+	private static QuestionOptionListItem CloneItem(QuestionOptionListItem item)
+	{
+		return new QuestionOptionListItem
+		{
+			Id = item.Id,
+			SurveyQuestionId = item.SurveyQuestionId,
+			QuestionPrompt = item.QuestionPrompt,
+			Label = item.Label,
+			SortOrder = item.SortOrder,
+			IsLocked = item.IsLocked
 		};
-		if (SurveySectionId.HasValue)
-		{
-			queryParts.Add($"surveySectionId={SurveySectionId.Value}");
-		}
-		if (SurveyVersionId.HasValue)
-		{
-			queryParts.Add($"surveyVersionId={SurveyVersionId.Value}");
-		}
-		if (SurveyDefinitionId.HasValue)
-		{
-			queryParts.Add($"surveyDefinitionId={SurveyDefinitionId.Value}");
-		}
-		if (!string.IsNullOrWhiteSpace(sort))
-		{
-			queryParts.Add($"sort={Uri.EscapeDataString(sort)}");
-		}
-
-		return $"/app/options?{string.Join("&", queryParts)}";
 	}
 }

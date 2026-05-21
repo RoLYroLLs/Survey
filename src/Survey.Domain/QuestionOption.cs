@@ -30,4 +30,9 @@ public class QuestionOption : ITenantOwned
 		Label = trimmed.Length > 200 ? trimmed[..200] : trimmed;
 		SortOrder = sortOrder < 0 ? 0 : sortOrder;
 	}
+
+	public void SetSortOrder(int sortOrder)
+	{
+		SortOrder = sortOrder < 0 ? 0 : sortOrder;
+	}
 }

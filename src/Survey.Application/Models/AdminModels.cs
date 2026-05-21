@@ -88,7 +88,7 @@ public class SurveySectionEditModel
 	[StringLength(1000)]
 	public string? Description { get; set; }
 
-	[Range(0, 9999)]
+	[Range(1, 9999)]
 	public int SortOrder { get; set; }
 
 	public bool IsLocked { get; set; }
@@ -130,7 +130,7 @@ public class SurveyQuestionEditModel
 
 	public bool IsRequired { get; set; } = true;
 
-	[Range(0, 9999)]
+	[Range(1, 9999)]
 	public int SortOrder { get; set; }
 
 	public bool IsLocked { get; set; }
@@ -162,7 +162,7 @@ public class QuestionOptionEditModel
 	[StringLength(200)]
 	public string Label { get; set; } = string.Empty;
 
-	[Range(0, 9999)]
+	[Range(1, 9999)]
 	public int SortOrder { get; set; }
 
 	public bool IsLocked { get; set; }

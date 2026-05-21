@@ -487,6 +487,7 @@ public sealed partial class SurveyApplicationService(
 			{
 				SurveyDefinitionId = versionContext?.SurveyDefinitionId ?? 0,
 				SurveyVersionId = selectedVersionId,
+				SortOrder = selectedVersionId > 0 ? await GetNextSectionSortOrderAsync(selectedVersionId, cancellationToken) : 1,
 				IsLocked = versionContext?.Assignments.Any() == true,
 				VersionName = versionContext?.DisplayName ?? string.Empty,
 				SurveyVersionOptions = versionOptions
@@ -535,11 +536,63 @@ public sealed partial class SurveyApplicationService(
 		}
 
 		await EnsureVersionEditableAsync(model.SurveyVersionId, cancellationToken);
-		var entity = new SurveySection(model.SurveyVersionId, model.Title, model.Description, model.SortOrder);
+		var sections = await _dbContext.SurveySections
+			.Where(section => section.SurveyVersionId == model.SurveyVersionId)
+			.OrderBy(section => section.SortOrder)
+			.ThenBy(section => section.Id)
+			.ToListAsync(cancellationToken);
+		var sortOrder = NormalizeInsertSortOrder(model.SortOrder, sections.Count);
+		ShiftItemsForInsert(sections, sortOrder, static (section, updatedSortOrder) => section.SetSortOrder(updatedSortOrder));
+		var entity = new SurveySection(model.SurveyVersionId, model.Title, model.Description, sortOrder);
 		_dbContext.SurveySections.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
 		await AuditTenantEntityChangeAsync("tenant.survey-section.created", nameof(SurveySection), entity.Id, $"Survey section '{entity.Title}' was created.", cancellationToken);
 		return entity.Id;
+	}
+
+	public async Task ReorderSurveySectionsAsync(int surveyVersionId, IReadOnlyList<int> orderedSectionIds, CancellationToken cancellationToken = default)
+	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysEdit, cancellationToken);
+		await EnsureVersionEditableAsync(surveyVersionId, cancellationToken);
+
+		if (orderedSectionIds.Count == 0)
+		{
+			return;
+		}
+
+		var sections = await _dbContext.SurveySections
+			.Where(section => section.SurveyVersionId == surveyVersionId)
+			.OrderBy(section => section.SortOrder)
+			.ThenBy(section => section.Id)
+			.ToListAsync(cancellationToken);
+
+		if (sections.Count != orderedSectionIds.Count)
+		{
+			throw new InvalidOperationException("The section order is out of date. Refresh the page and try again.");
+		}
+
+		var sectionLookup = sections.ToDictionary(section => section.Id);
+		var remainingSectionIds = new HashSet<int>(sectionLookup.Keys);
+		foreach (var sectionId in orderedSectionIds)
+		{
+			if (!remainingSectionIds.Remove(sectionId))
+			{
+				throw new InvalidOperationException("The section order is out of date. Refresh the page and try again.");
+			}
+		}
+
+		for (var index = 0; index < orderedSectionIds.Count; index++)
+		{
+			sectionLookup[orderedSectionIds[index]].SetSortOrder(index + 1);
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			"tenant.survey-section.reordered",
+			nameof(SurveySection),
+			surveyVersionId,
+			$"{orderedSectionIds.Count} survey sections were reordered for version {surveyVersionId}.",
+			cancellationToken);
 	}
 
 	public async Task<PagedResult<SurveyQuestionListItem>> GetSurveyQuestionsAsync(PagedQuery request, int surveySectionId, CancellationToken cancellationToken = default)
@@ -602,6 +655,7 @@ public sealed partial class SurveyApplicationService(
 				SurveyDefinitionId = sectionContext?.SurveyVersion.SurveyDefinitionId ?? 0,
 				SurveyVersionId = sectionContext?.SurveyVersionId ?? 0,
 				SurveySectionId = selectedSectionId,
+				SortOrder = selectedSectionId > 0 ? await GetNextQuestionSortOrderAsync(selectedSectionId, cancellationToken) : 1,
 				IsLocked = sectionContext?.SurveyVersion.Assignments.Any() == true,
 				SupportsOptions = SupportsOptions(SurveyQuestionType.YesNo),
 				SurveySectionOptions = sectionOptions
@@ -654,11 +708,74 @@ public sealed partial class SurveyApplicationService(
 
 		var parentVersionId = await GetVersionIdForSectionAsync(model.SurveySectionId, cancellationToken);
 		await EnsureVersionEditableAsync(parentVersionId, cancellationToken);
-		var entity = new SurveyQuestion(model.SurveySectionId, model.Prompt, model.HelpText, model.Type, model.IsRequired, model.SortOrder);
+		var questions = await _dbContext.SurveyQuestions
+			.Where(question => question.SurveySectionId == model.SurveySectionId)
+			.OrderBy(question => question.SortOrder)
+			.ThenBy(question => question.Id)
+			.ToListAsync(cancellationToken);
+		var sortOrder = NormalizeInsertSortOrder(model.SortOrder, questions.Count);
+		ShiftItemsForInsert(questions, sortOrder, static (question, updatedSortOrder) => question.SetSortOrder(updatedSortOrder));
+		var entity = new SurveyQuestion(model.SurveySectionId, model.Prompt, model.HelpText, model.Type, model.IsRequired, sortOrder);
 		_dbContext.SurveyQuestions.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
 		await AuditTenantEntityChangeAsync("tenant.survey-question.created", nameof(SurveyQuestion), entity.Id, $"Survey question '{TrimLabel(entity.Prompt, 80)}' was created.", cancellationToken);
 		return entity.Id;
+	}
+
+	public async Task ReorderSurveyQuestionsAsync(int surveySectionId, IReadOnlyList<int> orderedQuestionIds, CancellationToken cancellationToken = default)
+	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysEdit, cancellationToken);
+
+		if (orderedQuestionIds.Count == 0)
+		{
+			return;
+		}
+
+		var sectionContext = await _dbContext.SurveySections
+			.AsNoTracking()
+			.Where(section => section.Id == surveySectionId)
+			.Select(section => new
+			{
+				section.Id,
+				section.SurveyVersionId
+			})
+			.FirstOrDefaultAsync(cancellationToken)
+			?? throw new InvalidOperationException("The requested section was not found.");
+		await EnsureVersionEditableAsync(sectionContext.SurveyVersionId, cancellationToken);
+
+		var questions = await _dbContext.SurveyQuestions
+			.Where(question => question.SurveySectionId == surveySectionId)
+			.OrderBy(question => question.SortOrder)
+			.ThenBy(question => question.Id)
+			.ToListAsync(cancellationToken);
+
+		if (questions.Count != orderedQuestionIds.Count)
+		{
+			throw new InvalidOperationException("The question order is out of date. Refresh the page and try again.");
+		}
+
+		var questionLookup = questions.ToDictionary(question => question.Id);
+		var remainingQuestionIds = new HashSet<int>(questionLookup.Keys);
+		foreach (var questionId in orderedQuestionIds)
+		{
+			if (!remainingQuestionIds.Remove(questionId))
+			{
+				throw new InvalidOperationException("The question order is out of date. Refresh the page and try again.");
+			}
+		}
+
+		for (var index = 0; index < orderedQuestionIds.Count; index++)
+		{
+			questionLookup[orderedQuestionIds[index]].SetSortOrder(index + 1);
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			"tenant.survey-question.reordered",
+			nameof(SurveyQuestion),
+			surveySectionId,
+			$"{orderedQuestionIds.Count} survey questions were reordered for section {surveySectionId}.",
+			cancellationToken);
 	}
 
 	public async Task<PagedResult<QuestionOptionListItem>> GetQuestionOptionsAsync(PagedQuery request, int surveyQuestionId, CancellationToken cancellationToken = default)
@@ -732,6 +849,7 @@ public sealed partial class SurveyApplicationService(
 				SurveyVersionId = questionContext?.SurveySection.SurveyVersionId ?? 0,
 				SurveySectionId = questionContext?.SurveySectionId ?? 0,
 				SurveyQuestionId = selectedQuestionId > 0 ? selectedQuestionId : questionOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0),
+				SortOrder = selectedQuestionId > 0 ? await GetNextOptionSortOrderAsync(selectedQuestionId, cancellationToken) : 1,
 				QuestionPrompt = questionContext?.Prompt ?? string.Empty,
 				QuestionType = questionContext?.Type ?? SurveyQuestionType.YesNo,
 				SupportsOptions = questionContext is not null && SupportsOptions(questionContext.Type),
@@ -797,11 +915,79 @@ public sealed partial class SurveyApplicationService(
 			return option.Id;
 		}
 
-		var entity = new QuestionOption(model.SurveyQuestionId, model.Label, model.SortOrder);
+		var options = await _dbContext.QuestionOptions
+			.Where(option => option.SurveyQuestionId == model.SurveyQuestionId)
+			.OrderBy(option => option.SortOrder)
+			.ThenBy(option => option.Id)
+			.ToListAsync(cancellationToken);
+		var sortOrder = NormalizeInsertSortOrder(model.SortOrder, options.Count);
+		ShiftItemsForInsert(options, sortOrder, static (option, updatedSortOrder) => option.SetSortOrder(updatedSortOrder));
+		var entity = new QuestionOption(model.SurveyQuestionId, model.Label, sortOrder);
 		_dbContext.QuestionOptions.Add(entity);
 		await _dbContext.SaveChangesAsync(cancellationToken);
 		await AuditTenantEntityChangeAsync("tenant.question-option.created", nameof(QuestionOption), entity.Id, $"Question option '{entity.Label}' was created.", cancellationToken);
 		return entity.Id;
+	}
+
+	public async Task ReorderQuestionOptionsAsync(int surveyQuestionId, IReadOnlyList<int> orderedOptionIds, CancellationToken cancellationToken = default)
+	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysEdit, cancellationToken);
+
+		if (orderedOptionIds.Count == 0)
+		{
+			return;
+		}
+
+		var questionContext = await _dbContext.SurveyQuestions
+			.AsNoTracking()
+			.Where(question => question.Id == surveyQuestionId)
+			.Select(question => new
+			{
+				question.Id,
+				question.Type,
+				SurveyVersionId = question.SurveySection.SurveyVersionId
+			})
+			.FirstOrDefaultAsync(cancellationToken)
+			?? throw new InvalidOperationException("The requested question was not found.");
+		await EnsureVersionEditableAsync(questionContext.SurveyVersionId, cancellationToken);
+		if (!SupportsOptions(questionContext.Type))
+		{
+			throw new InvalidOperationException("Options are only available for single-choice and multi-select questions.");
+		}
+
+		var options = await _dbContext.QuestionOptions
+			.Where(option => option.SurveyQuestionId == surveyQuestionId)
+			.OrderBy(option => option.SortOrder)
+			.ThenBy(option => option.Id)
+			.ToListAsync(cancellationToken);
+
+		if (options.Count != orderedOptionIds.Count)
+		{
+			throw new InvalidOperationException("The option order is out of date. Refresh the page and try again.");
+		}
+
+		var optionLookup = options.ToDictionary(option => option.Id);
+		var remainingOptionIds = new HashSet<int>(optionLookup.Keys);
+		foreach (var optionId in orderedOptionIds)
+		{
+			if (!remainingOptionIds.Remove(optionId))
+			{
+				throw new InvalidOperationException("The option order is out of date. Refresh the page and try again.");
+			}
+		}
+
+		for (var index = 0; index < orderedOptionIds.Count; index++)
+		{
+			optionLookup[orderedOptionIds[index]].SetSortOrder(index + 1);
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			"tenant.question-option.reordered",
+			nameof(QuestionOption),
+			surveyQuestionId,
+			$"{orderedOptionIds.Count} question options were reordered for question {surveyQuestionId}.",
+			cancellationToken);
 	}
 
 	public async Task<PagedResult<PersonListItem>> GetPeopleAsync(PagedQuery request, bool archivedOnly = false, CancellationToken cancellationToken = default)
@@ -1894,6 +2080,33 @@ public sealed partial class SurveyApplicationService(
 		return (maxVersion ?? 0) + 1;
 	}
 
+	private async Task<int> GetNextSectionSortOrderAsync(int surveyVersionId, CancellationToken cancellationToken)
+	{
+		var count = await _dbContext.SurveySections
+			.AsNoTracking()
+			.CountAsync(section => section.SurveyVersionId == surveyVersionId, cancellationToken);
+
+		return count + 1;
+	}
+
+	private async Task<int> GetNextQuestionSortOrderAsync(int surveySectionId, CancellationToken cancellationToken)
+	{
+		var count = await _dbContext.SurveyQuestions
+			.AsNoTracking()
+			.CountAsync(question => question.SurveySectionId == surveySectionId, cancellationToken);
+
+		return count + 1;
+	}
+
+	private async Task<int> GetNextOptionSortOrderAsync(int surveyQuestionId, CancellationToken cancellationToken)
+	{
+		var count = await _dbContext.QuestionOptions
+			.AsNoTracking()
+			.CountAsync(option => option.SurveyQuestionId == surveyQuestionId, cancellationToken);
+
+		return count + 1;
+	}
+
 	private async Task EnsureSurveyDefinitionExistsAsync(int surveyDefinitionId, CancellationToken cancellationToken)
 	{
 		var exists = await _dbContext.SurveyDefinitions.AnyAsync(definition => definition.Id == surveyDefinitionId, cancellationToken);
@@ -2024,6 +2237,31 @@ public sealed partial class SurveyApplicationService(
 	private static bool SupportsOptions(SurveyQuestionType questionType)
 	{
 		return questionType is SurveyQuestionType.SingleChoice or SurveyQuestionType.MultiSelect;
+	}
+
+	private static int NormalizeInsertSortOrder(int requestedSortOrder, int existingCount)
+	{
+		if (requestedSortOrder < 1)
+		{
+			return 1;
+		}
+
+		var maxSortOrder = existingCount + 1;
+		return requestedSortOrder > maxSortOrder ? maxSortOrder : requestedSortOrder;
+	}
+
+	private static void ShiftItemsForInsert<T>(IReadOnlyList<T> items, int insertSortOrder, Action<T, int> setSortOrder)
+	{
+		for (var index = 0; index < items.Count; index++)
+		{
+			var targetSortOrder = index + 1;
+			if (targetSortOrder >= insertSortOrder)
+			{
+				targetSortOrder++;
+			}
+
+			setSortOrder(items[index], targetSortOrder);
+		}
 	}
 
 	private static int TryParseInt(string? value)

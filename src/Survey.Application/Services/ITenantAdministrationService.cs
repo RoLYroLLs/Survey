@@ -20,12 +20,15 @@ public interface ITenantAdministrationService
 	Task<PagedResult<SurveySectionListItem>> GetSurveySectionsAsync(PagedQuery request, int surveyVersionId, CancellationToken cancellationToken = default);
 	Task<SurveySectionEditModel> GetSurveySectionAsync(int? id, int? surveyVersionId, CancellationToken cancellationToken = default);
 	Task<int> SaveSurveySectionAsync(SurveySectionEditModel model, CancellationToken cancellationToken = default);
+	Task ReorderSurveySectionsAsync(int surveyVersionId, IReadOnlyList<int> orderedSectionIds, CancellationToken cancellationToken = default);
 	Task<PagedResult<SurveyQuestionListItem>> GetSurveyQuestionsAsync(PagedQuery request, int surveySectionId, CancellationToken cancellationToken = default);
 	Task<SurveyQuestionEditModel> GetSurveyQuestionAsync(int? id, int? surveySectionId, CancellationToken cancellationToken = default);
 	Task<int> SaveSurveyQuestionAsync(SurveyQuestionEditModel model, CancellationToken cancellationToken = default);
+	Task ReorderSurveyQuestionsAsync(int surveySectionId, IReadOnlyList<int> orderedQuestionIds, CancellationToken cancellationToken = default);
 	Task<PagedResult<QuestionOptionListItem>> GetQuestionOptionsAsync(PagedQuery request, int surveyQuestionId, CancellationToken cancellationToken = default);
 	Task<QuestionOptionEditModel> GetQuestionOptionAsync(int? id, int? surveyQuestionId, CancellationToken cancellationToken = default);
 	Task<int> SaveQuestionOptionAsync(QuestionOptionEditModel model, CancellationToken cancellationToken = default);
+	Task ReorderQuestionOptionsAsync(int surveyQuestionId, IReadOnlyList<int> orderedOptionIds, CancellationToken cancellationToken = default);
 	Task<PagedResult<AreaListItem>> GetAreasAsync(PagedQuery request, int? countyId = null, CancellationToken cancellationToken = default);
 	Task<AreaEditModel> GetAreaAsync(int? id, CancellationToken cancellationToken = default);
 	Task<int> SaveAreaAsync(AreaEditModel model, CancellationToken cancellationToken = default);
