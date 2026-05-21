@@ -364,7 +364,7 @@ public sealed class BackgroundOperationsService(
 				{
 					StageKey = stage.StageKey,
 					StageLabel = string.IsNullOrWhiteSpace(update.StageLabel) ? stage.StageLabel : update.StageLabel,
-					ActivityMessage = update.IsComplete ? string.Empty : update.ActivityMessage ?? string.Empty,
+					ActivityMessage = string.IsNullOrWhiteSpace(update.ActivityMessage) ? stage.ActivityMessage : update.ActivityMessage,
 					Processed = update.Processed,
 					Total = update.Total,
 					IsStarted = true,
@@ -379,7 +379,7 @@ public sealed class BackgroundOperationsService(
 			{
 				StageKey = update.StageKey,
 				StageLabel = string.IsNullOrWhiteSpace(update.StageLabel) ? update.StageKey : update.StageLabel,
-				ActivityMessage = update.IsComplete ? string.Empty : update.ActivityMessage ?? string.Empty,
+				ActivityMessage = update.ActivityMessage ?? string.Empty,
 				Processed = update.Processed,
 				Total = update.Total,
 				IsStarted = true,
@@ -708,7 +708,7 @@ public sealed class BackgroundOperationsService(
 		{
 			StageKey = stage.StageKey,
 			StageLabel = stage.StageLabel,
-			ActivityMessage = string.Empty,
+			ActivityMessage = stage.ActivityMessage,
 			Processed = stage.Total > 0 ? stage.Total : Math.Max(stage.Processed, 1),
 			Total = stage.Total > 0 ? stage.Total : Math.Max(stage.Processed, 1),
 			IsStarted = true,

@@ -1,0 +1,23 @@
+@page "/admin/system/errors/access-denied"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+
+<PageTitle>Access Denied Preview</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">System Error</p>
+			<h1>Access Denied Preview</h1>
+			<p>This is the current authorization failure treatment for users who reach a resource they are not allowed to open.</p>
+		</div>
+	</div>
+
+	<div class="system-preview-stage">
+		<div class="form-card narrow-card">
+			<div class="page-stack">
+				<h1 class="text-danger">Access Denied</h1>
+				<p class="text-danger">You do not have access to this resource.</p>
+			</div>
+		</div>
+	</div>
+</div>

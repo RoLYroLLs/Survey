@@ -1,0 +1,23 @@
+@page "/admin/system/errors/lockout"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+
+<PageTitle>Lockout Preview</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">System Error</p>
+			<h1>Lockout Preview</h1>
+			<p>This is the account lockout message shown after repeated failed sign-in attempts.</p>
+		</div>
+	</div>
+
+	<div class="system-preview-stage">
+		<div class="form-card narrow-card">
+			<div class="page-stack">
+				<h1 class="text-danger">Locked Out</h1>
+				<p class="text-danger" role="alert">This account has been locked out. Please try again later.</p>
+			</div>
+		</div>
+	</div>
+</div>

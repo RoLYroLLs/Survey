@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Survey.Application.Models;
 using Survey.Application.Services;
 using Survey.Domain;
@@ -14,15 +15,13 @@ namespace Survey.Infrastructure.Services;
 public sealed class TenantContextAccessor(
 	AuthenticationStateProvider authenticationStateProvider,
 	IHttpContextAccessor httpContextAccessor,
-	UserManager<ApplicationUser> userManager,
-	SurveyDbContext dbContext,
-	TenantExecutionContext tenantExecutionContext) : ITenantContextAccessor
+	TenantExecutionContext tenantExecutionContext,
+	IServiceScopeFactory serviceScopeFactory) : ITenantContextAccessor
 {
 	private readonly AuthenticationStateProvider _authenticationStateProvider = authenticationStateProvider;
 	private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
-	private readonly UserManager<ApplicationUser> _userManager = userManager;
-	private readonly SurveyDbContext _dbContext = dbContext;
 	private readonly TenantExecutionContext _tenantExecutionContext = tenantExecutionContext;
+	private readonly IServiceScopeFactory _serviceScopeFactory = serviceScopeFactory;
 
 	public async Task<CurrentAccessContext> GetCurrentAsync(CancellationToken cancellationToken = default)
 	{
@@ -33,14 +32,18 @@ public sealed class TenantContextAccessor(
 			return new CurrentAccessContext();
 		}
 
-		var user = await _userManager.GetUserAsync(principal);
+		using var scope = _serviceScopeFactory.CreateScope();
+		var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+		var dbContext = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+
+		var user = await userManager.GetUserAsync(principal);
 		if (user is null)
 		{
 			_tenantExecutionContext.Clear();
 			return new CurrentAccessContext();
 		}
 
-		var memberships = await _dbContext.TenantMemberships
+		var memberships = await dbContext.TenantMemberships
 			.AsNoTracking()
 			.Include(membership => membership.Tenant)
 			.Include(membership => membership.PermissionOverrides)
@@ -55,15 +58,15 @@ public sealed class TenantContextAccessor(
 			if (enabledMemberships.Count == 1)
 			{
 				activeMembership = enabledMemberships[0];
-				await UpdateActiveMembershipAsync(user, activeMembership.Id);
+				await UpdateActiveMembershipAsync(userManager, user, activeMembership.Id);
 			}
 			else if (user.ActiveTenantMembershipId.HasValue)
 			{
-				await UpdateActiveMembershipAsync(user, null);
+				await UpdateActiveMembershipAsync(userManager, user, null);
 			}
 		}
 
-		var platformPermissions = await ResolvePlatformPermissionsAsync(user, cancellationToken);
+		var platformPermissions = await ResolvePlatformPermissionsAsync(dbContext, user, cancellationToken);
 		if (activeMembership is null)
 		{
 			_tenantExecutionContext.Clear();
@@ -106,13 +109,17 @@ public sealed class TenantContextAccessor(
 			return [];
 		}
 
-		var user = await _userManager.GetUserAsync(principal);
+		using var scope = _serviceScopeFactory.CreateScope();
+		var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+		var dbContext = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+
+		var user = await userManager.GetUserAsync(principal);
 		if (user is null)
 		{
 			return [];
 		}
 
-		var memberships = await _dbContext.TenantMemberships
+		var memberships = await dbContext.TenantMemberships
 			.AsNoTracking()
 			.Include(membership => membership.Tenant)
 			.Where(membership => membership.UserId == user.Id)
@@ -127,7 +134,7 @@ public sealed class TenantContextAccessor(
 			.Select(membership => membership.TenantId)
 			.Distinct()
 			.ToArray();
-		var ownerMemberships = await _dbContext.TenantMemberships
+		var ownerMemberships = await dbContext.TenantMemberships
 			.AsNoTracking()
 			.Where(membership => tenantIds.Contains(membership.TenantId) && membership.Role == TenantRole.Owner)
 			.Select(membership => new
@@ -140,7 +147,7 @@ public sealed class TenantContextAccessor(
 			.Select(membership => membership.UserId)
 			.Distinct(StringComparer.Ordinal)
 			.ToArray();
-		var ownerLookup = await _userManager.Users
+		var ownerLookup = await userManager.Users
 			.AsNoTracking()
 			.Where(item => ownerUserIds.Contains(item.Id))
 			.ToDictionaryAsync(
@@ -223,14 +230,18 @@ public sealed class TenantContextAccessor(
 			throw new UnauthorizedAccessException("Authentication is required.");
 		}
 
-		var user = await _userManager.GetUserAsync(principal)
+		using var scope = _serviceScopeFactory.CreateScope();
+		var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+		var dbContext = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
+
+		var user = await userManager.GetUserAsync(principal)
 			?? throw new UnauthorizedAccessException("The current user was not found.");
-		var membership = await _dbContext.TenantMemberships
+		var membership = await dbContext.TenantMemberships
 			.AsNoTracking()
 			.FirstOrDefaultAsync(item => item.Id == membershipId && item.UserId == user.Id && item.IsEnabled, cancellationToken)
 			?? throw new UnauthorizedAccessException("The requested tenant membership was not found.");
 
-		await UpdateActiveMembershipAsync(user, membership.Id);
+		await UpdateActiveMembershipAsync(userManager, user, membership.Id);
 		_tenantExecutionContext.UseTenant(membership.TenantId);
 	}
 
@@ -254,7 +265,7 @@ public sealed class TenantContextAccessor(
 		}
 	}
 
-	private async Task UpdateActiveMembershipAsync(ApplicationUser user, int? membershipId)
+	private static async Task UpdateActiveMembershipAsync(UserManager<ApplicationUser> userManager, ApplicationUser user, int? membershipId)
 	{
 		if (user.ActiveTenantMembershipId == membershipId)
 		{
@@ -262,10 +273,10 @@ public sealed class TenantContextAccessor(
 		}
 
 		user.ActiveTenantMembershipId = membershipId;
-		await _userManager.UpdateAsync(user);
+		await userManager.UpdateAsync(user);
 	}
 
-	private async Task<IReadOnlySet<string>> ResolvePlatformPermissionsAsync(ApplicationUser user, CancellationToken cancellationToken)
+	private static async Task<IReadOnlySet<string>> ResolvePlatformPermissionsAsync(SurveyDbContext dbContext, ApplicationUser user, CancellationToken cancellationToken)
 	{
 		if (!user.IsPlatformUserEnabled)
 		{
@@ -277,7 +288,7 @@ public sealed class TenantContextAccessor(
 			return PermissionDefaults.GetPlatformAdminPermissions();
 		}
 
-		return await _dbContext.PlatformUserPermissions
+		return await dbContext.PlatformUserPermissions
 			.AsNoTracking()
 			.Where(permission => permission.UserId == user.Id)
 			.Select(permission => permission.PermissionKey)

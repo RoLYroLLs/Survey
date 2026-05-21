@@ -1,0 +1,57 @@
+@page "/admin/system/errors"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+
+<PageTitle>Error Catalog</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">System</p>
+			<h1>Error Catalog</h1>
+			<p>Choose a preview to see exactly how that error state will look to a front-end user.</p>
+		</div>
+	</div>
+
+	<div class="card-grid">
+		<section class="content-card">
+			<h2>Global Error</h2>
+			<p>Used by the platform-wide exception handler when a request fails before the page can complete.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/global">Preview</a>
+		</section>
+		<section class="content-card">
+			<h2>Setup Error</h2>
+			<p>Centered setup-style card for failures that need to stay inside the focused onboarding experience.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/setup">Preview</a>
+		</section>
+		<section class="content-card">
+			<h2>Form Error</h2>
+			<p>Inline validation and save failure treatment inside a standard narrow form card.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/form">Preview</a>
+		</section>
+		<section class="content-card">
+			<h2>Not Found</h2>
+			<p>Friendly missing-page experience for broken or expired links.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/not-found">Preview</a>
+		</section>
+		<section class="content-card">
+			<h2>Access Denied</h2>
+			<p>Shown when a signed-in user reaches a route they are not allowed to access.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/access-denied">Preview</a>
+		</section>
+		<section class="content-card">
+			<h2>Lockout</h2>
+			<p>Account security state shown after too many failed sign-in attempts.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/lockout">Preview</a>
+		</section>
+		<section class="content-card">
+			<h2>Invalid User</h2>
+			<p>Neutral account error state for user-resolution problems.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/invalid-user">Preview</a>
+		</section>
+		<section class="content-card">
+			<h2>Invalid Password Reset</h2>
+			<p>Password reset link failure shown with minimal exposed detail.</p>
+			<a class="btn btn-outline-primary" href="/admin/system/errors/invalid-password-reset">Preview</a>
+		</section>
+	</div>
+</div>

@@ -7,6 +7,13 @@
 	<nav class="nav-shell__links">
 		@if (IsAccountManageSection)
 		{
+			@if (CanSeeBackToTenant)
+			{
+				<a class="nav-shell__back-link nav-shell__back-link--spaced" href="app">
+					<span class="nav-shell__icon"><OutlineIcon Name="back" CssClass="nav-shell__icon-svg" /></span>
+					<span>Back to Tenant</span>
+				</a>
+			}
 			<p class="nav-shell__caption">Account</p>
 			<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="Account/Manage" Match="NavLinkMatch.All">
 				<span class="nav-shell__icon"><OutlineIcon Name="settings" CssClass="nav-shell__icon-svg" /></span>
@@ -39,98 +46,159 @@
 				<span class="nav-shell__icon"><OutlineIcon Name="profile" CssClass="nav-shell__icon-svg" /></span>
 				<span>Personal data</span>
 			</NavLink>
-			@if (CanSeeBackToTenant)
-			{
-				<a class="nav-shell__back-link" href="app">
-					<span class="nav-shell__icon"><OutlineIcon Name="back" CssClass="nav-shell__icon-svg" /></span>
-					<span>Back to Tenant</span>
-				</a>
-			}
 		}
 		else if (IsPlatformSection)
 		{
-			@if (CanSeePlatformSection)
+			@if (IsPlatformSystemSection)
 			{
-				<p class="nav-shell__caption">Platform</p>
+				<a class="nav-shell__back-link nav-shell__back-link--spaced" href="admin">
+					<span class="nav-shell__icon"><OutlineIcon Name="back" CssClass="nav-shell__icon-svg" /></span>
+					<span>Back to Platform Admin</span>
+				</a>
+				<p class="nav-shell__caption">System</p>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system" Match="NavLinkMatch.All">
+					<span class="nav-shell__icon"><OutlineIcon Name="settings" CssClass="nav-shell__icon-svg" /></span>
+					<span>Home</span>
+				</NavLink>
+				<p class="nav-shell__caption">Error</p>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors" Match="NavLinkMatch.All">
+					<span class="nav-shell__icon"><OutlineIcon Name="audit" CssClass="nav-shell__icon-svg" /></span>
+					<span>Catalog</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/global">
+					<span class="nav-shell__icon"><OutlineIcon Name="platform" CssClass="nav-shell__icon-svg" /></span>
+					<span>Global Error</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/setup">
+					<span class="nav-shell__icon"><OutlineIcon Name="settings" CssClass="nav-shell__icon-svg" /></span>
+					<span>Setup Error</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/form">
+					<span class="nav-shell__icon"><OutlineIcon Name="profile" CssClass="nav-shell__icon-svg" /></span>
+					<span>Form Error</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/not-found">
+					<span class="nav-shell__icon"><OutlineIcon Name="search" CssClass="nav-shell__icon-svg" /></span>
+					<span>Not Found</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/access-denied">
+					<span class="nav-shell__icon"><OutlineIcon Name="security" CssClass="nav-shell__icon-svg" /></span>
+					<span>Access Denied</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/lockout">
+					<span class="nav-shell__icon"><OutlineIcon Name="password" CssClass="nav-shell__icon-svg" /></span>
+					<span>Lockout</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/invalid-user">
+					<span class="nav-shell__icon"><OutlineIcon Name="users" CssClass="nav-shell__icon-svg" /></span>
+					<span>Invalid User</span>
+				</NavLink>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system/errors/invalid-password-reset">
+					<span class="nav-shell__icon"><OutlineIcon Name="email" CssClass="nav-shell__icon-svg" /></span>
+					<span>Invalid Password Reset</span>
+				</NavLink>
 			}
-			@if (CanSeePlatformHome)
+			else
 			{
+				@if (CanSeeBackToTenant)
+				{
+					<a class="nav-shell__back-link nav-shell__back-link--spaced" href="app">
+						<span class="nav-shell__icon"><OutlineIcon Name="back" CssClass="nav-shell__icon-svg" /></span>
+						<span>Back to Tenant</span>
+					</a>
+				}
+				@if (CanSeePlatformSection)
+				{
+					<p class="nav-shell__caption">Platform</p>
+				}
+				@if (CanSeePlatformHome)
+				{
 					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin" Match="NavLinkMatch.All">
 						<span class="nav-shell__icon"><OutlineIcon Name="home" CssClass="nav-shell__icon-svg" /></span>
 						<span>Home</span>
 					</NavLink>
-			}
-			@if (CanSeePlatformUsers)
-			{
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/users">
-					<span class="nav-shell__icon"><OutlineIcon Name="users" CssClass="nav-shell__icon-svg" /></span>
-					<span>Users</span>
-				</NavLink>
-			}
-			@if (CanSeePlatformTenants)
-			{
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/tenants">
-					<span class="nav-shell__icon"><OutlineIcon Name="tenant" CssClass="nav-shell__icon-svg" /></span>
-					<span>Tenants</span>
-				</NavLink>
-			}
-			@if (CanSeePlatformAudit)
-			{
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/audit">
-					<span class="nav-shell__icon"><OutlineIcon Name="audit" CssClass="nav-shell__icon-svg" /></span>
-					<span>Audit</span>
-				</NavLink>
-			}
-			@if (CanSeePlatformJobs)
-			{
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/jobs">
-					<span class="nav-shell__icon"><OutlineIcon Name="platform" CssClass="nav-shell__icon-svg" /></span>
-					<span>Jobs</span>
-				</NavLink>
-			}
-			@if (CanSeePlatformEmails)
-			{
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/emails">
-					<span class="nav-shell__icon"><OutlineIcon Name="email" CssClass="nav-shell__icon-svg" /></span>
-					<span>Emails</span>
-				</NavLink>
-			}
-			@if (CanSeePlatformThemes)
-			{
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/themes">
-					<span class="nav-shell__icon"><OutlineIcon Name="theme" CssClass="nav-shell__icon-svg" /></span>
-					<span>Themes</span>
-				</NavLink>
-			}
-			@if (CanSeePlatformGeography)
-			{
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/countries">
-					<span class="nav-shell__icon"><OutlineIcon Name="country" CssClass="nav-shell__icon-svg" /></span>
-					<span>Countries</span>
-				</NavLink>
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/state-provinces">
-					<span class="nav-shell__icon"><OutlineIcon Name="state" CssClass="nav-shell__icon-svg" /></span>
-					<span>States / Territories</span>
-				</NavLink>
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/counties">
-					<span class="nav-shell__icon"><OutlineIcon Name="county" CssClass="nav-shell__icon-svg" /></span>
-					<span>Counties</span>
-				</NavLink>
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/addresses">
-					<span class="nav-shell__icon"><OutlineIcon Name="address" CssClass="nav-shell__icon-svg" /></span>
-					<span>Addresses</span>
-				</NavLink>
-				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/zip-mappings">
-					<span class="nav-shell__icon"><OutlineIcon Name="zip" CssClass="nav-shell__icon-svg" /></span>
-					<span>ZIP Mappings</span>
-				</NavLink>
-			}
-			@if (CanSeeBackToTenant)
-			{
-				<a class="nav-shell__back-link" href="app">
-					<span class="nav-shell__icon"><OutlineIcon Name="back" CssClass="nav-shell__icon-svg" /></span>
-					<span>Back to Tenant</span>
-				</a>
+				}
+				@if (CanSeePlatformUsers)
+				{
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/users">
+						<span class="nav-shell__icon"><OutlineIcon Name="users" CssClass="nav-shell__icon-svg" /></span>
+						<span>Users</span>
+					</NavLink>
+				}
+				@if (CanSeePlatformTenants)
+				{
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/tenants">
+						<span class="nav-shell__icon"><OutlineIcon Name="tenant" CssClass="nav-shell__icon-svg" /></span>
+						<span>Tenants</span>
+					</NavLink>
+				}
+
+				@if (CanSeePlatformJobs || CanSeePlatformEmails)
+				{
+					<p class="nav-shell__caption">Operations</p>
+				}
+				@if (CanSeePlatformJobs)
+				{
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/jobs">
+						<span class="nav-shell__icon"><OutlineIcon Name="platform" CssClass="nav-shell__icon-svg" /></span>
+						<span>Jobs</span>
+					</NavLink>
+				}
+				@if (CanSeePlatformEmails)
+				{
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/emails">
+						<span class="nav-shell__icon"><OutlineIcon Name="email" CssClass="nav-shell__icon-svg" /></span>
+						<span>Emails</span>
+					</NavLink>
+				}
+
+				@if (CanSeePlatformAudit)
+				{
+					<p class="nav-shell__caption">Governance</p>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/audit">
+						<span class="nav-shell__icon"><OutlineIcon Name="audit" CssClass="nav-shell__icon-svg" /></span>
+						<span>Audit</span>
+					</NavLink>
+				}
+
+				@if (CanSeePlatformThemes)
+				{
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/themes">
+						<span class="nav-shell__icon"><OutlineIcon Name="theme" CssClass="nav-shell__icon-svg" /></span>
+						<span>Themes</span>
+					</NavLink>
+				}
+				@if (CanSeePlatformGeography)
+				{
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/countries">
+						<span class="nav-shell__icon"><OutlineIcon Name="country" CssClass="nav-shell__icon-svg" /></span>
+						<span>Countries</span>
+					</NavLink>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/state-provinces">
+						<span class="nav-shell__icon"><OutlineIcon Name="state" CssClass="nav-shell__icon-svg" /></span>
+						<span>States / Territories</span>
+					</NavLink>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/counties">
+						<span class="nav-shell__icon"><OutlineIcon Name="county" CssClass="nav-shell__icon-svg" /></span>
+						<span>Counties</span>
+					</NavLink>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/addresses">
+						<span class="nav-shell__icon"><OutlineIcon Name="address" CssClass="nav-shell__icon-svg" /></span>
+						<span>Addresses</span>
+					</NavLink>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/zip-mappings">
+						<span class="nav-shell__icon"><OutlineIcon Name="zip" CssClass="nav-shell__icon-svg" /></span>
+						<span>ZIP Mappings</span>
+					</NavLink>
+				}
+				@if (CanSeePlatformSystem)
+				{
+					<p class="nav-shell__caption">System</p>
+					<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin/system">
+						<span class="nav-shell__icon"><OutlineIcon Name="settings" CssClass="nav-shell__icon-svg" /></span>
+						<span>Settings</span>
+					</NavLink>
+				}
 			}
 		}
 		else
@@ -247,6 +315,15 @@
 					<span>Theme</span>
 				</NavLink>
 			}
+
+			@if (CanSeeMainPlatformSection)
+			{
+				<p class="nav-shell__caption">Platform</p>
+				<NavLink class="nav-shell__link" ActiveClass="nav-shell__link--active" href="admin">
+					<span class="nav-shell__icon"><OutlineIcon Name="settings" CssClass="nav-shell__icon-svg" /></span>
+					<span>Settings</span>
+				</NavLink>
+			}
 		}
 	</nav>
 
@@ -263,6 +340,9 @@
 	private bool IsPlatformSection =>
 		!string.IsNullOrWhiteSpace(_currentUrl)
 		&& _currentUrl.StartsWith("admin", StringComparison.OrdinalIgnoreCase);
+	private bool IsPlatformSystemSection =>
+		!string.IsNullOrWhiteSpace(_currentUrl)
+		&& _currentUrl.StartsWith("admin/system", StringComparison.OrdinalIgnoreCase);
 
 	private bool IsAccountManageSection =>
 		!string.IsNullOrWhiteSpace(_currentUrl)
@@ -298,9 +378,10 @@
 	private bool CanSeePlatformJobs => HasPlatformPermission(PlatformPermissionKeys.JobsView);
 	private bool CanSeePlatformEmails => HasPlatformPermission(PlatformPermissionKeys.JobsView);
 	private bool CanSeePlatformThemes => HasPlatformPermission(PlatformPermissionKeys.SettingsManage);
+	private bool CanSeePlatformSystem => HasPlatformPermission(PlatformPermissionKeys.SettingsManage);
 	private bool CanSeePlatformGeography => HasPlatformPermission(PlatformPermissionKeys.GeographyView);
 	private bool CanSeeBackToTenant => _accessContext.HasTenantAccess;
-	private bool CanSeePlatformSection => CanSeePlatformHome || CanSeePlatformUsers || CanSeePlatformTenants || CanSeePlatformAudit || CanSeePlatformJobs || CanSeePlatformEmails || CanSeePlatformThemes || CanSeePlatformGeography;
+	private bool CanSeePlatformSection => CanSeePlatformHome || CanSeePlatformUsers || CanSeePlatformTenants || CanSeePlatformAudit || CanSeePlatformJobs || CanSeePlatformEmails || CanSeePlatformThemes || CanSeePlatformSystem || CanSeePlatformGeography;
 
 	private bool CanSeeDashboard => HasTenantPermission(TenantPermissionKeys.DashboardView);
 	private bool CanSeeAssignments => HasTenantPermission(TenantPermissionKeys.AssignmentsView);
@@ -318,6 +399,7 @@
 	private bool CanSeeSurveyOperationsSection => CanSeeAssignments || CanSeePeople || CanSeeResponses;
 	private bool CanSeeSurveyBuilderSection => CanSeeSurveyBuilder;
 	private bool CanSeeReportingSection => CanSeeReports || CanSeeGoals || CanSeeAreas;
+	private bool CanSeeMainPlatformSection => CanSeePlatformSystem;
 	private bool CanSeeAdminSection => CanSeeUsers || CanSeeTenantSettings;
 
 	private bool HasTenantPermission(string permissionKey)

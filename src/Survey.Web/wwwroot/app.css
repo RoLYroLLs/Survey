@@ -236,6 +236,32 @@ h4 {
   width: min(100%, 42rem);
 }
 
+.nav-shell__back-link--spaced {
+  margin-top: 0.75rem;
+}
+
+.system-preview-stage {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at top right, var(--app-primary-soft), transparent 18rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.95), var(--app-warm));
+  border: 1px dashed var(--app-border);
+  border-radius: 0.75rem;
+}
+
+.system-preview-stage--center {
+  min-height: 24rem;
+  place-items: center;
+}
+
+.system-preview-stage > .content-card,
+.system-preview-stage > .form-card,
+.system-preview-stage > .status-card {
+  width: min(100%, 52rem);
+}
+
 .seed-progress-card {
 	max-width: 52rem;
 	height: auto;
@@ -269,6 +295,14 @@ h4 {
 	background: var(--app-card);
 	border: 1px solid var(--app-border);
 	border-radius: 0.5rem;
+}
+
+.seed-progress__row--complete {
+	gap: 0.3rem;
+	padding-top: 0.75rem;
+	padding-bottom: 0.75rem;
+	background: linear-gradient(180deg, var(--app-primary-soft), rgba(255, 255, 255, 0.94));
+	border-color: var(--app-primary-border);
 }
 
 .seed-progress__header {
@@ -322,6 +356,10 @@ h4 {
 .seed-progress__activity {
 	min-height: 1.25rem;
 	font-size: 0.88rem;
+}
+
+.seed-progress__row--complete .seed-progress__activity {
+	min-height: 0;
 }
 
 .seed-activity-log {

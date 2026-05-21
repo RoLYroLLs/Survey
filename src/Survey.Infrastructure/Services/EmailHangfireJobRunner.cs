@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Survey.Application.Models;
 using Survey.Application.Services;
 using Survey.Domain;
@@ -8,11 +9,11 @@ namespace Survey.Infrastructure.Services;
 
 public sealed class EmailHangfireJobRunner(
 	SurveyDbContext dbContext,
-	BackgroundOperationsService backgroundOperationsService,
+	IServiceScopeFactory serviceScopeFactory,
 	IEmailTransport emailTransport)
 {
 	private readonly SurveyDbContext _dbContext = dbContext;
-	private readonly BackgroundOperationsService _backgroundOperationsService = backgroundOperationsService;
+	private readonly IServiceScopeFactory _serviceScopeFactory = serviceScopeFactory;
 	private readonly IEmailTransport _emailTransport = emailTransport;
 
 	public async Task SendOutboundEmailAsync(int outboundEmailId, CancellationToken cancellationToken)
@@ -26,7 +27,8 @@ public sealed class EmailHangfireJobRunner(
 			throw new InvalidOperationException("The outbound email is missing its background operation.");
 		}
 
-		await _backgroundOperationsService.MarkRunningAsync(email.BackgroundOperationId.Value, $"Sending email to '{email.RecipientEmail}'.", cancellationToken);
+		await UseBackgroundOperationsServiceAsync(
+			service => service.MarkRunningAsync(email.BackgroundOperationId.Value, $"Sending email to '{email.RecipientEmail}'.", cancellationToken));
 		email.MarkSending();
 		email.IncrementAttempt();
 		var attempt = new OutboundEmailAttempt(email.Id, email.AttemptCount);
@@ -47,14 +49,23 @@ public sealed class EmailHangfireJobRunner(
 			email.MarkSent(result.ProviderMessageId);
 			attempt.MarkSent(result.ProviderMessageId);
 			await _dbContext.SaveChangesAsync(cancellationToken);
-			await _backgroundOperationsService.CompleteOperationAsync(email.BackgroundOperationId.Value, $"Sent email to '{email.RecipientEmail}'.", cancellationToken);
+			await UseBackgroundOperationsServiceAsync(
+				service => service.CompleteOperationAsync(email.BackgroundOperationId.Value, $"Sent email to '{email.RecipientEmail}'.", cancellationToken));
 			return;
 		}
 
 		email.MarkFailed(result.ErrorMessage, result.ProviderMessageId);
 		attempt.MarkFailed(result.ErrorMessage, result.ProviderMessageId);
 		await _dbContext.SaveChangesAsync(cancellationToken);
-		await _backgroundOperationsService.FailOperationAsync(email.BackgroundOperationId.Value, result.ErrorMessage, cancellationToken);
+		await UseBackgroundOperationsServiceAsync(
+			service => service.FailOperationAsync(email.BackgroundOperationId.Value, result.ErrorMessage, cancellationToken));
 		throw new InvalidOperationException(result.ErrorMessage);
+	}
+
+	private async Task UseBackgroundOperationsServiceAsync(Func<BackgroundOperationsService, Task> action)
+	{
+		using var scope = _serviceScopeFactory.CreateScope();
+		var service = scope.ServiceProvider.GetRequiredService<BackgroundOperationsService>();
+		await action(service);
 	}
 }

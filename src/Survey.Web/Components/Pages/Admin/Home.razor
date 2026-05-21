@@ -75,6 +75,14 @@
 					<p>Manage the global theme library that controls tenant-facing app appearance.</p>
 					<a class="btn btn-outline-primary" href="/admin/themes">Open Themes</a>
 				</section>
+				<section class="content-card">
+					<h2>System</h2>
+					<p>Review internal platform previews and experience diagnostics such as the error catalog.</p>
+					<div class="toolbar">
+						<a class="btn btn-outline-primary" href="/admin/system">Open System</a>
+						<a class="btn btn-outline-primary" href="/admin/system/errors">Open Error Catalog</a>
+					</div>
+				</section>
 			</Authorized>
 		</AuthorizeView>
 		<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyView)">

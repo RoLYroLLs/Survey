@@ -1,0 +1,23 @@
+@page "/admin/system/errors/global"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+
+<PageTitle>Global Error Preview</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">System Error</p>
+			<h1>Global Error Preview</h1>
+			<p>This is the production-safe fallback screen shown when a request fails and the exception is only logged.</p>
+		</div>
+	</div>
+
+	<div class="system-preview-stage system-preview-stage--center">
+		<div class="status-card narrow-card">
+			<p class="eyebrow">Something Went Wrong</p>
+			<h1>We couldn't finish that request.</h1>
+			<p class="mb-3">Please try again in a moment. If the problem continues, contact support.</p>
+			<button class="btn btn-outline-primary" type="button">Return Home</button>
+		</div>
+	</div>
+</div>

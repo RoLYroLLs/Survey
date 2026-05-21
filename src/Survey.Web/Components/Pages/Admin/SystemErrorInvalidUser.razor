@@ -1,0 +1,23 @@
+@page "/admin/system/errors/invalid-user"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+
+<PageTitle>Invalid User Preview</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">System Error</p>
+			<h1>Invalid User Preview</h1>
+			<p>This is the neutral account error treatment used when the app cannot resolve the user tied to an action.</p>
+		</div>
+	</div>
+
+	<div class="system-preview-stage">
+		<div class="form-card narrow-card">
+			<div class="page-stack">
+				<h1>Invalid User</h1>
+				<div class="inline-banner inline-banner--danger">We couldn't validate that account. The problem was logged automatically.</div>
+			</div>
+		</div>
+	</div>
+</div>

@@ -1,0 +1,23 @@
+@page "/admin/system/errors/not-found"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+
+<PageTitle>Not Found Preview</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">System Error</p>
+			<h1>Not Found Preview</h1>
+			<p>This matches the friendly missing-page treatment for broken routes, expired survey links, or stale navigation.</p>
+		</div>
+	</div>
+
+	<div class="system-preview-stage system-preview-stage--center">
+		<div class="content-card narrow-card">
+			<p class="eyebrow">404</p>
+			<h1>That page isn't available.</h1>
+			<p class="mb-3">The link may be out of date, the survey may have expired, or the route simply doesn't exist.</p>
+			<button class="btn btn-outline-primary" type="button">Go Back</button>
+		</div>
+	</div>
+</div>

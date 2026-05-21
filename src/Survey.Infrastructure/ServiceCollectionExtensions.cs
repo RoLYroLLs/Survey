@@ -8,6 +8,7 @@ using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -182,6 +183,11 @@ public static class ServiceCollectionExtensions
 
 		var dbContext = serviceProvider.GetRequiredService<SurveyDbContext>();
 		await dbContext.Database.MigrateAsync(cancellationToken);
+
+		if (databaseProvider == DatabaseOptions.SqlServer && !string.IsNullOrWhiteSpace(connectionString))
+		{
+			await RepairLegacySqlServerSchemaAsync(connectionString, cancellationToken);
+		}
 
 		if (databaseProvider == DatabaseOptions.Sqlite && !string.IsNullOrWhiteSpace(connectionString))
 		{
@@ -698,5 +704,50 @@ public static class ServiceCollectionExtensions
 		await using var command = connection.CreateCommand();
 		command.CommandText = sql;
 		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task RepairLegacySqlServerSchemaAsync(string connectionString, CancellationToken cancellationToken)
+	{
+		await using var connection = new SqlConnection(connectionString);
+		await connection.OpenAsync(cancellationToken);
+
+		await EnsureSqlServerColumnExistsAsync(
+			connection,
+			"dbo",
+			"SiteSettings",
+			"InitialSetupCompletedUtc",
+			"ALTER TABLE [dbo].[SiteSettings] ADD [InitialSetupCompletedUtc] datetimeoffset NULL;",
+			cancellationToken);
+	}
+
+	private static async Task EnsureSqlServerColumnExistsAsync(
+		SqlConnection connection,
+		string schemaName,
+		string tableName,
+		string columnName,
+		string alterSql,
+		CancellationToken cancellationToken)
+	{
+		await using var command = connection.CreateCommand();
+		command.CommandText = """
+			SELECT COUNT(*)
+			FROM INFORMATION_SCHEMA.COLUMNS
+			WHERE TABLE_SCHEMA = @schemaName
+				AND TABLE_NAME = @tableName
+				AND COLUMN_NAME = @columnName;
+			""";
+		command.Parameters.AddWithValue("@schemaName", schemaName);
+		command.Parameters.AddWithValue("@tableName", tableName);
+		command.Parameters.AddWithValue("@columnName", columnName);
+
+		var exists = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+		if (exists)
+		{
+			return;
+		}
+
+		await using var alterCommand = connection.CreateCommand();
+		alterCommand.CommandText = alterSql;
+		await alterCommand.ExecuteNonQueryAsync(cancellationToken);
 	}
 }

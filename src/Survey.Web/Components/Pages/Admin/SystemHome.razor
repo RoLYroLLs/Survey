@@ -1,0 +1,25 @@
+@page "/admin/system"
+@attribute [PlatformAuthorize(PlatformPermissionKeys.SettingsManage)]
+
+<PageTitle>System</PageTitle>
+
+<div class="page-stack">
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Platform</p>
+			<h1>System</h1>
+			<p>Review internal experience previews, starting with the error catalog used for front-end QA.</p>
+		</div>
+	</div>
+
+	<div class="card-grid">
+		<section class="content-card">
+			<h2>Error Catalog</h2>
+			<p>Preview every distinct error treatment used in the app without waiting for a live failure.</p>
+			<div class="toolbar">
+				<a class="btn btn-outline-primary" href="/admin/system/errors">Open Catalog</a>
+				<a class="btn btn-outline-primary" href="/admin/system/errors/global">Preview Global Error</a>
+			</div>
+		</section>
+	</div>
+</div>

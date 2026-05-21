@@ -1,5 +1,5 @@
 @page "/setup/initial-seeding"
-@attribute [Authorize]
+@attribute [AllowAnonymous]
 @implements IAsyncDisposable
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ITenantContextAccessor TenantContextAccessor
@@ -9,6 +9,9 @@
 @inject global::Survey.Infrastructure.Persistence.InitialSeedingProgressService InitialSeedingProgressService
 
 <PageTitle>Initial Seeding</PageTitle>
+<HeadContent>
+	<style>@((MarkupString)_previewThemeCssVariables)</style>
+</HeadContent>
 
 <div class="status-card narrow-card seed-progress-card">
 	<p class="eyebrow">Initial Setup</p>
@@ -137,14 +140,17 @@
 		<div class="seed-progress">
 			@foreach (var stage in _stages)
 			{
-				<div class="seed-progress__row">
+				<div class="seed-progress__row @(stage.IsComplete ? "seed-progress__row--complete" : null)">
 					<div class="seed-progress__header">
 						<span class="seed-progress__label">Seeding @stage.Label: <span class="seed-progress__status @(stage.IsComplete ? "seed-progress__status--done" : null)">@BuildStageStatus(stage)</span></span>
 						<span class="seed-progress__percent">@GetStagePercent(stage)%</span>
 					</div>
-					<div class="seed-progress__bar" aria-hidden="true">
-						<span class="seed-progress__fill" style="width: @($"{GetStagePercent(stage)}%")"></span>
-					</div>
+					@if (!stage.IsComplete)
+					{
+						<div class="seed-progress__bar" aria-hidden="true">
+							<span class="seed-progress__fill" style="width: @($"{GetStagePercent(stage)}%")"></span>
+						</div>
+					}
 					<div class="seed-progress__activity">@BuildStageActivity(stage)</div>
 				</div>
 			}
@@ -165,14 +171,17 @@
 			</div>
 			@foreach (var stage in _stages)
 			{
-				<div class="seed-progress__row">
+				<div class="seed-progress__row @(stage.IsComplete ? "seed-progress__row--complete" : null)">
 					<div class="seed-progress__header">
 						<span class="seed-progress__label">Seeding @stage.Label: <span class="seed-progress__status @(stage.IsComplete ? "seed-progress__status--done" : null)">@BuildStageStatus(stage)</span></span>
 						<span class="seed-progress__percent">@GetStagePercent(stage)%</span>
 					</div>
-					<div class="seed-progress__bar" aria-hidden="true">
-						<span class="seed-progress__fill" style="width: @($"{GetStagePercent(stage)}%")"></span>
-					</div>
+					@if (!stage.IsComplete)
+					{
+						<div class="seed-progress__bar" aria-hidden="true">
+							<span class="seed-progress__fill" style="width: @($"{GetStagePercent(stage)}%")"></span>
+						</div>
+					}
 					<div class="seed-progress__activity">@BuildStageActivity(stage)</div>
 				</div>
 			}
@@ -201,6 +210,7 @@
 		SiteThemePresetCatalog.DefaultPresetKey
 	};
 	private string _defaultThemeKey = SiteThemePresetCatalog.DefaultPresetKey;
+	private string _previewThemeCssVariables = SiteThemePresetCatalog.BuildCssVariablesBlock(SiteThemePresetCatalog.DefaultPresetKey);
 	private readonly List<SeedStageViewModel> _stages = InitialSeedingStages.Ordered
 		.Select(stage => new SeedStageViewModel(stage.Key, stage.Label))
 		.ToList();
@@ -230,6 +240,7 @@
 			EnsurePlaybackTimer();
 		}
 
+		SyncPreviewTheme();
 		_isReady = true;
 	}
 
@@ -321,6 +332,8 @@
 		{
 			_defaultThemeKey = key;
 		}
+
+		SyncPreviewTheme();
 	}
 
 	private Task OnDefaultThemeChanged(ChangeEventArgs args)
@@ -329,6 +342,7 @@
 		if (_selectedThemeKeys.Contains(selectedKey))
 		{
 			_defaultThemeKey = selectedKey;
+			SyncPreviewTheme();
 		}
 
 		return Task.CompletedTask;
@@ -484,7 +498,7 @@
 	private void ApplyJobStatus(InitialSetupJobStatusModel status, bool applyDisplayState = true)
 	{
 		_currentOperationId = status.OperationId;
-		_isComplete = status.IsComplete;
+		_isComplete = status.IsComplete || AreAllStagesComplete(status.Stages);
 		_isSeeding = status.Status is BackgroundOperationStatuses.Queued or BackgroundOperationStatuses.Running;
 		_hasFailedOperation = status.Status == BackgroundOperationStatuses.Failed;
 		_errorMessage = string.IsNullOrWhiteSpace(status.ErrorMessage) ? null : status.ErrorMessage;
@@ -502,6 +516,8 @@
 		{
 			_defaultThemeKey = status.DefaultThemeKey;
 		}
+
+		SyncPreviewTheme();
 
 		if (applyDisplayState)
 		{
@@ -583,7 +599,7 @@
 		stage.Processed = entry.Processed;
 		stage.Total = entry.Total;
 		stage.IsComplete = entry.IsComplete;
-		stage.ActivityMessage = entry.IsComplete ? string.Empty : entry.ActivityMessage ?? string.Empty;
+		stage.ActivityMessage = entry.ActivityMessage ?? string.Empty;
 	}
 
 	private bool TryFinalizeDisplayState()
@@ -648,6 +664,19 @@
 		}
 
 		return "Waiting to begin.";
+	}
+
+	private static bool AreAllStagesComplete(IReadOnlyList<InitialSeedingStageSnapshot> stages)
+	{
+		return stages.Count > 0 && stages.All(stage => stage.IsComplete);
+	}
+
+	private void SyncPreviewTheme()
+	{
+		var previewThemeKey = _selectedThemeKeys.Contains(_defaultThemeKey)
+			? _defaultThemeKey
+			: GetSelectedThemeOptions().FirstOrDefault()?.Key ?? SiteThemePresetCatalog.DefaultPresetKey;
+		_previewThemeCssVariables = SiteThemePresetCatalog.BuildCssVariablesBlock(previewThemeKey);
 	}
 
 	private void ResetStages()

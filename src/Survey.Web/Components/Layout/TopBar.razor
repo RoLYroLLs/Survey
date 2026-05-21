@@ -155,6 +155,15 @@
 
 	private async Task LoadAsync()
 	{
+		if (IsSetupRoute)
+		{
+			_currentUser = null;
+			_accessContext = new CurrentAccessContext();
+			_membershipOptions = Array.Empty<TenantMembershipOption>();
+			_searchText = string.Empty;
+			return;
+		}
+
 		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
 		var principal = authenticationState.User;
 		_currentUser = principal.Identity?.IsAuthenticated == true

@@ -155,7 +155,7 @@ public sealed class InitialSeedingProgressService
 				{
 					StageKey = existing.StageKey,
 					StageLabel = existing.StageLabel,
-					ActivityMessage = string.Empty,
+					ActivityMessage = existing.ActivityMessage,
 					Processed = existing.Total > 0 ? existing.Total : Math.Max(existing.Processed, 1),
 					Total = existing.Total > 0 ? existing.Total : Math.Max(existing.Processed, 1),
 					IsStarted = true,

@@ -1,20 +1,22 @@
+using Microsoft.Extensions.DependencyInjection;
 using Survey.Infrastructure.Persistence;
 
 namespace Survey.Infrastructure.Services;
 
 internal sealed class InitialSetupBackgroundRunner(
 	InitialSetupSeeder initialSetupSeeder,
-	BackgroundOperationsService backgroundOperationsService)
+	IServiceScopeFactory serviceScopeFactory)
 {
 	private readonly InitialSetupSeeder _initialSetupSeeder = initialSetupSeeder;
-	private readonly BackgroundOperationsService _backgroundOperationsService = backgroundOperationsService;
+	private readonly IServiceScopeFactory _serviceScopeFactory = serviceScopeFactory;
 
 	public async Task RunAsync(int operationId, string[] selectedThemeKeys, string defaultThemeKey, bool resetBeforeRun, CancellationToken cancellationToken)
 	{
-		await _backgroundOperationsService.MarkRunningAsync(
-			operationId,
-			resetBeforeRun ? "Restarting initial setup seeding from a clean slate." : "Starting initial setup seeding.",
-			cancellationToken);
+		await UseBackgroundOperationsServiceAsync(
+			service => service.MarkRunningAsync(
+				operationId,
+				resetBeforeRun ? "Restarting initial setup seeding from a clean slate." : "Starting initial setup seeding.",
+				cancellationToken));
 
 		try
 		{
@@ -24,13 +26,23 @@ internal sealed class InitialSetupBackgroundRunner(
 			}
 
 			await _initialSetupSeeder.SeedAsync(selectedThemeKeys, defaultThemeKey, update =>
-				_backgroundOperationsService.ReportInitialSetupProgressAsync(operationId, update, cancellationToken), cancellationToken);
-			await _backgroundOperationsService.CompleteOperationAsync(operationId, "Initial setup completed.", cancellationToken);
+				UseBackgroundOperationsServiceAsync(service =>
+					service.ReportInitialSetupProgressAsync(operationId, update, cancellationToken)), cancellationToken);
+			await UseBackgroundOperationsServiceAsync(
+				service => service.CompleteOperationAsync(operationId, "Initial setup completed.", cancellationToken));
 		}
 		catch (Exception ex)
 		{
-			await _backgroundOperationsService.FailOperationAsync(operationId, ex.Message, cancellationToken);
+			await UseBackgroundOperationsServiceAsync(
+				service => service.FailOperationAsync(operationId, ex.Message, cancellationToken));
 			throw;
 		}
+	}
+
+	private async Task UseBackgroundOperationsServiceAsync(Func<BackgroundOperationsService, Task> action)
+	{
+		using var scope = _serviceScopeFactory.CreateScope();
+		var service = scope.ServiceProvider.GetRequiredService<BackgroundOperationsService>();
+		await action(service);
 	}
 }

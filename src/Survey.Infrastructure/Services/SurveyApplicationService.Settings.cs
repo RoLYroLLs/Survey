@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Survey.Application.Models;
 using Survey.Domain;
+using Survey.Infrastructure.Persistence;
 
 namespace Survey.Infrastructure.Services;
 
@@ -155,21 +157,23 @@ public sealed partial class SurveyApplicationService
 	public async Task<SiteAppearanceModel> GetSiteAppearanceAsync(CancellationToken cancellationToken = default)
 	{
 		var context = await _tenantContextAccessor.GetCurrentAsync(cancellationToken);
+		using var scope = _serviceScopeFactory.CreateScope();
+		var dbContext = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
 		var presetKey = context.TenantId.HasValue
-			? await _dbContext.TenantSettings
+			? await dbContext.TenantSettings
 				.AsNoTracking()
 				.Where(setting => setting.TenantId == context.TenantId.Value)
 				.Select(setting => setting.ThemePresetKey)
 				.FirstOrDefaultAsync(cancellationToken)
 			: null;
 
-		presetKey ??= await _dbContext.SiteSettings
+		presetKey ??= await dbContext.SiteSettings
 			.AsNoTracking()
 			.Where(setting => setting.Id == SiteSetting.DefaultId)
 			.Select(setting => setting.ThemePresetKey)
 			.FirstOrDefaultAsync(cancellationToken);
 		presetKey ??= SiteThemePresetCatalog.DefaultPresetKey;
-		var theme = await _dbContext.PlatformThemes
+		var theme = await dbContext.PlatformThemes
 			.AsNoTracking()
 			.FirstOrDefaultAsync(item => item.Key == presetKey, cancellationToken);
 

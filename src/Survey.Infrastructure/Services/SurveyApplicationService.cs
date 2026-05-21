@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Linq.Expressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Survey.Application.Models;
 using Survey.Application.Services;
 using Survey.Domain;
@@ -21,7 +22,8 @@ public sealed partial class SurveyApplicationService(
 	IAuditWriter auditWriter,
 	IQueuedEmailService queuedEmailService,
 	TenantExecutionContext tenantExecutionContext,
-	InitialSetupSeeder initialSetupSeeder) : ITenantAdministrationService, IPlatformAdministrationService, ISurveyExperienceService
+	InitialSetupSeeder initialSetupSeeder,
+	IServiceScopeFactory serviceScopeFactory) : ITenantAdministrationService, IPlatformAdministrationService, ISurveyExperienceService
 {
 	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 	private readonly SurveyDbContext _dbContext = dbContext;
@@ -33,6 +35,7 @@ public sealed partial class SurveyApplicationService(
 	private readonly IQueuedEmailService _queuedEmailService = queuedEmailService;
 	private readonly TenantExecutionContext _tenantExecutionContext = tenantExecutionContext;
 	private readonly InitialSetupSeeder _initialSetupSeeder = initialSetupSeeder;
+	private readonly IServiceScopeFactory _serviceScopeFactory = serviceScopeFactory;
 
 	private static PagedQuery NormalizePagedQuery(PagedQuery request)
 	{
