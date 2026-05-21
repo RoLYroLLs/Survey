@@ -7,6 +7,8 @@
 - `src/Survey.Domain`: core entities and business rules for surveys, assignments, responses, and answer types.
 - `src/Survey.Application`: UI-facing models and service contracts for admin and public survey flows.
 - `src/Survey.Infrastructure`: EF Core persistence, Identity integration, database-provider selection, and application service implementation.
+- `src/Survey.Migrations.MySql`: MySQL migration assembly.
+- `src/Survey.Migrations.Postgres`: PostgreSQL migration assembly.
 - `src/Survey.Migrations.SqlServer`: SQL Server migration assembly.
 - `src/Survey.Migrations.Sqlite`: SQLite migration assembly.
 - `src/Survey.Web`: Blazor Web App host for the admin experience and public recipient experience.
@@ -38,7 +40,7 @@
 - Self-serve onboarding should prefill the first tenant name as `Default Tenant` until the user changes it.
 - The very first platform bootstrap account is separate from self-serve onboarding and creates an initial tenant named `Initial Platform Tenant`.
 - Tenant admins can invite users into their tenant with secure invitation tokens. Existing accounts can accept an invite after signing in, and new accounts can be created directly from the invitation flow.
-- Tenant membership management must prevent privilege escalation, disallow changing one’s own tenant role/status/permissions through normal tenant-admin flows, and block removal, disablement, or demotion of the final enabled `Owner` or the final enabled admin-capable membership.
+- Tenant membership management must prevent privilege escalation, disallow changing oneâ€™s own tenant role/status/permissions through normal tenant-admin flows, and block removal, disablement, or demotion of the final enabled `Owner` or the final enabled admin-capable membership.
 - Sensitive authorization denials and tenant-admin security changes should be audit logged.
 
 ## Contact And Location Model
@@ -85,7 +87,7 @@
 - Identity is stored in the same application database as survey data.
 - Database provider is selected per deployment with `Database:Provider` and `ConnectionStrings:Default`.
 - `Sqlite` is the default provider for local development and lightweight deployments.
-- `SqlServer` is supported through a separate migration assembly for production-style deployments.
+- `SqlServer`, `Postgres`, and `MySql` each use their own migration assembly so schema history stays provider-specific.
 - Hangfire is used for queued outbound email work during this phase.
 - First-run setup seeding should use an app-owned background worker so the setup pipeline can continue after the user leaves the page without paying the extra Hangfire-plus-SQLite overhead of item-by-item progress tracking.
 - Hangfire storage should use the same configured application database/provider as the main app during this phase, with separate queues for `email` and `default`.

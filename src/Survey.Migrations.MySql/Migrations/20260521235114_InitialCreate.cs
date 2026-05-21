@@ -1,9 +1,10 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using MySql.EntityFrameworkCore.Metadata;
 
 #nullable disable
 
-namespace Survey.Migrations.SqlServer.Migrations
+namespace Survey.Migrations.MySql.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -11,241 +12,257 @@ namespace Survey.Migrations.SqlServer.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AlterDatabase()
+                .Annotation("MySQL:Charset", "utf8mb4");
+
             migrationBuilder.CreateTable(
                 name: "Areas",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Areas", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetRoles",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    NormalizedName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    Id = table.Column<string>(type: "varchar(255)", nullable: false),
+                    Name = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
+                    NormalizedName = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "longtext", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetRoles", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserPasskeys",
                 columns: table => new
                 {
-                    CredentialId = table.Column<byte[]>(type: "varbinary(900)", nullable: false),
-                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    Data = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                    CredentialId = table.Column<byte[]>(type: "varbinary(3072)", nullable: false),
+                    UserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: false),
+                    Data = table.Column<string>(type: "longtext", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUserPasskeys", x => x.CredentialId);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetUsers",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    FirstName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    LastName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    FavoriteGoalIds = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
-                    AddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    AddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    City = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    State = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    PostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
-                    IsOrganizationAccount = table.Column<bool>(type: "bit", nullable: false),
-                    OrganizationName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
+                    Id = table.Column<string>(type: "varchar(255)", nullable: false),
+                    FirstName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    LastName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    FavoriteGoalIds = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true),
+                    AddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    AddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    City = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    State = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    PostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true),
+                    IsOrganizationAccount = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    OrganizationName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
                     ActiveTenantMembershipId = table.Column<int>(type: "int", nullable: true),
-                    IsPlatformSuperAdmin = table.Column<bool>(type: "bit", nullable: false),
-                    IsPlatformUserEnabled = table.Column<bool>(type: "bit", nullable: false),
-                    IsBootstrapPlatformOwner = table.Column<bool>(type: "bit", nullable: false),
-                    AvatarColorHex = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: true),
-                    UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    NormalizedUserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    NormalizedEmail = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    EmailConfirmed = table.Column<bool>(type: "bit", nullable: false),
-                    PasswordHash = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    SecurityStamp = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    PhoneNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    PhoneNumberConfirmed = table.Column<bool>(type: "bit", nullable: false),
-                    TwoFactorEnabled = table.Column<bool>(type: "bit", nullable: false),
-                    LockoutEnd = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    LockoutEnabled = table.Column<bool>(type: "bit", nullable: false),
+                    IsPlatformSuperAdmin = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    IsPlatformUserEnabled = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    IsBootstrapPlatformOwner = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    AvatarColorHex = table.Column<string>(type: "varchar(16)", maxLength: 16, nullable: true),
+                    UserName = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
+                    NormalizedUserName = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
+                    Email = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
+                    NormalizedEmail = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
+                    EmailConfirmed = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    PasswordHash = table.Column<string>(type: "longtext", nullable: true),
+                    SecurityStamp = table.Column<string>(type: "longtext", nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "longtext", nullable: true),
+                    PhoneNumber = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true),
+                    PhoneNumberConfirmed = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    TwoFactorEnabled = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    LockoutEnd = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    LockoutEnabled = table.Column<bool>(type: "tinyint(1)", nullable: false),
                     AccessFailedCount = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AuditLogs",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: true),
-                    ActorUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: true),
-                    Plane = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    ActionType = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    TargetType = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    TargetId = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    Details = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: true),
-                    Succeeded = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    ActorUserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: true),
+                    Plane = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    ActionType = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    TargetType = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    TargetId = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    Details = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: true),
+                    Succeeded = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AuditLogs", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "Countries",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Iso2Code = table.Column<string>(type: "nvarchar(2)", maxLength: 2, nullable: false),
-                    Iso3Code = table.Column<string>(type: "nvarchar(3)", maxLength: 3, nullable: true),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Iso2Code = table.Column<string>(type: "varchar(2)", maxLength: 2, nullable: false),
+                    Iso3Code = table.Column<string>(type: "varchar(3)", maxLength: 3, nullable: true),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Countries", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "PlatformThemes",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Key = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    PrimaryColor = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    AccentColor = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    BackgroundColor = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    CssVariablesBlock = table.Column<string>(type: "nvarchar(max)", maxLength: 12000, nullable: false),
-                    IsEnabled = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    IsArchived = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    Key = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
+                    PrimaryColor = table.Column<string>(type: "varchar(32)", maxLength: 32, nullable: false),
+                    AccentColor = table.Column<string>(type: "varchar(32)", maxLength: 32, nullable: false),
+                    BackgroundColor = table.Column<string>(type: "varchar(32)", maxLength: 32, nullable: false),
+                    CssVariablesBlock = table.Column<string>(type: "varchar(12000)", maxLength: 12000, nullable: false),
+                    IsEnabled = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: true),
+                    IsArchived = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_PlatformThemes", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SeedStates",
                 columns: table => new
                 {
-                    Key = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Key = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
                     Version = table.Column<int>(type: "int", nullable: false),
-                    AppliedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    AppliedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SeedStates", x => x.Key);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SiteSettings",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false),
-                    ThemePresetKey = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    ThemePresetKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    InitialSetupCompletedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SiteSettings", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SurveyDefinitions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
-                    IsArchived = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true),
+                    IsArchived = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SurveyDefinitions", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "Tenants",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Slug = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Slug = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Tenants", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "ZipCountyLookups",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    ZipCode = table.Column<string>(type: "nvarchar(10)", maxLength: 10, nullable: false),
-                    CountyFips = table.Column<string>(type: "nvarchar(5)", maxLength: 5, nullable: false),
-                    CountyName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    StateCode = table.Column<string>(type: "nvarchar(2)", maxLength: 2, nullable: false),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    ZipCode = table.Column<string>(type: "varchar(10)", maxLength: 10, nullable: false),
+                    CountyFips = table.Column<string>(type: "varchar(5)", maxLength: 5, nullable: false),
+                    CountyName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    StateCode = table.Column<string>(type: "varchar(2)", maxLength: 2, nullable: false),
                     ResidentialRatio = table.Column<decimal>(type: "decimal(9,6)", precision: 9, scale: 6, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ZipCountyLookups", x => x.Id);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AreaCounties",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     AreaId = table.Column<int>(type: "int", nullable: false),
-                    CountyFips = table.Column<string>(type: "nvarchar(5)", maxLength: 5, nullable: false),
-                    CountyName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    StateCode = table.Column<string>(type: "nvarchar(2)", maxLength: 2, nullable: false)
+                    CountyFips = table.Column<string>(type: "varchar(5)", maxLength: 5, nullable: false),
+                    CountyName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    StateCode = table.Column<string>(type: "varchar(2)", maxLength: 2, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -256,17 +273,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Areas",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetRoleClaims",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    RoleId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ClaimType = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ClaimValue = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    RoleId = table.Column<string>(type: "varchar(255)", nullable: false),
+                    ClaimType = table.Column<string>(type: "longtext", nullable: true),
+                    ClaimValue = table.Column<string>(type: "longtext", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -277,17 +295,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "AspNetRoles",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserClaims",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ClaimType = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ClaimValue = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    UserId = table.Column<string>(type: "varchar(255)", nullable: false),
+                    ClaimType = table.Column<string>(type: "longtext", nullable: true),
+                    ClaimValue = table.Column<string>(type: "longtext", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -298,16 +317,17 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserLogins",
                 columns: table => new
                 {
-                    LoginProvider = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ProviderKey = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ProviderDisplayName = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false)
+                    LoginProvider = table.Column<string>(type: "varchar(255)", nullable: false),
+                    ProviderKey = table.Column<string>(type: "varchar(255)", nullable: false),
+                    ProviderDisplayName = table.Column<string>(type: "longtext", nullable: true),
+                    UserId = table.Column<string>(type: "varchar(255)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -318,14 +338,15 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserRoles",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    RoleId = table.Column<string>(type: "nvarchar(450)", nullable: false)
+                    UserId = table.Column<string>(type: "varchar(255)", nullable: false),
+                    RoleId = table.Column<string>(type: "varchar(255)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -342,16 +363,17 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserTokens",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    LoginProvider = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Value = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UserId = table.Column<string>(type: "varchar(255)", nullable: false),
+                    LoginProvider = table.Column<string>(type: "varchar(255)", nullable: false),
+                    Name = table.Column<string>(type: "varchar(255)", nullable: false),
+                    Value = table.Column<string>(type: "longtext", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -362,17 +384,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "PlatformUserPermissions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    PermissionKey = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    UserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: false),
+                    PermissionKey = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -383,20 +406,21 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "StateProvinces",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     CountryId = table.Column<int>(type: "int", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Code = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    SubdivisionType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Code = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
+                    SubdivisionType = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -407,24 +431,25 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Countries",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "Goals",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true),
                     AreaId = table.Column<int>(type: "int", nullable: true),
                     SurveyDefinitionId = table.Column<int>(type: "int", nullable: true),
                     TargetResponseCount = table.Column<int>(type: "int", nullable: false),
                     StartDate = table.Column<DateOnly>(type: "date", nullable: false),
                     EndDate = table.Column<DateOnly>(type: "date", nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -441,22 +466,23 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveyDefinitions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SurveyVersions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     SurveyDefinitionId = table.Column<int>(type: "int", nullable: false),
-                    DisplayName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    DisplayName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
                     VersionNumber = table.Column<int>(type: "int", nullable: false),
-                    IsPublished = table.Column<bool>(type: "bit", nullable: false),
-                    IsArchived = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    IsPublished = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    IsArchived = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -467,26 +493,64 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveyDefinitions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "BackgroundOperations",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    Kind = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    Status = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    QueueName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    Summary = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    TenantId = table.Column<int>(type: "int", nullable: true),
+                    RequestedByUserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: true),
+                    HangfireJobId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    ProgressPercent = table.Column<int>(type: "int", nullable: false),
+                    CurrentStageKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    CurrentStageLabel = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    CurrentItemMessage = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
+                    StageStatesJson = table.Column<string>(type: "longtext", maxLength: 32000, nullable: false),
+                    MetadataJson = table.Column<string>(type: "longtext", maxLength: 32000, nullable: false),
+                    ErrorMessage = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: true),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    StartedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    CompletedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BackgroundOperations", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_BackgroundOperations_Tenants_TenantId",
+                        column: x => x.TenantId,
+                        principalTable: "Tenants",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "PlatformUserInvitations",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                    IsPlatformUserEnabled = table.Column<bool>(type: "bit", nullable: false),
-                    IsPlatformSuperAdmin = table.Column<bool>(type: "bit", nullable: false),
-                    PermissionKeysJson = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: false),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    Email = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
+                    IsPlatformUserEnabled = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    IsPlatformSuperAdmin = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    PermissionKeysJson = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: false),
                     TenantId = table.Column<int>(type: "int", nullable: true),
                     TenantRole = table.Column<int>(type: "int", nullable: true),
-                    TokenHash = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: false),
-                    ExpiresAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    CreatedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    AcceptedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    RevokedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true)
+                    TokenHash = table.Column<string>(type: "varchar(512)", maxLength: 512, nullable: false),
+                    ExpiresAtUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    CreatedByUserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    AcceptedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    RevokedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -497,23 +561,24 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Tenants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "TenantInvitations",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    Email = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
                     Role = table.Column<int>(type: "int", nullable: false),
-                    TokenHash = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: false),
-                    ExpiresAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    CreatedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    AcceptedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    RevokedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true)
+                    TokenHash = table.Column<string>(type: "varchar(512)", maxLength: 512, nullable: false),
+                    ExpiresAtUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    CreatedByUserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    AcceptedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    RevokedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -524,20 +589,21 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Tenants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "TenantMemberships",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
-                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    UserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: false),
                     Role = table.Column<int>(type: "int", nullable: false),
-                    IsEnabled = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    IsEnabled = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -554,17 +620,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Tenants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "TenantSettings",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
-                    ThemePresetKey = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    ThemePresetKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -575,17 +642,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Tenants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "TenantVisibleCountries",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     CountryId = table.Column<int>(type: "int", nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -602,19 +670,20 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Tenants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "Counties",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     StateProvinceId = table.Column<int>(type: "int", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    FipsCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    FipsCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -625,17 +694,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "StateProvinces",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "TenantVisibleStateProvinces",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     StateProvinceId = table.Column<int>(type: "int", nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -652,18 +722,19 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Tenants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SurveySections",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     SurveyVersionId = table.Column<int>(type: "int", nullable: false),
-                    Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    Title = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true),
                     SortOrder = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -675,48 +746,128 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveyVersions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "BackgroundOperationEvents",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    BackgroundOperationId = table.Column<int>(type: "int", nullable: false),
+                    StageKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    StageLabel = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Status = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    Message = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: false),
+                    Processed = table.Column<int>(type: "int", nullable: false),
+                    Total = table.Column<int>(type: "int", nullable: false),
+                    ProgressPercent = table.Column<int>(type: "int", nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BackgroundOperationEvents", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_BackgroundOperationEvents_BackgroundOperations_BackgroundOpe~",
+                        column: x => x.BackgroundOperationId,
+                        principalTable: "BackgroundOperations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "OutboundEmails",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    BackgroundOperationId = table.Column<int>(type: "int", nullable: true),
+                    TenantId = table.Column<int>(type: "int", nullable: true),
+                    CreatedByUserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: true),
+                    TemplateKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    SourceType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    SourceId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    RecipientName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    RecipientEmail = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
+                    Subject = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    HtmlBody = table.Column<string>(type: "longtext", maxLength: 32000, nullable: false),
+                    TextBody = table.Column<string>(type: "varchar(16000)", maxLength: 16000, nullable: false),
+                    TrackingToken = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Status = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    ProviderMessageId = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    LastError = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: true),
+                    AttemptCount = table.Column<int>(type: "int", nullable: false),
+                    FirstOpenedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    LastOpenedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    OpenCount = table.Column<int>(type: "int", nullable: false),
+                    FirstClickedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    LastClickedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    ClickCount = table.Column<int>(type: "int", nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    SentUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OutboundEmails", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_OutboundEmails_BackgroundOperations_BackgroundOperationId",
+                        column: x => x.BackgroundOperationId,
+                        principalTable: "BackgroundOperations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_OutboundEmails_Tenants_TenantId",
+                        column: x => x.TenantId,
+                        principalTable: "Tenants",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "TenantMembershipPermissions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantMembershipId = table.Column<int>(type: "int", nullable: false),
-                    PermissionKey = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    PermissionKey = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
                     GrantKind = table.Column<int>(type: "int", nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_TenantMembershipPermissions", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_TenantMembershipPermissions_TenantMemberships_TenantMembershipId",
+                        name: "FK_TenantMembershipPermissions_TenantMemberships_TenantMembersh~",
                         column: x => x.TenantMembershipId,
                         principalTable: "TenantMemberships",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "PostalAddresses",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     CountryId = table.Column<int>(type: "int", nullable: false),
                     StateProvinceId = table.Column<int>(type: "int", nullable: true),
                     CountyId = table.Column<int>(type: "int", nullable: true),
-                    AddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    AddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    City = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    PostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    FormattedAddress = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    NormalizedKey = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    AddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    AddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    City = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    PostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
+                    FormattedAddress = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    NormalizedKey = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -739,17 +890,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "StateProvinces",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "TenantVisibleCounties",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     CountyId = table.Column<int>(type: "int", nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -766,20 +918,21 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Tenants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SurveyQuestions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     SurveySectionId = table.Column<int>(type: "int", nullable: false),
-                    Prompt = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
-                    HelpText = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    Prompt = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: false),
+                    HelpText = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true),
                     Type = table.Column<int>(type: "int", nullable: false),
-                    IsRequired = table.Column<bool>(type: "bit", nullable: false),
+                    IsRequired = table.Column<bool>(type: "tinyint(1)", nullable: false),
                     SortOrder = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -791,39 +944,91 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveySections",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "OutboundEmailAttempts",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    OutboundEmailId = table.Column<int>(type: "int", nullable: false),
+                    AttemptNumber = table.Column<int>(type: "int", nullable: false),
+                    Status = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    ProviderMessageId = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    ErrorMessage = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: true),
+                    StartedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    CompletedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OutboundEmailAttempts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_OutboundEmailAttempts_OutboundEmails_OutboundEmailId",
+                        column: x => x.OutboundEmailId,
+                        principalTable: "OutboundEmails",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
+
+            migrationBuilder.CreateTable(
+                name: "OutboundEmailClickEvents",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    OutboundEmailId = table.Column<int>(type: "int", nullable: false),
+                    LinkType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    DestinationUrl = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: false),
+                    UserAgent = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
+                    IpAddressHash = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    OccurredUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OutboundEmailClickEvents", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_OutboundEmailClickEvents_OutboundEmails_OutboundEmailId",
+                        column: x => x.OutboundEmailId,
+                        principalTable: "OutboundEmails",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "People",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
-                    FirstName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    MiddleName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    LastName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    FirstName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    MiddleName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    LastName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
                     PostalAddressId = table.Column<int>(type: "int", nullable: true),
-                    AddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    AddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    City = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    State = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    HomeAddress = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    PostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
+                    AddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    AddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    City = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    State = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    HomeAddress = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    PostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true),
                     MailingPostalAddressId = table.Column<int>(type: "int", nullable: true),
-                    MailingAddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    MailingAddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    MailingCity = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    MailingState = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    MailingAddress = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    MailingPostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
-                    PhoneNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    BestTimeToContact = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    PreferredContactMethod = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                    IsArchived = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    MailingAddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    MailingAddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    MailingCity = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    MailingState = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    MailingAddress = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    MailingPostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true),
+                    PhoneNumber = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    BestTimeToContact = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    PreferredContactMethod = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true),
+                    Email = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
+                    IsArchived = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -840,17 +1045,18 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "PostalAddresses",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "QuestionOptions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     SurveyQuestionId = table.Column<int>(type: "int", nullable: false),
-                    Label = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Label = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
                     SortOrder = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -862,35 +1068,36 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveyQuestions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "Locations",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     PersonId = table.Column<int>(type: "int", nullable: false),
-                    Nickname = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Nickname = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
                     PostalAddressId = table.Column<int>(type: "int", nullable: true),
-                    AddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    AddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    City = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    State = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    HomeAddress = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    PostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
+                    AddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    AddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    City = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    State = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    HomeAddress = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    PostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true),
                     MailingPostalAddressId = table.Column<int>(type: "int", nullable: true),
-                    MailingAddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    MailingAddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    MailingCity = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    MailingState = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    MailingAddress = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    MailingPostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
-                    PhoneNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    MailingAddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    MailingAddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    MailingCity = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    MailingState = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    MailingAddress = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    MailingPostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true),
+                    PhoneNumber = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    Email = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    UpdatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -913,18 +1120,19 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "PostalAddresses",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "PersonEmails",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     PersonId = table.Column<int>(type: "int", nullable: false),
-                    Label = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    EmailAddress = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    Label = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    EmailAddress = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
                     SortOrder = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -936,18 +1144,19 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "People",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "PersonPhones",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     PersonId = table.Column<int>(type: "int", nullable: false),
-                    Label = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    PhoneNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Label = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    PhoneNumber = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
                     SortOrder = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -959,18 +1168,19 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "People",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "LocationEmails",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     LocationId = table.Column<int>(type: "int", nullable: false),
-                    Label = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    EmailAddress = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    Label = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    EmailAddress = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
                     SortOrder = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -982,18 +1192,19 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Locations",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "LocationPhones",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     LocationId = table.Column<int>(type: "int", nullable: false),
-                    Label = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    PhoneNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Label = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    PhoneNumber = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
                     SortOrder = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -1005,24 +1216,25 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "Locations",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SurveyAssignments",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     LocationId = table.Column<int>(type: "int", nullable: false),
                     LocationPhoneId = table.Column<int>(type: "int", nullable: true),
                     LocationEmailId = table.Column<int>(type: "int", nullable: true),
                     SurveyVersionId = table.Column<int>(type: "int", nullable: false),
-                    PublicToken = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    ExpiresAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    IsArchived = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    CreatedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: true)
+                    PublicToken = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    ExpiresAtUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: true),
+                    IsArchived = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    CreatedByUserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -1051,53 +1263,54 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveyVersions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SurveyResponses",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     SurveyAssignmentId = table.Column<int>(type: "int", nullable: false),
-                    SubmittedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: true),
-                    SubmittedByEmployee = table.Column<bool>(type: "bit", nullable: false),
-                    SubmittedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    RespondentFirstName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    RespondentMiddleName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    RespondentLastName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    SubmittedByUserId = table.Column<string>(type: "varchar(450)", maxLength: 450, nullable: true),
+                    SubmittedByEmployee = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    SubmittedUtc = table.Column<DateTimeOffset>(type: "datetime", nullable: false),
+                    RespondentFirstName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    RespondentMiddleName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    RespondentLastName = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
                     RespondentPostalAddressId = table.Column<int>(type: "int", nullable: true),
-                    RespondentAddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    RespondentAddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    RespondentCity = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    RespondentState = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    RespondentHomeAddress = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    RespondentPostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
+                    RespondentAddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    RespondentAddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    RespondentCity = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    RespondentState = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    RespondentHomeAddress = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    RespondentPostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true),
                     RespondentMailingPostalAddressId = table.Column<int>(type: "int", nullable: true),
-                    RespondentMailingAddressLine1 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    RespondentMailingAddressLine2 = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    RespondentMailingCity = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    RespondentMailingState = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    RespondentMailingAddress = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    RespondentMailingPostalCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
-                    RespondentCountyFipsSnapshot = table.Column<string>(type: "nvarchar(5)", maxLength: 5, nullable: true),
-                    RespondentCountyNameSnapshot = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    RespondentStateCodeSnapshot = table.Column<string>(type: "nvarchar(2)", maxLength: 2, nullable: true),
-                    RespondentPhoneNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    RespondentPhoneLabel = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    RespondentBestTimeToContact = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    RespondentPreferredContactMethod = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    RespondentEmail = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                    RespondentEmailLabel = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    SurveyNameSnapshot = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    SurveyVersionNameSnapshot = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false)
+                    RespondentMailingAddressLine1 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    RespondentMailingAddressLine2 = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    RespondentMailingCity = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    RespondentMailingState = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    RespondentMailingAddress = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    RespondentMailingPostalCode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true),
+                    RespondentCountyFipsSnapshot = table.Column<string>(type: "varchar(5)", maxLength: 5, nullable: true),
+                    RespondentCountyNameSnapshot = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
+                    RespondentStateCodeSnapshot = table.Column<string>(type: "varchar(2)", maxLength: 2, nullable: true),
+                    RespondentPhoneNumber = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    RespondentPhoneLabel = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true),
+                    RespondentBestTimeToContact = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    RespondentPreferredContactMethod = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true),
+                    RespondentEmail = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
+                    RespondentEmailLabel = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true),
+                    SurveyNameSnapshot = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    SurveyVersionNameSnapshot = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SurveyResponses", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_SurveyResponses_PostalAddresses_RespondentMailingPostalAddressId",
+                        name: "FK_SurveyResponses_PostalAddresses_RespondentMailingPostalAddre~",
                         column: x => x.RespondentMailingPostalAddressId,
                         principalTable: "PostalAddresses",
                         principalColumn: "Id",
@@ -1114,23 +1327,24 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveyAssignments",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "SurveyAnswers",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     SurveyResponseId = table.Column<int>(type: "int", nullable: false),
                     SurveyQuestionId = table.Column<int>(type: "int", nullable: false),
-                    QuestionPromptSnapshot = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
+                    QuestionPromptSnapshot = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: false),
                     QuestionType = table.Column<int>(type: "int", nullable: false),
-                    AnswerText = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    YesNoValue = table.Column<bool>(type: "bit", nullable: true),
+                    AnswerText = table.Column<string>(type: "longtext", nullable: true),
+                    YesNoValue = table.Column<bool>(type: "tinyint(1)", nullable: true),
                     SelectedOptionId = table.Column<int>(type: "int", nullable: true),
-                    SelectedOptionIdsJson = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    SelectedOptionIdsJson = table.Column<string>(type: "longtext", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -1147,7 +1361,8 @@ namespace Survey.Migrations.SqlServer.Migrations
                         principalTable: "SurveyResponses",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
+                })
+                .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AreaCounties_AreaId",
@@ -1184,8 +1399,7 @@ namespace Survey.Migrations.SqlServer.Migrations
                 name: "RoleNameIndex",
                 table: "AspNetRoles",
                 column: "NormalizedName",
-                unique: true,
-                filter: "[NormalizedName] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetUserClaims_UserId",
@@ -1216,13 +1430,32 @@ namespace Survey.Migrations.SqlServer.Migrations
                 name: "UserNameIndex",
                 table: "AspNetUsers",
                 column: "NormalizedUserName",
-                unique: true,
-                filter: "[NormalizedUserName] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_AuditLogs_TenantId_CreatedUtc",
                 table: "AuditLogs",
                 columns: new[] { "TenantId", "CreatedUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BackgroundOperationEvents_BackgroundOperationId_CreatedUtc",
+                table: "BackgroundOperationEvents",
+                columns: new[] { "BackgroundOperationId", "CreatedUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BackgroundOperations_CreatedUtc",
+                table: "BackgroundOperations",
+                column: "CreatedUtc");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BackgroundOperations_Kind_Status",
+                table: "BackgroundOperations",
+                columns: new[] { "Kind", "Status" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BackgroundOperations_TenantId",
+                table: "BackgroundOperations",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Counties_StateProvinceId_FipsCode",
@@ -1312,6 +1545,38 @@ namespace Survey.Migrations.SqlServer.Migrations
                 name: "IX_Locations_TenantId_PersonId",
                 table: "Locations",
                 columns: new[] { "TenantId", "PersonId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OutboundEmailAttempts_OutboundEmailId_AttemptNumber",
+                table: "OutboundEmailAttempts",
+                columns: new[] { "OutboundEmailId", "AttemptNumber" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OutboundEmailClickEvents_OutboundEmailId_OccurredUtc",
+                table: "OutboundEmailClickEvents",
+                columns: new[] { "OutboundEmailId", "OccurredUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OutboundEmails_BackgroundOperationId",
+                table: "OutboundEmails",
+                column: "BackgroundOperationId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OutboundEmails_Status_CreatedUtc",
+                table: "OutboundEmails",
+                columns: new[] { "Status", "CreatedUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OutboundEmails_TenantId",
+                table: "OutboundEmails",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OutboundEmails_TrackingToken",
+                table: "OutboundEmails",
+                column: "TrackingToken",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_People_MailingPostalAddressId",
@@ -1694,7 +1959,16 @@ namespace Survey.Migrations.SqlServer.Migrations
                 name: "AuditLogs");
 
             migrationBuilder.DropTable(
+                name: "BackgroundOperationEvents");
+
+            migrationBuilder.DropTable(
                 name: "Goals");
+
+            migrationBuilder.DropTable(
+                name: "OutboundEmailAttempts");
+
+            migrationBuilder.DropTable(
+                name: "OutboundEmailClickEvents");
 
             migrationBuilder.DropTable(
                 name: "PersonEmails");
@@ -1751,6 +2025,9 @@ namespace Survey.Migrations.SqlServer.Migrations
                 name: "Areas");
 
             migrationBuilder.DropTable(
+                name: "OutboundEmails");
+
+            migrationBuilder.DropTable(
                 name: "SurveyQuestions");
 
             migrationBuilder.DropTable(
@@ -1758,6 +2035,9 @@ namespace Survey.Migrations.SqlServer.Migrations
 
             migrationBuilder.DropTable(
                 name: "TenantMemberships");
+
+            migrationBuilder.DropTable(
+                name: "BackgroundOperations");
 
             migrationBuilder.DropTable(
                 name: "SurveySections");

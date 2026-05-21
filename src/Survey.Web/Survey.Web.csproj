@@ -14,6 +14,8 @@
     <PackageReference Include="NLog.Web.AspNetCore" />
     <ProjectReference Include="..\Survey.Application\Survey.Application.csproj" />
     <ProjectReference Include="..\Survey.Infrastructure\Survey.Infrastructure.csproj" />
+    <ProjectReference Include="..\Survey.Migrations.MySql\Survey.Migrations.MySql.csproj" />
+    <ProjectReference Include="..\Survey.Migrations.Postgres\Survey.Migrations.Postgres.csproj" />
     <ProjectReference Include="..\Survey.Migrations.Sqlite\Survey.Migrations.Sqlite.csproj" />
     <ProjectReference Include="..\Survey.Migrations.SqlServer\Survey.Migrations.SqlServer.csproj" />
     <ProjectReference Include="..\Survey.ServiceDefaults\Survey.ServiceDefaults.csproj" />

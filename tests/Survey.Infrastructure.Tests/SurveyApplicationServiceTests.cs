@@ -1160,9 +1160,8 @@ public class SurveyApplicationServiceTests
 		var accessor = new TenantContextAccessor(
 			new ThrowingAuthenticationStateProvider(),
 			harness.HttpContextAccessor,
-			harness.UserManager,
-			harness.DbContext,
-			harness.TenantExecutionContext);
+			harness.TenantExecutionContext,
+			harness.ServiceScopeFactory);
 
 		var context = await accessor.GetCurrentAsync();
 
@@ -1763,6 +1762,7 @@ public class SurveyApplicationServiceTests
 			TenantExecutionContext = _scope.ServiceProvider.GetRequiredService<TenantExecutionContext>();
 			AuthenticationStateProvider = (TestAuthenticationStateProvider)_scope.ServiceProvider.GetRequiredService<AuthenticationStateProvider>();
 			HttpContextAccessor = _scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+			ServiceScopeFactory = _scope.ServiceProvider.GetRequiredService<IServiceScopeFactory>();
 			BackgroundOperationsService = _scope.ServiceProvider.GetRequiredService<IBackgroundOperationsService>();
 			EmailTrackingService = _scope.ServiceProvider.GetRequiredService<IEmailTrackingService>();
 			GeographySeeder = _scope.ServiceProvider.GetRequiredService<GeographyDataSeeder>();
@@ -1779,6 +1779,7 @@ public class SurveyApplicationServiceTests
 		public TenantExecutionContext TenantExecutionContext { get; }
 		public TestAuthenticationStateProvider AuthenticationStateProvider { get; }
 		public IHttpContextAccessor HttpContextAccessor { get; }
+		public IServiceScopeFactory ServiceScopeFactory { get; }
 		public IBackgroundOperationsService BackgroundOperationsService { get; }
 		public IEmailTrackingService EmailTrackingService { get; }
 		public GeographyDataSeeder GeographySeeder { get; }

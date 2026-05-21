@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Hangfire;
+using Hangfire.MySql;
+using Hangfire.PostgreSql;
 using Hangfire.SQLite;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authorization;
@@ -12,6 +14,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MySql.EntityFrameworkCore.Extensions;
 using Survey.Application.Services;
 using Survey.Domain;
 using Survey.Infrastructure.Configuration;
@@ -36,20 +39,12 @@ public static class ServiceCollectionExtensions
 		var databaseProvider = NormalizeProvider(configuration[$"{DatabaseOptions.SectionName}:Provider"]);
 		var connectionString = configuration.GetConnectionString("Default")
 			?? throw new InvalidOperationException("ConnectionStrings:Default must be configured.");
-		var migrationsAssembly = databaseProvider == DatabaseOptions.SqlServer
-			? "Survey.Migrations.SqlServer"
-			: "Survey.Migrations.Sqlite";
+		var migrationsAssembly = GetMigrationsAssembly(databaseProvider);
 		var backgroundJobsOptions = configuration.GetSection(BackgroundJobsOptions.SectionName).Get<BackgroundJobsOptions>() ?? new BackgroundJobsOptions();
 
 		services.AddDbContext<SurveyDbContext>(options =>
 		{
-			if (databaseProvider == DatabaseOptions.SqlServer)
-			{
-				options.UseSqlServer(connectionString, sqlServer => sqlServer.MigrationsAssembly(migrationsAssembly));
-				return;
-			}
-
-			options.UseSqlite(connectionString, sqlite => sqlite.MigrationsAssembly(migrationsAssembly));
+			ConfigureSurveyDbProvider(options, databaseProvider, connectionString, migrationsAssembly);
 		});
 
 		services.AddIdentityCore<ApplicationUser>(options =>
@@ -106,17 +101,7 @@ public static class ServiceCollectionExtensions
 				hangfire.UseSimpleAssemblyNameTypeSerializer();
 				hangfire.UseRecommendedSerializerSettings();
 
-				if (databaseProvider == DatabaseOptions.SqlServer)
-				{
-					hangfire.UseSqlServerStorage(connectionString);
-					return;
-				}
-
-				var sqliteConnectionName = EnsureHangfireSqliteConnectionStringRegistered(connectionString);
-				hangfire.UseSQLiteStorage(sqliteConnectionName, new SQLiteStorageOptions
-				{
-					PrepareSchemaIfNecessary = true
-				});
+				ConfigureHangfireStorage(hangfire, databaseProvider, connectionString);
 			});
 			services.AddHangfireServer(serverOptions =>
 			{
@@ -203,12 +188,107 @@ public static class ServiceCollectionExtensions
 
 	public static string NormalizeProvider(string? provider)
 	{
+		if (string.Equals(provider, DatabaseOptions.MySql, StringComparison.OrdinalIgnoreCase))
+		{
+			return DatabaseOptions.MySql;
+		}
+
+		if (string.Equals(provider, DatabaseOptions.Postgres, StringComparison.OrdinalIgnoreCase)
+			|| string.Equals(provider, "PostgreSql", StringComparison.OrdinalIgnoreCase)
+			|| string.Equals(provider, "PostgreSQL", StringComparison.OrdinalIgnoreCase))
+		{
+			return DatabaseOptions.Postgres;
+		}
+
 		if (string.Equals(provider, DatabaseOptions.SqlServer, StringComparison.OrdinalIgnoreCase))
 		{
 			return DatabaseOptions.SqlServer;
 		}
 
 		return DatabaseOptions.Sqlite;
+	}
+
+	private static string GetMigrationsAssembly(string databaseProvider)
+	{
+		return databaseProvider switch
+		{
+			DatabaseOptions.MySql => "Survey.Migrations.MySql",
+			DatabaseOptions.Postgres => "Survey.Migrations.Postgres",
+			DatabaseOptions.SqlServer => "Survey.Migrations.SqlServer",
+			_ => "Survey.Migrations.Sqlite"
+		};
+	}
+
+	private static void ConfigureSurveyDbProvider(
+		DbContextOptionsBuilder options,
+		string databaseProvider,
+		string connectionString,
+		string migrationsAssembly)
+	{
+		switch (databaseProvider)
+		{
+			case DatabaseOptions.MySql:
+				options.UseMySQL(connectionString, mySql => mySql.MigrationsAssembly(migrationsAssembly));
+				break;
+
+			case DatabaseOptions.Postgres:
+				options.UseNpgsql(connectionString, postgres => postgres.MigrationsAssembly(migrationsAssembly));
+				break;
+
+			case DatabaseOptions.SqlServer:
+				options.UseSqlServer(connectionString, sqlServer => sqlServer.MigrationsAssembly(migrationsAssembly));
+				break;
+
+			default:
+				options.UseSqlite(connectionString, sqlite => sqlite.MigrationsAssembly(migrationsAssembly));
+				break;
+		}
+	}
+
+	private static void ConfigureHangfireStorage(IGlobalConfiguration hangfire, string databaseProvider, string connectionString)
+	{
+		switch (databaseProvider)
+		{
+			case DatabaseOptions.MySql:
+				hangfire.UseStorage(new MySqlStorage(
+					EnsureHangfireMySqlConnectionString(connectionString),
+					new MySqlStorageOptions
+					{
+						PrepareSchemaIfNecessary = true
+					}));
+				break;
+
+			case DatabaseOptions.Postgres:
+				hangfire.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString));
+				break;
+
+			case DatabaseOptions.SqlServer:
+				hangfire.UseSqlServerStorage(connectionString);
+				break;
+
+			default:
+				var sqliteConnectionName = EnsureHangfireSqliteConnectionStringRegistered(connectionString);
+				hangfire.UseSQLiteStorage(sqliteConnectionName, new SQLiteStorageOptions
+				{
+					PrepareSchemaIfNecessary = true
+				});
+				break;
+		}
+	}
+
+	private static string EnsureHangfireMySqlConnectionString(string connectionString)
+	{
+		const string optionName = "Allow User Variables";
+		var segments = connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+		var optionIndex = segments.FindIndex(static segment => segment.StartsWith($"{optionName}=", StringComparison.OrdinalIgnoreCase));
+		if (optionIndex >= 0)
+		{
+			segments[optionIndex] = $"{optionName}=True";
+			return string.Join(';', segments);
+		}
+
+		segments.Add($"{optionName}=True");
+		return string.Join(';', segments);
 	}
 
 	private static string EnsureHangfireSqliteConnectionStringRegistered(string connectionString)
