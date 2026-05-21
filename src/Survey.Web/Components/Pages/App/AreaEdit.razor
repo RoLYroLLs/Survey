@@ -71,10 +71,10 @@
 							<a class="btn btn-primary" href="/app/areas/@Id/edit">Edit Area</a>
 						</Authorized>
 					</AuthorizeView>
-					<a class="btn btn-outline-primary" href="app/areas">Back to Areas</a>
+					<a class="btn btn-outline-primary" href="/app/areas">Back to Areas</a>
 					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
 						<Authorized Context="platformContext">
-							<a class="btn btn-outline-primary" href="admin/counties/import">Import Counties</a>
+							<a class="btn btn-outline-primary" href="/admin/counties/import">Import Counties</a>
 						</Authorized>
 					</AuthorizeView>
 				</div>
@@ -122,10 +122,10 @@
 
 				<div class="form-footer">
 					<button class="btn btn-primary" type="submit">Save Area</button>
-					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/areas/{Id.Value}" : "app/areas")">Cancel</a>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/areas/{Id.Value}" : "/app/areas")">Cancel</a>
 					<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
 						<Authorized Context="platformContext">
-							<a class="btn btn-outline-primary" href="admin/counties/import">Import Counties</a>
+							<a class="btn btn-outline-primary" href="/admin/counties/import">Import Counties</a>
 						</Authorized>
 					</AuthorizeView>
 				</div>
@@ -185,7 +185,7 @@
 			var savedId = await AdministrationService.SaveAreaAsync(_model);
 			_errorMessage = null;
 			ToastService.ShowSuccess("Area saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"app/areas/{savedId}");
+			NavigationManager.NavigateTo($"/app/areas/{savedId}");
 		}
 		catch (Exception ex)
 		{

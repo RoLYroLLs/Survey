@@ -57,11 +57,7 @@
 								<td>@item.OptionCount</td>
 								<td>
 										<div class="table-actions">
-											<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
-												<Authorized>
-													<a class="btn btn-sm btn-outline-primary" href="@GetEditUrl(item.Id)">Edit</a>
-												</Authorized>
-											</AuthorizeView>
+											<a class="btn btn-sm btn-outline-primary" href="@GetViewUrl(item.Id)">View</a>
 											@if (SupportsOptions(item.Type))
 											{
 												<a class="btn btn-sm btn-outline-primary" href="@GetOptionsUrl(item.Id)">Options</a>
@@ -135,20 +131,20 @@
 		var surveyVersionId = SurveyVersionId ?? 0;
 		if (SurveyDefinitionId.HasValue)
 		{
-			return $"app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}";
+			return $"/app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}";
 		}
 
 		return SurveyVersionId.HasValue
-			? $"app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}"
-			: $"app/questions/new?surveySectionId={surveySectionId}&pageSize={_pageSize}";
+			? $"/app/questions/new?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}"
+			: $"/app/questions/new?surveySectionId={surveySectionId}&pageSize={_pageSize}";
 	}
 
 	private string GetSectionsUrl()
 	{
 		var surveyVersionId = SurveyVersionId ?? 0;
 		return SurveyDefinitionId.HasValue
-			? $"app/sections?surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
-			: $"app/sections?surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
+			? $"/app/sections?surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
+			: $"/app/sections?surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
 	private string GetOptionsUrl(int surveyQuestionId)
@@ -156,17 +152,17 @@
 		var surveySectionId = SurveySectionId ?? 0;
 		var surveyVersionId = SurveyVersionId ?? 0;
 		return SurveyDefinitionId.HasValue
-			? $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
-			: $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
+			? $"/app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
+			: $"/app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
-	private string GetEditUrl(int surveyQuestionId)
+	private string GetViewUrl(int surveyQuestionId)
 	{
 		var surveySectionId = SurveySectionId ?? 0;
 		var surveyVersionId = SurveyVersionId ?? 0;
 		return SurveyDefinitionId.HasValue
-			? $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
-			: $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
+			? $"/app/questions/{surveyQuestionId}?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
+			: $"/app/questions/{surveyQuestionId}?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
 	private static bool SupportsOptions(SurveyQuestionType questionType)

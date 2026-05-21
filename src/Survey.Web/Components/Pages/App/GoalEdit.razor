@@ -65,7 +65,7 @@
 							<a class="btn btn-primary" href="/app/goals/@Id/edit">Edit Goal</a>
 						</Authorized>
 					</AuthorizeView>
-					<a class="btn btn-outline-primary" href="app/goals">Back to Goals</a>
+					<a class="btn btn-outline-primary" href="/app/goals">Back to Goals</a>
 				</div>
 			</div>
 		}
@@ -116,7 +116,7 @@
 
 				<div class="form-footer">
 					<button class="btn btn-primary" type="submit">Save Goal</button>
-					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/goals/{Id.Value}" : "app/goals")">Cancel</a>
+					<a class="btn btn-outline-primary" href="@(Id.HasValue ? $"/app/goals/{Id.Value}" : "/app/goals")">Cancel</a>
 				</div>
 			</EditForm>
 		}
@@ -159,7 +159,7 @@
 			var savedId = await AdministrationService.SaveGoalAsync(_model);
 			_errorMessage = null;
 			ToastService.ShowSuccess("Goal saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"app/goals/{savedId}");
+			NavigationManager.NavigateTo($"/app/goals/{savedId}");
 		}
 		catch (Exception ex)
 		{

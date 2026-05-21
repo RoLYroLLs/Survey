@@ -47,7 +47,8 @@
 		|| string.Equals(CurrentPathOnly, "Account/ExternalLogin", StringComparison.OrdinalIgnoreCase)
 		|| string.Equals(CurrentPathOnly, "Account/CompleteProfile", StringComparison.OrdinalIgnoreCase)
 		|| string.Equals(CurrentPathOnly, "Account/CreateTenant", StringComparison.OrdinalIgnoreCase)
-		|| string.Equals(CurrentPathOnly, "Account/AcceptPlatformInvite", StringComparison.OrdinalIgnoreCase);
+		|| string.Equals(CurrentPathOnly, "Account/AcceptPlatformInvite", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(CurrentPathOnly, "not-found", StringComparison.OrdinalIgnoreCase);
 
 	private bool IsWideAuthFocusRoute =>
 		string.Equals(CurrentPathOnly, "Account/CompleteProfile", StringComparison.OrdinalIgnoreCase);

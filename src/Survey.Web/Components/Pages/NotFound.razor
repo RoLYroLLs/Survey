@@ -1,10 +1,27 @@
 @page "/not-found"
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
 
 <PageTitle>Not Found</PageTitle>
 
-<div class="content-card narrow-card">
-	<p class="eyebrow">404</p>
-	<h1>That page isn't available.</h1>
-	<p class="mb-3">The link may be out of date, the survey may have expired, or the route simply doesn't exist.</p>
-	<a class="btn btn-outline-primary" href="">Return home</a>
+<div class="not-found-page">
+	<div class="content-card narrow-card">
+		<p class="eyebrow">404</p>
+		<h1>That page isn't available.</h1>
+		<p class="mb-3">The link may be out of date, the survey may have expired, or the route simply doesn't exist.</p>
+		<button class="btn btn-outline-primary" type="button" @onclick="ReturnAsync">Go Back</button>
+	</div>
 </div>
+
+@code {
+	private async Task ReturnAsync()
+	{
+		await JS.InvokeVoidAsync("history.back");
+		await Task.Delay(150);
+
+		if (NavigationManager.Uri.EndsWith("/not-found", StringComparison.OrdinalIgnoreCase))
+		{
+			NavigationManager.NavigateTo("/app");
+		}
+	}
+}

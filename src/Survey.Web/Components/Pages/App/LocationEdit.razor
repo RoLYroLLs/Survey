@@ -363,7 +363,7 @@
 			var savedId = await AdministrationService.SaveLocationAsync(_model);
 			_errorMessage = null;
 			ToastService.ShowSuccess("Location saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"app/people/{_model.PersonId}/locations/{savedId}");
+			NavigationManager.NavigateTo($"/app/people/{_model.PersonId}/locations/{savedId}");
 		}
 		catch (Exception ex)
 		{

@@ -1,18 +1,19 @@
 @page "/app/options/new"
-@page "/app/options/{Id:int}/edit"
+@page "/app/options/{Id:int}"
+@page "/app/options/{Id:int}/{Mode}"
 @attribute [TenantAuthorize]
 @inject ITenantAdministrationService AdministrationService
 @inject ITenantPermissionEvaluator TenantPermissionEvaluator
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Option" : "New Option")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Question Option</p>
-			<h1>@(Id.HasValue ? "Edit Option" : "New Option")</h1>
+			<h1>@GetPageTitle()</h1>
 			<p>@GetHeaderDescription()</p>
 		</div>
 	</div>
@@ -32,8 +33,41 @@
 		{
 			<div class="inline-banner">Options are only available for single-choice and multi-select questions.</div>
 			<div class="form-footer">
-				<a class="btn btn-outline-primary" href="@GetQuestionEditUrl()">Back to Question</a>
+				<a class="btn btn-outline-primary" href="@GetQuestionViewUrl()">Back to Question</a>
 				<a class="btn btn-outline-primary" href="@GetOptionsUrl()">Back to Options</a>
+			</div>
+		}
+		else if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Question</strong>
+						<span>@GetSelectedOptionLabel(_model.SurveyQuestionOptions, _model.SurveyQuestionId)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Label</strong>
+						<span>@DisplayOrDash(_model.Label)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Sort Order</strong>
+						<span>@_model.SortOrder</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Locked</strong>
+						<span>@(_model.IsLocked ? "Yes" : "No")</span>
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
+						<Authorized>
+							<a class="btn btn-primary" href="@GetOptionEditUrl(Id!.Value)">Edit Option</a>
+						</Authorized>
+					</AuthorizeView>
+					<a class="btn btn-outline-primary" href="@GetQuestionViewUrl()">Back to Question</a>
+					<a class="btn btn-outline-primary" href="@GetOptionsUrl()">Back to Options</a>
+				</div>
 			</div>
 		}
 		else
@@ -61,8 +95,7 @@
 
 				<div class="form-footer">
 					<button class="btn btn-primary" type="submit" disabled="@_model.IsLocked">Save Option</button>
-					<a class="btn btn-outline-primary" href="@GetQuestionEditUrl()">Back to Question</a>
-					<a class="btn btn-outline-primary" href="@GetOptionsUrl()">Back to Options</a>
+					<button class="btn btn-outline-primary" type="button" @onclick="Cancel">Cancel</button>
 				</div>
 			</EditForm>
 		}
@@ -72,6 +105,9 @@
 @code {
 	[Parameter]
 	public int? Id { get; set; }
+
+	[Parameter]
+	public string? Mode { get; set; }
 
 	[SupplyParameterFromQuery]
 	public int? SurveyQuestionId { get; set; }
@@ -87,6 +123,8 @@
 
 	private QuestionOptionEditModel _model = new();
 	private string? _errorMessage;
+	private bool IsEditMode => string.Equals(Mode, "edit", StringComparison.OrdinalIgnoreCase);
+	private bool IsViewMode => Id.HasValue && !IsEditMode;
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -110,7 +148,7 @@
 			var savedId = await AdministrationService.SaveQuestionOptionAsync(_model);
 			_errorMessage = null;
 			ToastService.ShowSuccess("Option saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"app/options/{savedId}?surveyQuestionId={_model.SurveyQuestionId}&surveySectionId={_model.SurveySectionId}&surveyVersionId={_model.SurveyVersionId}&surveyDefinitionId={_model.SurveyDefinitionId}");
+			NavigationManager.NavigateTo(GetOptionViewUrl(savedId));
 		}
 		catch (Exception ex)
 		{
@@ -129,6 +167,16 @@
 		return $"View or update an answer choice for '{_model.QuestionPrompt}'.";
 	}
 
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "Option";
+		}
+
+		return Id.HasValue ? "Edit Option" : "New Option";
+	}
+
 	private string GetOptionsUrl()
 	{
 		var surveyQuestionId = _model.SurveyQuestionId > 0 ? _model.SurveyQuestionId : SurveyQuestionId ?? 0;
@@ -136,8 +184,8 @@
 		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
 		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
 		return surveyDefinitionId > 0
-			? $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
-			: $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+			? $"/app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
 	}
 
 	private string GetQuestionEditUrl()
@@ -147,15 +195,70 @@
 		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
 		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
 		return surveyDefinitionId > 0
-			? $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
-			: $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+			? $"/app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetQuestionViewUrl()
+	{
+		var surveyQuestionId = _model.SurveyQuestionId > 0 ? _model.SurveyQuestionId : SurveyQuestionId ?? 0;
+		var surveySectionId = _model.SurveySectionId > 0 ? _model.SurveySectionId : SurveySectionId ?? 0;
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"/app/questions/{surveyQuestionId}?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/questions/{surveyQuestionId}?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetOptionEditUrl(int optionId)
+	{
+		var surveyQuestionId = _model.SurveyQuestionId > 0 ? _model.SurveyQuestionId : SurveyQuestionId ?? 0;
+		var surveySectionId = _model.SurveySectionId > 0 ? _model.SurveySectionId : SurveySectionId ?? 0;
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"/app/options/{optionId}/edit?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/options/{optionId}/edit?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetOptionViewUrl(int optionId)
+	{
+		var surveyQuestionId = _model.SurveyQuestionId > 0 ? _model.SurveyQuestionId : SurveyQuestionId ?? 0;
+		var surveySectionId = _model.SurveySectionId > 0 ? _model.SurveySectionId : SurveySectionId ?? 0;
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"/app/options/{optionId}?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/options/{optionId}?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetCancelUrl()
+	{
+		return Id.HasValue ? GetOptionViewUrl(Id.Value) : GetOptionsUrl();
+	}
+
+	private void Cancel()
+	{
+		NavigationManager.NavigateTo(GetCancelUrl());
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, int value)
+	{
+		return options.FirstOrDefault(option => option.Value == value.ToString())?.Label ?? "-";
 	}
 
 	private async Task<bool> EnsurePageAccessAsync()
 	{
-		var permissionKey = Id.HasValue
-			? TenantPermissionKeys.SurveysEdit
-			: TenantPermissionKeys.SurveysCreate;
+		var permissionKey = IsViewMode
+			? TenantPermissionKeys.SurveysView
+			: Id.HasValue
+				? TenantPermissionKeys.SurveysEdit
+				: TenantPermissionKeys.SurveysCreate;
 		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
 		{
 			return true;

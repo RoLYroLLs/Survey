@@ -14,17 +14,17 @@
 		<div class="toolbar">
 			<AuthorizeView Policy="@SurveyAuthorizationPolicies.PlatformPermission(PlatformPermissionKeys.GeographyManage)">
 				<Authorized>
-					<a class="btn btn-outline-primary" href="admin/zip-mappings/import">Import ZIP Mappings</a>
+					<a class="btn btn-outline-primary" href="/admin/zip-mappings/import">Import ZIP Mappings</a>
 				</Authorized>
 			</AuthorizeView>
 			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AreasView)">
 				<Authorized>
-					<a class="btn btn-outline-primary" href="app/areas">Manage Areas</a>
+					<a class="btn btn-outline-primary" href="/app/areas">Manage Areas</a>
 				</Authorized>
 			</AuthorizeView>
 			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.GoalsView)">
 				<Authorized>
-					<a class="btn btn-primary" href="app/goals">Manage Goals</a>
+					<a class="btn btn-primary" href="/app/goals">Manage Goals</a>
 				</Authorized>
 			</AuthorizeView>
 		</div>
@@ -160,14 +160,14 @@
 						{
 							<tr>
 								<td>
-									<a href="app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">@item.PostalCode</a>
+									<a href="/app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">@item.PostalCode</a>
 								</td>
 								<td>
-									<a href="app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">@item.ResponseCount</a>
+									<a href="/app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">@item.ResponseCount</a>
 								</td>
 								<td>
 									<div class="table-actions">
-										<a class="btn btn-sm btn-outline-primary" href="app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">View Responses</a>
+										<a class="btn btn-sm btn-outline-primary" href="/app/reports/unmapped-responses?postalCode=@Uri.EscapeDataString(item.PostalCode)">View Responses</a>
 									</div>
 								</td>
 							</tr>

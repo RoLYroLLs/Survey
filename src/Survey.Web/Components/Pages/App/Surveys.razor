@@ -21,7 +21,7 @@
 			{
 				<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysCreate)">
 					<Authorized>
-						<a class="btn btn-primary" href="app/surveys/new">Add Survey</a>
+						<a class="btn btn-primary" href="/app/surveys/new">Add Survey</a>
 					</Authorized>
 				</AuthorizeView>
 			}
@@ -57,8 +57,8 @@
 							<td>@item.UpdatedUtc.LocalDateTime.ToString("g")</td>
 							<td>
 								<div class="table-actions">
-									<a class="btn btn-sm btn-outline-primary" href="@($"app/surveys/{item.Id}?showArchived={ShowArchived.ToString().ToLowerInvariant()}")">View</a>
-									<a class="btn btn-sm btn-outline-primary" href="@($"app/versions?surveyDefinitionId={item.Id}&showArchived={ShowArchived.ToString().ToLowerInvariant()}")">Versions</a>
+									<a class="btn btn-sm btn-outline-primary" href="@($"/app/surveys/{item.Id}?showArchived={ShowArchived.ToString().ToLowerInvariant()}")">View</a>
+									<a class="btn btn-sm btn-outline-primary" href="@($"/app/versions?surveyDefinitionId={item.Id}&showArchived={ShowArchived.ToString().ToLowerInvariant()}")">Versions</a>
 								</div>
 							</td>
 						</tr>

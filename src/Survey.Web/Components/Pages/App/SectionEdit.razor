@@ -1,18 +1,19 @@
 @page "/app/sections/new"
-@page "/app/sections/{Id:int}/edit"
+@page "/app/sections/{Id:int}"
+@page "/app/sections/{Id:int}/{Mode}"
 @attribute [TenantAuthorize]
 @inject ITenantAdministrationService AdministrationService
 @inject ITenantPermissionEvaluator TenantPermissionEvaluator
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Section" : "New Section")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Survey Section</p>
-			<h1>@(Id.HasValue ? "Edit Section" : "New Section")</h1>
+			<h1>@GetPageTitle()</h1>
 			<p>View or update this survey section.</p>
 		</div>
 	</div>
@@ -31,7 +32,44 @@
 		@if (_model.IsLocked && !Id.HasValue)
 		{
 			<div class="form-footer">
-				<a class="btn btn-outline-primary" href="@GetSectionsUrl()">Back to Sections</a>
+				<button class="btn btn-outline-primary" type="button" @onclick="Cancel">Cancel</button>
+			</div>
+		}
+		else if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Survey Version</strong>
+						<span>@GetSelectedOptionLabel(_model.SurveyVersionOptions, _model.SurveyVersionId)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Title</strong>
+						<span>@DisplayOrDash(_model.Title)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Description</strong>
+						<span>@DisplayOrDash(_model.Description)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Sort Order</strong>
+						<span>@_model.SortOrder</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Locked</strong>
+						<span>@(_model.IsLocked ? "Yes" : "No")</span>
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
+						<Authorized>
+							<a class="btn btn-primary" href="@GetSectionEditUrl(Id!.Value)">Edit Section</a>
+						</Authorized>
+					</AuthorizeView>
+					<a class="btn btn-outline-primary" href="@GetQuestionsUrl(_model.Id ?? 0, _model.SurveyVersionId, _model.SurveyDefinitionId)">Questions</a>
+					<a class="btn btn-outline-primary" href="@GetSectionsUrl()">Back to Sections</a>
+				</div>
 			</div>
 		}
 		else
@@ -63,7 +101,7 @@
 
 				<div class="form-footer">
 					<button class="btn btn-primary" type="submit" disabled="@_model.IsLocked">Save Section</button>
-					<a class="btn btn-outline-primary" href="@GetSectionsUrl()">Back to Sections</a>
+					<button class="btn btn-outline-primary" type="button" @onclick="Cancel">Cancel</button>
 				</div>
 			</EditForm>
 		}
@@ -74,6 +112,9 @@
 	[Parameter]
 	public int? Id { get; set; }
 
+	[Parameter]
+	public string? Mode { get; set; }
+
 	[SupplyParameterFromQuery]
 	public int? SurveyVersionId { get; set; }
 
@@ -82,6 +123,8 @@
 
 	private SurveySectionEditModel _model = new();
 	private string? _errorMessage;
+	private bool IsEditMode => string.Equals(Mode, "edit", StringComparison.OrdinalIgnoreCase);
+	private bool IsViewMode => Id.HasValue && !IsEditMode;
 
 	protected override async Task OnParametersSetAsync()
 	{
@@ -101,7 +144,7 @@
 			var savedId = await AdministrationService.SaveSurveySectionAsync(_model);
 			_errorMessage = null;
 			ToastService.ShowSuccess("Section saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"app/sections/{savedId}");
+			NavigationManager.NavigateTo(GetSectionViewUrl(savedId));
 		}
 		catch (Exception ex)
 		{
@@ -115,22 +158,72 @@
 		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
 		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
 		return surveyDefinitionId > 0
-			? $"app/sections?surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
-			: $"app/sections?surveyVersionId={surveyVersionId}";
+			? $"/app/sections?surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/sections?surveyVersionId={surveyVersionId}";
 	}
 
 	private string GetQuestionsUrl(int surveySectionId, int surveyVersionId, int surveyDefinitionId)
 	{
 		return surveyDefinitionId > 0
-			? $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
-			: $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+			? $"/app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetSectionEditUrl(int sectionId)
+	{
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"/app/sections/{sectionId}/edit?surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/sections/{sectionId}/edit?surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetSectionViewUrl(int sectionId)
+	{
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"/app/sections/{sectionId}?surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/sections/{sectionId}?surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetCancelUrl()
+	{
+		return Id.HasValue ? GetSectionViewUrl(Id.Value) : GetSectionsUrl();
+	}
+
+	private void Cancel()
+	{
+		NavigationManager.NavigateTo(GetCancelUrl());
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "Section";
+		}
+
+		return Id.HasValue ? "Edit Section" : "New Section";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, int value)
+	{
+		return options.FirstOrDefault(option => option.Value == value.ToString())?.Label ?? "-";
 	}
 
 	private async Task<bool> EnsurePageAccessAsync()
 	{
-		var permissionKey = Id.HasValue
-			? TenantPermissionKeys.SurveysEdit
-			: TenantPermissionKeys.SurveysCreate;
+		var permissionKey = IsViewMode
+			? TenantPermissionKeys.SurveysView
+			: Id.HasValue
+				? TenantPermissionKeys.SurveysEdit
+				: TenantPermissionKeys.SurveysCreate;
 		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
 		{
 			return true;

@@ -72,7 +72,7 @@
 											<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => CloneAsync(item.Id)">Clone</button>
 										</Authorized>
 									</AuthorizeView>
-									<a class="btn btn-sm btn-outline-primary" href="@($"app/sections?surveyVersionId={item.Id}&surveyDefinitionId={item.SurveyDefinitionId}")">Sections</a>
+									<a class="btn btn-sm btn-outline-primary" href="@($"/app/sections?surveyVersionId={item.Id}&surveyDefinitionId={item.SurveyDefinitionId}")">Sections</a>
 								</div>
 							</td>
 						</tr>
@@ -122,8 +122,8 @@
 	private string GetAddUrl()
 	{
 		return SurveyDefinitionId.HasValue
-			? $"app/versions/new?surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
-			: $"app/versions/new?pageSize={_pageSize}";
+			? $"/app/versions/new?surveyDefinitionId={SurveyDefinitionId.Value}&pageSize={_pageSize}"
+			: $"/app/versions/new?pageSize={_pageSize}";
 	}
 
 	private string GetActiveUrl()
@@ -139,13 +139,13 @@
 	private string GetEditUrl(int versionId, int surveyDefinitionId)
 	{
 		var archived = ShowArchived.ToString().ToLowerInvariant();
-		return $"app/versions/{versionId}/edit?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}";
+		return $"/app/versions/{versionId}/edit?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}";
 	}
 
 	private string GetViewUrl(int versionId, int surveyDefinitionId)
 	{
 		var archived = ShowArchived.ToString().ToLowerInvariant();
-		return $"app/versions/{versionId}?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}&pageSize={_pageSize}";
+		return $"/app/versions/{versionId}?surveyDefinitionId={surveyDefinitionId}&showArchived={archived}&pageSize={_pageSize}";
 	}
 
 	private async Task CloneAsync(int versionId)
@@ -153,7 +153,7 @@
 		try
 		{
 			var newId = await AdministrationService.CloneSurveyVersionAsync(versionId);
-			NavigationManager.NavigateTo($"app/versions/{newId}/edit");
+			NavigationManager.NavigateTo($"/app/versions/{newId}/edit");
 		}
 		catch (Exception ex)
 		{

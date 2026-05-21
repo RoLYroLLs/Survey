@@ -16,7 +16,7 @@
 		<div class="toolbar">
 			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.GoalsCreate)">
 				<Authorized>
-					<a class="btn btn-primary" href="app/goals/new">Add Goal</a>
+					<a class="btn btn-primary" href="/app/goals/new">Add Goal</a>
 				</Authorized>
 			</AuthorizeView>
 		</div>
@@ -62,7 +62,7 @@
 							</td>
 							<td>
 								<div class="table-actions">
-								<a class="btn btn-sm btn-outline-primary" href="app/goals/@item.Id">View</a>
+									<a class="btn btn-sm btn-outline-primary" href="/app/goals/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>

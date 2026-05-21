@@ -242,13 +242,13 @@
 		if (PersonId.HasValue)
 		{
 			return queryParts.Count == 0
-				? $"app/assignments/{assignmentId}"
-				: $"app/assignments/{assignmentId}?{string.Join("&", queryParts)}";
+				? $"/app/assignments/{assignmentId}"
+				: $"/app/assignments/{assignmentId}?{string.Join("&", queryParts)}";
 		}
 
 		return queryParts.Count == 0
-			? $"app/assignments/{assignmentId}"
-			: $"app/assignments/{assignmentId}?{string.Join("&", queryParts)}";
+			? $"/app/assignments/{assignmentId}"
+			: $"/app/assignments/{assignmentId}?{string.Join("&", queryParts)}";
 	}
 
 	private async Task<bool> EnsurePageAccessAsync()

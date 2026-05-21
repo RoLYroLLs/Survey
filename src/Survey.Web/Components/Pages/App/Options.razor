@@ -68,11 +68,7 @@
 								<td>@(item.IsLocked ? "Yes" : "No")</td>
 								<td>
 									<div class="table-actions">
-										<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
-											<Authorized>
-												<a class="btn btn-sm btn-outline-primary" href="@GetEditUrl(item.Id)">Edit</a>
-											</Authorized>
-										</AuthorizeView>
+										<a class="btn btn-sm btn-outline-primary" href="@GetViewUrl(item.Id)">View</a>
 									</div>
 								</td>
 							</tr>
@@ -168,12 +164,12 @@
 	private string GetAddUrl()
 	{
 		var surveyQuestionId = SurveyQuestionId ?? 0;
-		return GetOptionsEditorUrl($"app/options/new?surveyQuestionId={surveyQuestionId}");
+		return GetOptionsEditorUrl($"/app/options/new?surveyQuestionId={surveyQuestionId}");
 	}
 
-	private string GetEditUrl(int optionId)
+	private string GetViewUrl(int optionId)
 	{
-		return GetOptionsEditorUrl($"app/options/{optionId}/edit");
+		return GetOptionsEditorUrl($"/app/options/{optionId}");
 	}
 
 	private string GetQuestionsUrl()
@@ -182,8 +178,8 @@
 		var surveyVersionId = SurveyVersionId ?? _context.SurveyVersionId;
 		var surveyDefinitionId = SurveyDefinitionId ?? _context.SurveyDefinitionId;
 		return surveyDefinitionId > 0
-			? $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}&pageSize={_pageSize}"
-			: $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
+			? $"/app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}&pageSize={_pageSize}"
+			: $"/app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
 	private string GetQuestionEditUrl()
@@ -193,8 +189,8 @@
 		var surveyDefinitionId = SurveyDefinitionId ?? _context.SurveyDefinitionId;
 		var surveySectionId = SurveySectionId ?? _context.SurveySectionId;
 		return surveyDefinitionId > 0
-			? $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}&pageSize={_pageSize}"
-			: $"app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
+			? $"/app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}&pageSize={_pageSize}"
+			: $"/app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&pageSize={_pageSize}";
 	}
 
 	private string GetOptionsEditorUrl(string baseUrl)

@@ -15,11 +15,11 @@
 		<div class="toolbar">
 			@if (CountyId.HasValue)
 			{
-				<a class="btn btn-outline-primary" href="app/areas">View All</a>
+				<a class="btn btn-outline-primary" href="/app/areas">View All</a>
 			}
 			<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AreasCreate)">
 				<Authorized>
-					<a class="btn btn-primary" href="app/areas/new">Add Area</a>
+					<a class="btn btn-primary" href="/app/areas/new">Add Area</a>
 				</Authorized>
 			</AuthorizeView>
 		</div>
@@ -54,7 +54,7 @@
 							<td>@item.UpdatedUtc.LocalDateTime.ToString("g")</td>
 							<td>
 								<div class="table-actions">
-								<a class="btn btn-sm btn-outline-primary" href="app/areas/@item.Id">View</a>
+									<a class="btn btn-sm btn-outline-primary" href="/app/areas/@item.Id">View</a>
 								</div>
 							</td>
 						</tr>

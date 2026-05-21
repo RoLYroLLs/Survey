@@ -1,18 +1,19 @@
 @page "/app/questions/new"
-@page "/app/questions/{Id:int}/edit"
+@page "/app/questions/{Id:int}"
+@page "/app/questions/{Id:int}/{Mode}"
 @attribute [TenantAuthorize]
 @inject ITenantAdministrationService AdministrationService
 @inject ITenantPermissionEvaluator TenantPermissionEvaluator
 @inject NavigationManager NavigationManager
 @inject ToastService ToastService
 
-<PageTitle>@(Id.HasValue ? "Edit Question" : "New Question")</PageTitle>
+<PageTitle>@GetPageTitle()</PageTitle>
 
 <div class="page-stack">
 	<div class="page-header">
 		<div>
 			<p class="eyebrow">Survey Question</p>
-			<h1>@(Id.HasValue ? "Edit Question" : "New Question")</h1>
+			<h1>@GetPageTitle()</h1>
 			<p>View or update this question.</p>
 		</div>
 	</div>
@@ -28,57 +29,111 @@
 			<div class="inline-banner inline-banner--danger mb-3">@_errorMessage</div>
 		}
 
-		<EditForm Model="_model" OnValidSubmit="SaveAsync">
-			<DataAnnotationsValidator />
-			<div class="form-grid form-grid--single">
-				<div class="field-stack">
-					<FieldLabel Text="Section" Required />
-					<SearchableSelect class="form-select"
-									  @bind-Value="_model.SurveySectionId"
-									  Options="_model.SurveySectionOptions"
-									  Disabled="@_model.Id.HasValue" />
+		@if (IsViewMode)
+		{
+			<div class="page-stack">
+				<div class="assignment-detail-list">
+					<div class="assignment-detail-row">
+						<strong>Section</strong>
+						<span>@GetSelectedOptionLabel(_model.SurveySectionOptions, _model.SurveySectionId)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Prompt</strong>
+						<span>@DisplayOrDash(_model.Prompt)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Help Text</strong>
+						<span>@DisplayOrDash(_model.HelpText)</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Type</strong>
+						<span>@_model.Type</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Required</strong>
+						<span>@(_model.IsRequired ? "Yes" : "No")</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Sort Order</strong>
+						<span>@_model.SortOrder</span>
+					</div>
+					<div class="assignment-detail-row">
+						<strong>Locked</strong>
+						<span>@(_model.IsLocked ? "Yes" : "No")</span>
+					</div>
 				</div>
-				<div class="field-stack">
-					<FieldLabel Text="Prompt" Required />
-					<InputTextArea class="form-control" rows="4" @bind-Value="_model.Prompt" disabled="@_model.IsLocked" />
-					<ValidationMessage For="@(() => _model.Prompt)" />
-				</div>
-				<div class="field-stack">
-					<label>Help Text</label>
-					<InputTextArea class="form-control" rows="3" @bind-Value="_model.HelpText" disabled="@_model.IsLocked" />
-				</div>
-				<div class="field-stack">
-					<FieldLabel Text="Type" Required />
-					<SearchableSelect class="form-select"
-									  @bind-Value="_model.Type"
-									  Options="_questionTypeOptions"
-									  Disabled="@_model.IsLocked" />
-				</div>
-				<div class="field-stack">
-					<label>Required</label>
-					<InputCheckbox class="form-check-input" @bind-Value="_model.IsRequired" disabled="@_model.IsLocked" />
-				</div>
-				<div class="field-stack">
-					<label>Sort Order</label>
-					<InputNumber class="form-control" @bind-Value="_model.SortOrder" disabled="@_model.IsLocked" />
-				</div>
-			</div>
 
-			<div class="form-footer">
-				<button class="btn btn-primary" type="submit" disabled="@_model.IsLocked">Save Question</button>
-				@if (_model.Id.HasValue && SupportsOptions())
-				{
-					<a class="btn btn-outline-primary" href="@GetOptionsUrl(_model.Id.Value)">Manage Options</a>
-				}
-				<a class="btn btn-outline-primary" href="@GetQuestionsUrl()">Back to Questions</a>
+				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
+						<Authorized>
+							<a class="btn btn-primary" href="@GetQuestionEditUrl(Id!.Value)">Edit Question</a>
+						</Authorized>
+					</AuthorizeView>
+					@if (SupportsOptions())
+					{
+						<a class="btn btn-outline-primary" href="@GetOptionsUrl(Id!.Value)">Options</a>
+					}
+					<a class="btn btn-outline-primary" href="@GetQuestionsUrl()">Back to Questions</a>
+				</div>
 			</div>
-		</EditForm>
+		}
+		else
+		{
+			<EditForm Model="_model" OnValidSubmit="SaveAsync">
+				<DataAnnotationsValidator />
+				<div class="form-grid form-grid--single">
+					<div class="field-stack">
+						<FieldLabel Text="Section" Required />
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.SurveySectionId"
+										  Options="_model.SurveySectionOptions"
+										  Disabled="@_model.Id.HasValue" />
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Prompt" Required />
+						<InputTextArea class="form-control" rows="4" @bind-Value="_model.Prompt" disabled="@_model.IsLocked" />
+						<ValidationMessage For="@(() => _model.Prompt)" />
+					</div>
+					<div class="field-stack">
+						<label>Help Text</label>
+						<InputTextArea class="form-control" rows="3" @bind-Value="_model.HelpText" disabled="@_model.IsLocked" />
+					</div>
+					<div class="field-stack">
+						<FieldLabel Text="Type" Required />
+						<SearchableSelect class="form-select"
+										  @bind-Value="_model.Type"
+										  Options="_questionTypeOptions"
+										  Disabled="@_model.IsLocked" />
+					</div>
+					<div class="field-stack">
+						<label>Required</label>
+						<InputCheckbox class="form-check-input" @bind-Value="_model.IsRequired" disabled="@_model.IsLocked" />
+					</div>
+					<div class="field-stack">
+						<label>Sort Order</label>
+						<InputNumber class="form-control" @bind-Value="_model.SortOrder" disabled="@_model.IsLocked" />
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<button class="btn btn-primary" type="submit" disabled="@_model.IsLocked">Save Question</button>
+					@if (_model.Id.HasValue && SupportsOptions())
+					{
+						<a class="btn btn-outline-primary" href="@GetOptionsUrl(_model.Id.Value)">Manage Options</a>
+					}
+					<button class="btn btn-outline-primary" type="button" @onclick="Cancel">Cancel</button>
+				</div>
+			</EditForm>
+		}
 	</div>
 </div>
 
 @code {
 	[Parameter]
 	public int? Id { get; set; }
+
+	[Parameter]
+	public string? Mode { get; set; }
 
 	[SupplyParameterFromQuery]
 	public int? SurveySectionId { get; set; }
@@ -91,6 +146,8 @@
 
 	private SurveyQuestionEditModel _model = new();
 	private string? _errorMessage;
+	private bool IsEditMode => string.Equals(Mode, "edit", StringComparison.OrdinalIgnoreCase);
+	private bool IsViewMode => Id.HasValue && !IsEditMode;
 	private static readonly IReadOnlyList<SelectOption> _questionTypeOptions = Enum
 		.GetValues<SurveyQuestionType>()
 		.Select(questionType => new SelectOption { Value = questionType.ToString(), Label = questionType.ToString() })
@@ -114,7 +171,7 @@
 			var savedId = await AdministrationService.SaveSurveyQuestionAsync(_model);
 			_errorMessage = null;
 			ToastService.ShowSuccess("Question saved successfully.", "Saved");
-			NavigationManager.NavigateTo($"app/questions/{savedId}");
+			NavigationManager.NavigateTo(GetQuestionViewUrl(savedId));
 		}
 		catch (Exception ex)
 		{
@@ -134,8 +191,8 @@
 		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
 		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
 		return surveyDefinitionId > 0
-			? $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
-			: $"app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+			? $"/app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/questions?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
 	}
 
 	private string GetOptionsUrl(int surveyQuestionId)
@@ -144,15 +201,67 @@
 		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
 		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
 		return surveyDefinitionId > 0
-			? $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
-			: $"app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+			? $"/app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/options?surveyQuestionId={surveyQuestionId}&surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetQuestionEditUrl(int surveyQuestionId)
+	{
+		var surveySectionId = _model.SurveySectionId > 0 ? _model.SurveySectionId : SurveySectionId ?? 0;
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"/app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/questions/{surveyQuestionId}/edit?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetQuestionViewUrl(int surveyQuestionId)
+	{
+		var surveySectionId = _model.SurveySectionId > 0 ? _model.SurveySectionId : SurveySectionId ?? 0;
+		var surveyVersionId = _model.SurveyVersionId > 0 ? _model.SurveyVersionId : SurveyVersionId ?? 0;
+		var surveyDefinitionId = _model.SurveyDefinitionId > 0 ? _model.SurveyDefinitionId : SurveyDefinitionId ?? 0;
+		return surveyDefinitionId > 0
+			? $"/app/questions/{surveyQuestionId}?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}&surveyDefinitionId={surveyDefinitionId}"
+			: $"/app/questions/{surveyQuestionId}?surveySectionId={surveySectionId}&surveyVersionId={surveyVersionId}";
+	}
+
+	private string GetCancelUrl()
+	{
+		return Id.HasValue ? GetQuestionViewUrl(Id.Value) : GetQuestionsUrl();
+	}
+
+	private void Cancel()
+	{
+		NavigationManager.NavigateTo(GetCancelUrl());
+	}
+
+	private string GetPageTitle()
+	{
+		if (IsViewMode)
+		{
+			return "Question";
+		}
+
+		return Id.HasValue ? "Edit Question" : "New Question";
+	}
+
+	private static string DisplayOrDash(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value) ? "-" : value;
+	}
+
+	private static string GetSelectedOptionLabel(IEnumerable<SelectOption> options, int value)
+	{
+		return options.FirstOrDefault(option => option.Value == value.ToString())?.Label ?? "-";
 	}
 
 	private async Task<bool> EnsurePageAccessAsync()
 	{
-		var permissionKey = Id.HasValue
-			? TenantPermissionKeys.SurveysEdit
-			: TenantPermissionKeys.SurveysCreate;
+		var permissionKey = IsViewMode
+			? TenantPermissionKeys.SurveysView
+			: Id.HasValue
+				? TenantPermissionKeys.SurveysEdit
+				: TenantPermissionKeys.SurveysCreate;
 		if (await TenantPermissionEvaluator.HasPermissionAsync(permissionKey))
 		{
 			return true;
