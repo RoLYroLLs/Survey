@@ -16,6 +16,9 @@ src/Survey.Web/Data/
 # Aspire local artifacts
 .aspire/
 
+# Local tooling artifacts
+.tools/
+
 # User-specific files
 *.rsuser
 *.suo
