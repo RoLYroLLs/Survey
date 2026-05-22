@@ -215,6 +215,42 @@ public sealed partial class SurveyApplicationService
 					Items = items
 				});
 			}
+
+			var versionsQuery = _dbContext.SurveyVersions
+				.AsNoTracking()
+				.Include(version => version.SurveyDefinition)
+				.Where(version =>
+					!version.IsArchived &&
+					(version.DisplayName.Contains(normalizedQuery)
+					|| version.VersionNumber.ToString().Contains(normalizedQuery)
+					|| version.SurveyDefinition.Name.Contains(normalizedQuery)
+					|| (version.SurveyDefinition.Description != null && version.SurveyDefinition.Description.Contains(normalizedQuery))));
+			var versionTotalCount = await versionsQuery.CountAsync(cancellationToken);
+			if (versionTotalCount > 0)
+			{
+				var versionItems = await versionsQuery
+					.OrderBy(version => version.SurveyDefinition.Name)
+					.ThenBy(version => version.VersionNumber)
+					.ThenBy(version => version.Id)
+					.Take(5)
+					.Select(version => new TenantSearchItemModel
+					{
+						Title = version.DisplayName,
+						Subtitle = $"{version.SurveyDefinition.Name} - Version {version.VersionNumber}" + (version.IsPublished ? " - Published" : string.Empty),
+						Url = $"/app/versions/{version.Id}",
+						IconName = "versions"
+					})
+					.ToListAsync(cancellationToken);
+
+				sections.Add(new TenantSearchSectionModel
+				{
+					Key = "versions",
+					Title = "Versions",
+					ViewAllUrl = "/app/versions",
+					TotalCount = versionTotalCount,
+					Items = versionItems
+				});
+			}
 		}
 
 		if (context.TenantPermissions.Contains(TenantPermissionKeys.GoalsView, StringComparer.Ordinal))
@@ -309,6 +345,29 @@ public sealed partial class SurveyApplicationService
 			}
 		}
 
+		if (context.TenantPermissions.Contains(TenantPermissionKeys.ReportsView, StringComparer.Ordinal)
+			&& ReportSearchTerms.Any(term => term.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)
+				|| normalizedQuery.Contains(term, StringComparison.OrdinalIgnoreCase)))
+		{
+			sections.Add(new TenantSearchSectionModel
+			{
+				Key = "reports",
+				Title = "Reports",
+				ViewAllUrl = "/app/reports",
+				TotalCount = 1,
+				Items =
+				[
+					new TenantSearchItemModel
+					{
+						Title = "Reports",
+						Subtitle = "Response totals, goal progress, area counts, and unmapped ZIP activity.",
+						Url = "/app/reports",
+						IconName = "reports"
+					}
+				]
+			});
+		}
+
 		if (context.TenantPermissions.Contains(TenantPermissionKeys.ResponsesView, StringComparer.Ordinal))
 		{
 			var responsesQuery = _dbContext.SurveyResponses
@@ -386,4 +445,16 @@ public sealed partial class SurveyApplicationService
 
 		return expiresAtUtc.HasValue && expiresAtUtc.Value <= DateTimeOffset.UtcNow ? "Expired" : "Active";
 	}
+
+	private static readonly string[] ReportSearchTerms =
+	[
+		"report",
+		"reports",
+		"reporting",
+		"response totals",
+		"goal progress",
+		"area counts",
+		"unmapped zip",
+		"zip activity"
+	];
 }

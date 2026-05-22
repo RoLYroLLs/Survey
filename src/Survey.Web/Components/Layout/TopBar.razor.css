@@ -9,6 +9,25 @@
 	color: var(--app-sidebar-ink);
 }
 
+.topbar__nav-toggle {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 0.75rem;
+	color: #ffffff;
+	background: rgba(255, 255, 255, 0.08);
+}
+
+.topbar ::deep(.topbar__nav-toggle-icon) {
+	width: 1.15rem;
+	height: 1.15rem;
+	stroke: currentColor;
+}
+
 .topbar__brand {
 	grid-column: 1;
 	color: #ffffff;
@@ -348,43 +367,94 @@
 	stroke: currentColor;
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 991.98px) {
 	.topbar {
-		grid-template-columns: 1fr;
+		grid-template-columns: auto 1fr auto;
+		gap: 0.85rem;
+		padding: 0.85rem 1rem;
 	}
 
-	.topbar__brand,
-	.topbar__search,
-	.topbar__actions {
-		grid-column: auto;
+	.topbar__nav-toggle {
+		display: inline-flex;
+		grid-column: 1;
 	}
 
-	.topbar__search,
+	.topbar__brand {
+		grid-column: 2;
+		font-size: 1.4rem;
+	}
+
 	.topbar__actions {
+		grid-column: 3;
+		justify-self: end;
+		gap: 0.6rem;
+	}
+
+	.topbar__search {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		max-width: none;
 		justify-self: stretch;
 	}
 
-	.topbar__actions {
-		justify-content: space-between;
+	.topbar__tenant-trigger {
+		min-width: 0;
+		max-width: 10rem;
 	}
 }
 
 @media (max-width: 720px) {
-	.topbar {
-		padding: 0.85rem 1rem;
-	}
-
 	.topbar__actions {
-		flex-direction: column;
-		align-items: stretch;
+		grid-column: 1 / -1;
+		grid-row: 3;
+		justify-self: stretch;
+		flex-wrap: wrap;
+		justify-content: space-between;
 	}
 
-	.topbar__tenant-select {
+	.topbar__tenant-switcher {
+		flex: 1 1 12rem;
 		min-width: 0;
+	}
+
+	.topbar__tenant-trigger {
 		width: 100%;
+		max-width: none;
 	}
 
 	.topbar__profile-menu {
-		align-self: end;
+		margin-left: auto;
+	}
+}
+
+@media (max-width: 575.98px) {
+	.topbar {
+		gap: 0.7rem;
+		padding: 0.75rem 0.85rem;
+	}
+
+	.topbar__brand {
+		font-size: 1.2rem;
+	}
+
+	.topbar__search-input {
+		padding-right: 4.9rem;
+		font-size: 0.95rem;
+	}
+
+	.topbar__search-submit {
+		padding: 0 0.7rem;
+		font-size: 0.78rem;
+	}
+
+	.topbar__tenant-dropdown,
+	.topbar__profile-dropdown {
+		width: min(18rem, calc(100vw - 1.2rem));
+		min-width: 0;
+		right: 0;
+	}
+
+	.topbar__profile-header {
+		align-items: flex-start;
 	}
 }

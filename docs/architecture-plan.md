@@ -123,6 +123,7 @@
 - Toast visual treatment should communicate severity consistently: success uses green, warning uses yellow, and error uses red.
 - The shared toast host should support multiple simultaneous toasts, stack them oldest-first near the top edge of the screen, and animate remaining toasts upward when one is dismissed or expires.
 - The authenticated app shell should use a shared top bar across `/app` and `/admin`, with `Survey` branding on the left, a centered tenant-wide search entry point, and tenant/profile controls on the right.
+- The authenticated app shell should switch to a hamburger / off-canvas navigation pattern below the desktop breakpoint so tenant and platform pages keep page content as the first visible focus on phones and smaller tablets.
 - First-run setup screens should not show the normal tenant shell controls; the setup experience should hide the left navigation, search, tenant switcher, and profile menu, and center the setup/admin-bootstrap content inside the remaining shell.
 - The tenant-wide top-bar search should search across the current tenant's accessible records and return only sections the current membership is authorized to view.
 - The authenticated shell should expose tenant switching as a top-bar control rather than a standalone navigation-only action.
@@ -147,6 +148,8 @@
 - Forward `Tab` on a focused dropdown should preserve the current selection unless the user has actually started interacting with the option list by typing or using arrow navigation; simple tabbing through a form must not clear or replace existing dropdown values.
 - Shared searchable dropdowns should show a single chevron indicator only; component markup and Bootstrap/select styling must not combine to render duplicate chevrons.
 - Searchable dropdown menus should render as floating overlays, preserve the trigger width as a minimum, grow only as needed for visible content, track the trigger on scroll and resize, and flip above the field when there is not enough viewport space below.
+- Shared page headers, action toolbars, card grids, table wrappers, form footers, and toast placement should continue collapsing intentionally on narrow viewports instead of relying on generic auto-fit behavior.
+- Person and location editors should keep whole address/contact sections stacked below `xxl`, while inner address/contact field layouts are reviewed deliberately case by case rather than widened by shared form-grid overrides.
 - Tenant administration should expose a `/app/users` flow for viewing users, creating invitation links, changing tenant role/status, reviewing effective permissions, and editing membership-level permission overrides.
 - Tenant administration now also exposes `/app/users/invitations` for reviewing pending/history invitation links and reissuing or revoking them safely inside the current tenant.
 - Invitation acceptance should support both existing users and newly created users, with the invited tenant becoming the active tenant after acceptance.
@@ -174,4 +177,5 @@
 - Public pricing is still a mockup and is not connected to enforceable tenant limits, checkout, invoicing, or plan provisioning.
 - Passkey support is build-wired, but the browser registration and sign-in flow still needs live end-to-end verification across supported devices and browsers.
 - Account-management pages have been brought closer to the main shell, but the remaining manage screens should continue to be reviewed so every account/settings page matches the main app styling and navigation consistently.
+- Responsive cleanup is still in progress; the next review pass should focus on dense admin list/detail pages, assignment workflows, search results, and reporting views so filters, tables, and action clusters remain usable on phones.
 - The current automated coverage is still lighter than the target security plan; tenant-switching, protected-owner rules, invitation flows, first-run setup, queued email dispatch, and public/auth navigation regressions would benefit from broader web and integration tests.

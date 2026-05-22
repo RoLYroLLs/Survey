@@ -6,6 +6,13 @@
 @inject NavigationManager NavigationManager
 
 <header class="topbar">
+	@if (ShowMenuToggle)
+	{
+		<button type="button" class="topbar__nav-toggle" aria-label="Toggle navigation menu" aria-controls="shell-sidebar" aria-expanded="@IsMenuOpen" @onclick="OnMenuToggle">
+			<OutlineIcon Name="menu" CssClass="topbar__nav-toggle-icon" />
+		</button>
+	}
+
 	<a class="topbar__brand" href="@GetBrandUrl()">Survey</a>
 
 	@if (_currentUser is not null && !IsSetupRoute && !IsAccountOnboardingRoute)
@@ -122,6 +129,15 @@
 </header>
 
 @code {
+	[Parameter]
+	public bool ShowMenuToggle { get; set; }
+
+	[Parameter]
+	public bool IsMenuOpen { get; set; }
+
+	[Parameter]
+	public EventCallback OnMenuToggle { get; set; }
+
 	private ApplicationUser? _currentUser;
 	private CurrentAccessContext _accessContext = new();
 	private IReadOnlyList<TenantMembershipOption> _membershipOptions = Array.Empty<TenantMembershipOption>();
@@ -135,6 +151,7 @@
 		string.Equals(_currentUrl, "Account/CompleteProfile", StringComparison.OrdinalIgnoreCase)
 		|| string.Equals(_currentUrl, "Account/CreateTenant", StringComparison.OrdinalIgnoreCase)
 		|| string.Equals(_currentUrl, "Account/AcceptPlatformInvite", StringComparison.OrdinalIgnoreCase);
+	private bool IsTopBarDataBypassRoute => IsSetupRoute || IsAccountOnboardingRoute;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -155,7 +172,7 @@
 
 	private async Task LoadAsync()
 	{
-		if (IsSetupRoute)
+		if (IsTopBarDataBypassRoute)
 		{
 			_currentUser = null;
 			_accessContext = new CurrentAccessContext();

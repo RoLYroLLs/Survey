@@ -663,6 +663,10 @@ h4 {
   grid-template-columns: 1fr;
 }
 
+.card-grid--person-location-sections {
+  grid-template-columns: 1fr;
+}
+
 .field-stack {
   display: grid;
   align-content: start;
@@ -724,6 +728,12 @@ h4 {
 .field-stack textarea.form-control {
 	height: auto;
 	min-height: 7rem;
+}
+
+@media (min-width: 1400px) {
+  .card-grid--person-location-sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .field-stack--ghost {
@@ -1498,6 +1508,11 @@ h4 {
 
   .page-header {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-header > .toolbar {
+    width: 100%;
   }
 
   .admin-table {
@@ -1514,6 +1529,42 @@ h4 {
   .list-pager__action,
   .list-pager__controls {
     justify-self: center;
+  }
+
+  .form-footer > * {
+    flex: 1 1 100%;
+  }
+
+  .toast-host {
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-grid,
+  .dashboard-grid,
+  .checkbox-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    gap: 0.6rem;
+  }
+
+  .toolbar > * {
+    max-width: 100%;
+  }
+
+  .toolbar--between {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar--between > * {
+    width: 100%;
   }
 }
 

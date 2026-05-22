@@ -2,14 +2,15 @@
 @implements IDisposable
 @inject NavigationManager NavigationManager
 
-<div class="shell @(IsSinglePaneShellRoute ? "shell--setup" : string.Empty) @(IsFocusedShellRoute ? "shell--setup-center" : string.Empty) @(IsAuthFocusRoute ? "shell--auth-focus" : string.Empty)">
+<div class="shell @(IsSinglePaneShellRoute ? "shell--setup" : string.Empty) @(IsFocusedShellRoute ? "shell--setup-center" : string.Empty) @(IsAuthFocusRoute ? "shell--auth-focus" : string.Empty) @(_isSidebarOpen ? "shell--nav-open" : string.Empty)">
 	<header class="shell__topbar">
-		<TopBar />
+		<TopBar ShowMenuToggle="@CanShowResponsiveNavToggle" IsMenuOpen="@_isSidebarOpen" OnMenuToggle="ToggleSidebarAsync" />
 	</header>
 
 	@if (!IsSinglePaneShellRoute)
 	{
-		<aside class="shell__sidebar">
+		<button type="button" class="shell__sidebar-backdrop" aria-label="Close navigation menu" @onclick="CloseSidebarAsync"></button>
+		<aside id="shell-sidebar" class="shell__sidebar @(_isSidebarOpen ? "shell__sidebar--open" : string.Empty)">
 			<NavMenu />
 		</aside>
 	}
@@ -25,6 +26,7 @@
 
 @code {
 	private string _currentUrl = string.Empty;
+	private bool _isSidebarOpen;
 	private string CurrentPathOnly => _currentUrl.Split('?', '#')[0].Trim('/');
 
 	private bool IsAuthFocusRoute =>
@@ -66,6 +68,7 @@
 	private bool IsSinglePaneShellRoute => IsSetupShellRoute || IsAuthFocusRoute;
 
 	private bool IsFocusedShellRoute => IsSetupFocusRoute || IsAuthFocusRoute;
+	private bool CanShowResponsiveNavToggle => !IsSinglePaneShellRoute;
 
 	protected override void OnInitialized()
 	{
@@ -76,7 +79,20 @@
 	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
 	{
 		_currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+		_isSidebarOpen = false;
 		_ = InvokeAsync(StateHasChanged);
+	}
+
+	private Task ToggleSidebarAsync()
+	{
+		_isSidebarOpen = !_isSidebarOpen;
+		return Task.CompletedTask;
+	}
+
+	private Task CloseSidebarAsync()
+	{
+		_isSidebarOpen = false;
+		return Task.CompletedTask;
 	}
 
 	public void Dispose()

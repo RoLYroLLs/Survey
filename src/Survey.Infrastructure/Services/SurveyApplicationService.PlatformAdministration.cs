@@ -543,7 +543,7 @@ public sealed partial class SurveyApplicationService
 		var normalizedKey = model.Key.Trim();
 		var normalizedName = model.Name.Trim();
 		var normalizedDescription = model.Description.Trim();
-		var normalizedCssVariablesBlock = model.CssVariablesBlock.Trim();
+		var normalizedCssVariablesBlock = ValidateThemeCssVariablesBlock(model.CssVariablesBlock);
 		var duplicateExists = await _dbContext.PlatformThemes
 			.AsNoTracking()
 			.AnyAsync(theme => theme.Key == normalizedKey && (!model.Id.HasValue || theme.Id != model.Id.Value), cancellationToken);
@@ -1223,6 +1223,73 @@ public sealed partial class SurveyApplicationService
 		{
 			throw new InvalidOperationException("The final enabled platform administrator cannot be removed or disabled.");
 		}
+	}
+
+	private static string ValidateThemeCssVariablesBlock(string cssVariablesBlock)
+	{
+		var normalized = cssVariablesBlock.Trim();
+		if (string.IsNullOrWhiteSpace(normalized))
+		{
+			throw new InvalidOperationException("The CSS variables block is required.");
+		}
+
+		if (!normalized.StartsWith(":root", StringComparison.OrdinalIgnoreCase))
+		{
+			throw new InvalidOperationException("Theme CSS must start with a :root block.");
+		}
+
+		if (normalized.Contains('<') || normalized.Contains('>'))
+		{
+			throw new InvalidOperationException("Theme CSS cannot contain HTML or script markup.");
+		}
+
+		var disallowedTokens = new[]
+		{
+			"</style",
+			"<script",
+			"</script",
+			"@import",
+			"url(",
+			"expression(",
+			"javascript:"
+		};
+		if (disallowedTokens.Any(token => normalized.Contains(token, StringComparison.OrdinalIgnoreCase)))
+		{
+			throw new InvalidOperationException("Theme CSS can only contain safe CSS variable declarations.");
+		}
+
+		var openingBraceIndex = normalized.IndexOf('{');
+		var closingBraceIndex = normalized.LastIndexOf('}');
+		if (openingBraceIndex < 0 || closingBraceIndex <= openingBraceIndex)
+		{
+			throw new InvalidOperationException("Theme CSS must contain a valid :root { ... } block.");
+		}
+
+		var trailingContent = normalized[(closingBraceIndex + 1)..].Trim();
+		if (!string.IsNullOrWhiteSpace(trailingContent))
+		{
+			throw new InvalidOperationException("Theme CSS cannot contain content after the closing :root brace.");
+		}
+
+		var declarationsBlock = normalized[(openingBraceIndex + 1)..closingBraceIndex];
+		var declarationLines = declarationsBlock
+			.Replace("\r", string.Empty, StringComparison.Ordinal)
+			.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+		if (declarationLines.Length == 0)
+		{
+			throw new InvalidOperationException("Theme CSS must define at least one CSS variable.");
+		}
+
+		foreach (var line in declarationLines)
+		{
+			if (!line.StartsWith("--", StringComparison.Ordinal) || !line.EndsWith(';'))
+			{
+				throw new InvalidOperationException("Theme CSS may only contain CSS custom property declarations inside :root.");
+			}
+		}
+
+		return normalized;
 	}
 
 	private static bool MatchesPlatformUserSearch(ApplicationUser user, string search)
