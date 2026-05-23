@@ -18,6 +18,8 @@ src/Survey.Web/Data/
 
 # Local tooling artifacts
 .tools/
+.artifacts/
+src/Survey.Web/dotnet-tools.json
 
 # User-specific files
 *.rsuser
