@@ -126,6 +126,8 @@
 - The authenticated app shell should switch to a hamburger / off-canvas navigation pattern below the desktop breakpoint so tenant and platform pages keep page content as the first visible focus on phones and smaller tablets.
 - First-run setup screens should not show the normal tenant shell controls; the setup experience should hide the left navigation, search, tenant switcher, and profile menu, and center the setup/admin-bootstrap content inside the remaining shell.
 - The tenant-wide top-bar search should search across the current tenant's accessible records and return only sections the current membership is authorized to view.
+- Tenant search matching should stay provider-consistent and case-insensitive across supported databases (`Sqlite`, `SqlServer`, `Postgres`, `MySql`) so the same query finds surveys, versions, areas, goals, people, locations, assignments, responses, and users regardless of database collation defaults.
+- Tenant search result groups should be ordered to mirror the tenant navigation structure so users see sections in the same sequence they already learn from the menu; location hits may sit immediately after people even though locations are not a top-level nav item.
 - The authenticated shell should expose tenant switching as a top-bar control rather than a standalone navigation-only action.
 - User profile entry in the shell should render as a colored circular avatar with the user's initial; avatar color is assigned once at account creation and reused until a future profile editor changes it.
 - Sidebar menu icons should use a consistent outlined icon style rather than colored emoji-style glyphs.
@@ -136,6 +138,7 @@
 - The shared list pager should show `Showing X of Y`, disable `Load More` when there are no more records, and preserve the selected `pageSize` in the query string when filters or searches rebuild the URL.
 - Filter, archive, and search changes on standalone routed list pages should reset the loaded batch back to the first page while preserving the selected `pageSize`.
 - Standalone routed list pages should allow sorting on every visible data column, remember the last three selected sort columns, and use the most recently selected column as the primary sort.
+- Collection-backed routed pages should render `Loading...` until their first async fetch completes; only after that first load should they choose between showing rows/cards or a true empty-state message such as `No results found`.
 - Selecting the current primary sort column repeatedly should cycle it through ascending, descending, and removed states while retaining any remaining secondary and tertiary sort columns.
 - Embedded child tables inside detail pages are excluded from the progressive paging standard unless they are explicitly upgraded later.
 - Person-edit address section titles should use concise end-user labels such as `Address` and `Mailing Address` instead of internal profile-oriented wording.
@@ -143,7 +146,11 @@
 - Person mailing address is required in the admin editor and must be entered or explicitly copied by the user; it should not silently inherit the physical address during save.
 - Assignment list views should support query-string-driven filtering so archived scope, person scope, and status scope survive view/edit/back navigation.
 - Assignment status filtering should support `All`, `Active`, `Completed`, and `Expired` in both the global assignments list and the person-specific assignments list.
+- New assignment entry points from people and location flows should prefill only the record context already known from navigation (`Person`, and optionally `Location`), while generic assignment creation should leave person and location blank until the user makes an explicit selection; once a location is selected, its primary phone and primary email should prefill automatically.
+- Version list views should support one-click publishing for unpublished versions, while any version that can no longer be unpublished because assignments already exist should show a disabled publish-state action consistent with the backend lock rule.
 - Reference-data and workflow dropdowns should use a shared searchable combobox pattern instead of plain browser selects when the option list is long.
+- Area editing should not dump the full county catalog as an unfiltered checkbox wall; the county selector should support narrowing by state and free-text search, debounce live text filtering with a short pause, and preserve visibility into already selected counties.
+- Shared county dropdown labels across tenant and platform geography/address forms should use `State Abbr - County Name` for normal selection flows instead of exposing FIPS codes in the option text.
 - Searchable dropdown behavior should be case-insensitive, filter as the user types, support keyboard navigation, allow `Enter` to select without accidentally submitting the surrounding form, and treat `Tab` / `Shift+Tab` as "select highlighted option, then move focus onward" when the menu is open.
 - Forward `Tab` on a focused dropdown should preserve the current selection unless the user has actually started interacting with the option list by typing or using arrow navigation; simple tabbing through a form must not clear or replace existing dropdown values.
 - Shared searchable dropdowns should show a single chevron indicator only; component markup and Bootstrap/select styling must not combine to render duplicate chevrons.

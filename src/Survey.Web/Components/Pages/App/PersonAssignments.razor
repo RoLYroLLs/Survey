@@ -36,7 +36,11 @@
 	</div>
 
 	<div class="list-card">
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">This person does not have any assignments yet.</p>
 		}
@@ -135,6 +139,7 @@
 	private int _totalCount;
 	private bool _hasMore;
 	private bool _isLoadingMore;
+	private bool _hasLoadedInitialState;
 	private static readonly IReadOnlyList<SelectOption> _statusOptions =
 	[
 		new() { Value = "active", Label = "Active" },
@@ -144,10 +149,18 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
-		var person = await AdministrationService.GetPersonAsync(PersonId);
-		_personName = string.Join(" ", new[] { person.FirstName, person.MiddleName, person.LastName }.Where(part => !string.IsNullOrWhiteSpace(part)));
-		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
-		await LoadAsync();
+		_hasLoadedInitialState = false;
+		try
+		{
+			var person = await AdministrationService.GetPersonAsync(PersonId);
+			_personName = string.Join(" ", new[] { person.FirstName, person.MiddleName, person.LastName }.Where(part => !string.IsNullOrWhiteSpace(part)));
+			_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+			await LoadAsync();
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private string GetAssignmentUrl(int assignmentId)

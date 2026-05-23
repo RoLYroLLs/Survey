@@ -2,6 +2,7 @@
 @attribute [TenantAuthorize(TenantPermissionKeys.SurveysView)]
 @inject ITenantAdministrationService AdministrationService
 @inject NavigationManager NavigationManager
+@inject ToastService ToastService
 
 <PageTitle>Versions</PageTitle>
 
@@ -15,8 +16,14 @@
 				: "Used versions lock automatically once assignments exist. Clone an existing version to continue editing.")</p>
 		</div>
 		<div class="toolbar">
-			<a class="btn btn-outline-primary" href="@GetActiveUrl()">Active Versions</a>
-			<a class="btn btn-outline-primary" href="@GetArchivedUrl()">Archived Versions</a>
+			@if (ShowArchived)
+			{
+				<a class="btn btn-outline-primary" href="@GetActiveUrl()">Active Versions</a>
+			}
+			else
+			{
+				<a class="btn btn-outline-primary" href="@GetArchivedUrl()">Archived Versions</a>
+			}
 			@if (!ShowArchived)
 			{
 				<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysCreate)">
@@ -34,7 +41,11 @@
 	}
 
 	<div class="list-card">
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">No versions match the current filter.</p>
 		}
@@ -67,6 +78,22 @@
 							<td>
 								<div class="table-actions">
 									<a class="btn btn-sm btn-outline-primary" href="@GetViewUrl(item.Id, item.SurveyDefinitionId)">View</a>
+									<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysEdit)">
+										<Authorized>
+											@if (item.IsPublished)
+											{
+												<button class="btn btn-sm btn-muted-disabled" type="button" disabled>Published</button>
+											}
+											else if (item.IsLocked)
+											{
+												<button class="btn btn-sm btn-muted-disabled" type="button" disabled>Publish</button>
+											}
+											else
+											{
+												<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => PublishAsync(item.Id)">Publish</button>
+											}
+										</Authorized>
+									</AuthorizeView>
 									<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.SurveysCreate)">
 										<Authorized>
 											<button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => CloneAsync(item.Id)">Clone</button>
@@ -111,12 +138,21 @@
 	private int _totalCount;
 	private bool _hasMore;
 	private bool _isLoadingMore;
+	private bool _hasLoadedInitialState;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
-		await LoadAsync();
-		_errorMessage = null;
+		_hasLoadedInitialState = false;
+		try
+		{
+			await LoadAsync();
+			_errorMessage = null;
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private string GetAddUrl()
@@ -158,6 +194,22 @@
 		catch (Exception ex)
 		{
 			_errorMessage = ex.Message;
+		}
+	}
+
+	private async Task PublishAsync(int versionId)
+	{
+		try
+		{
+			await AdministrationService.SetSurveyVersionPublishedAsync(versionId, true);
+			ToastService.ShowSuccess("Version published successfully.", "Published");
+			await LoadAsync();
+			_errorMessage = null;
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+			ToastService.ShowError(ex.Message, "Publish failed");
 		}
 	}
 

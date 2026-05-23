@@ -32,7 +32,9 @@ public class CountyOptionItem
 {
 	public string CountyFips { get; set; } = string.Empty;
 	public string CountyName { get; set; } = string.Empty;
+	public string StateName { get; set; } = string.Empty;
 	public string StateCode { get; set; } = string.Empty;
+	public string CountryCode { get; set; } = string.Empty;
 	public int ZipCount { get; set; }
 }
 

@@ -37,7 +37,11 @@
 			</div>
 		</div>
 
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">No global themes matched the current search.</p>
 		}
@@ -123,13 +127,22 @@
 	private bool _hasMore;
 	private bool _isLoadingMore;
 	private string? _errorMessage;
+	private bool _hasLoadedInitialState;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_searchText = Search ?? string.Empty;
 		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
 		_errorMessage = null;
-		await LoadAsync();
+		_hasLoadedInitialState = false;
+		try
+		{
+			await LoadAsync();
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private void ApplySearch()

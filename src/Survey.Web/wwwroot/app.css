@@ -663,6 +663,22 @@ h4 {
   grid-template-columns: 1fr;
 }
 
+.form-grid--address {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .form-grid--address {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1400px) {
+  .form-grid--address {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .card-grid--person-location-sections {
   grid-template-columns: 1fr;
 }

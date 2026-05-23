@@ -15,142 +15,160 @@
 		</div>
 	</div>
 
-	@if (_metricCards.Count > 0)
+	@if (!_hasLoadedInitialState)
 	{
-		<div class="dashboard-grid">
-			@foreach (var metric in _metricCards)
-			{
-				<div class="metric-card">
-					<p class="metric-card__label">@metric.Label</p>
-					<p class="metric-card__value">@metric.Value</p>
+		<div class="list-card">
+			<p class="empty-state">Loading...</p>
+		</div>
+	}
+	else
+	{
+		@if (_metricCards.Count > 0)
+		{
+			<div class="dashboard-grid">
+				@foreach (var metric in _metricCards)
+				{
+					<div class="metric-card">
+						<p class="metric-card__label">@metric.Label</p>
+						<p class="metric-card__value">@metric.Value</p>
+					</div>
+				}
+			</div>
+		}
+
+		@if (HasTenantPermission(TenantPermissionKeys.GoalsView))
+		{
+			<section class="list-card">
+				<div class="page-header">
+					<div>
+						<h2>Favorite Goals</h2>
+						<p>Pin the goals you want this dashboard to keep in view.</p>
+					</div>
+					<div class="toolbar">
+						<a class="btn btn-outline-primary" href="/app/goals">Manage Goals</a>
+					</div>
 				</div>
+
+				@if (_favoriteGoals.Count == 0)
+				{
+					<p class="empty-state">No goals have been favorited yet.</p>
+				}
+				else
+				{
+					<table class="admin-table">
+						<thead>
+							<tr>
+								<th>Goal</th>
+								<th>Progress</th>
+							</tr>
+						</thead>
+						<tbody>
+							@foreach (var item in _favoriteGoals)
+							{
+								<tr>
+									<td>@item.GoalName</td>
+									<td>@item.ProgressPercent.ToString("0.0")% (@item.CompletedResponses / @item.TargetResponseCount)</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			</section>
+		}
+
+		<div class="card-grid">
+			@if (HasTenantPermission(TenantPermissionKeys.SurveysView))
+			{
+				<section class="content-card">
+					<h2>Build Surveys</h2>
+					<p>Create a survey, add versions, define sections, and author question sets with list pages and separate edit screens.</p>
+					<a class="btn btn-outline-primary" href="/app/surveys">Open Survey Builder</a>
+				</section>
+			}
+			@if (HasTenantPermission(TenantPermissionKeys.AssignmentsView))
+			{
+				<section class="content-card">
+					<h2>Issue Links</h2>
+					<p>Create one assignment per person and survey version, then share the generated tokenized URL through your existing outreach process.</p>
+					<a class="btn btn-outline-primary" href="/app/assignments">Manage Assignments</a>
+				</section>
+			}
+			@if (HasTenantPermission(TenantPermissionKeys.ResponsesView))
+			{
+				<section class="content-card">
+					<h2>Review Results</h2>
+					<p>View submitted responses and open individual response details.</p>
+					<a class="btn btn-outline-primary" href="/app/responses">View Responses</a>
+				</section>
+			}
+			@if (HasTenantPermission(TenantPermissionKeys.ReportsView))
+			{
+				<section class="content-card">
+					<h2>Track Area Goals</h2>
+					<p>Import ZIP mappings, group counties into named areas, and compare live response counts against your goals.</p>
+					<a class="btn btn-outline-primary" href="/app/reports">Open Reports</a>
+				</section>
 			}
 		</div>
 	}
-
-	@if (HasTenantPermission(TenantPermissionKeys.GoalsView))
-	{
-		<section class="list-card">
-			<div class="page-header">
-				<div>
-					<h2>Favorite Goals</h2>
-					<p>Pin the goals you want this dashboard to keep in view.</p>
-				</div>
-				<div class="toolbar">
-					<a class="btn btn-outline-primary" href="/app/goals">Manage Goals</a>
-				</div>
-			</div>
-
-			@if (_favoriteGoals.Count == 0)
-			{
-				<p class="empty-state">No goals have been favorited yet.</p>
-			}
-			else
-			{
-				<table class="admin-table">
-					<thead>
-						<tr>
-							<th>Goal</th>
-							<th>Progress</th>
-						</tr>
-					</thead>
-					<tbody>
-						@foreach (var item in _favoriteGoals)
-						{
-							<tr>
-								<td>@item.GoalName</td>
-								<td>@item.ProgressPercent.ToString("0.0")% (@item.CompletedResponses / @item.TargetResponseCount)</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			}
-		</section>
-	}
-
-	<div class="card-grid">
-		@if (HasTenantPermission(TenantPermissionKeys.SurveysView))
-		{
-			<section class="content-card">
-				<h2>Build Surveys</h2>
-				<p>Create a survey, add versions, define sections, and author question sets with list pages and separate edit screens.</p>
-				<a class="btn btn-outline-primary" href="/app/surveys">Open Survey Builder</a>
-			</section>
-		}
-		@if (HasTenantPermission(TenantPermissionKeys.AssignmentsView))
-		{
-			<section class="content-card">
-				<h2>Issue Links</h2>
-				<p>Create one assignment per person and survey version, then share the generated tokenized URL through your existing outreach process.</p>
-				<a class="btn btn-outline-primary" href="/app/assignments">Manage Assignments</a>
-			</section>
-		}
-		@if (HasTenantPermission(TenantPermissionKeys.ResponsesView))
-		{
-			<section class="content-card">
-				<h2>Review Results</h2>
-				<p>View submitted responses and open individual response details.</p>
-				<a class="btn btn-outline-primary" href="/app/responses">View Responses</a>
-			</section>
-		}
-		@if (HasTenantPermission(TenantPermissionKeys.ReportsView))
-		{
-			<section class="content-card">
-				<h2>Track Area Goals</h2>
-				<p>Import ZIP mappings, group counties into named areas, and compare live response counts against your goals.</p>
-				<a class="btn btn-outline-primary" href="/app/reports">Open Reports</a>
-			</section>
-		}
-	</div>
 </div>
 
 @code {
 	private readonly List<DashboardMetricCard> _metricCards = [];
 	private CurrentAccessContext _accessContext = new();
 	private IReadOnlyList<DashboardFavoriteGoalItem> _favoriteGoals = Array.Empty<DashboardFavoriteGoalItem>();
+	private bool _hasLoadedInitialState;
 
 	protected override async Task OnInitializedAsync()
 	{
-		var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-		var userId = authenticationState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-		_accessContext = await TenantContextAccessor.GetCurrentAsync();
-		_metricCards.Clear();
+		_hasLoadedInitialState = false;
+		try
+		{
+			var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+			var userId = authenticationState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+			_accessContext = await TenantContextAccessor.GetCurrentAsync();
+			_metricCards.Clear();
 
-		if (HasTenantPermission(TenantPermissionKeys.SurveysView))
-		{
-			_metricCards.Add(new DashboardMetricCard("Surveys", (await AdministrationService.GetSurveyDefinitionsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
-		}
+			if (HasTenantPermission(TenantPermissionKeys.SurveysView))
+			{
+				_metricCards.Add(new DashboardMetricCard("Surveys", (await AdministrationService.GetSurveyDefinitionsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
+			}
 
-		if (HasTenantPermission(TenantPermissionKeys.PeopleView))
-		{
-			_metricCards.Add(new DashboardMetricCard("People", (await AdministrationService.GetPeopleAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
-		}
+			if (HasTenantPermission(TenantPermissionKeys.PeopleView))
+			{
+				_metricCards.Add(new DashboardMetricCard("People", (await AdministrationService.GetPeopleAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
+			}
 
-		if (HasTenantPermission(TenantPermissionKeys.AreasView))
-		{
-			_metricCards.Add(new DashboardMetricCard("Areas", (await AdministrationService.GetAreasAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
-		}
+			if (HasTenantPermission(TenantPermissionKeys.AreasView))
+			{
+				_metricCards.Add(new DashboardMetricCard("Areas", (await AdministrationService.GetAreasAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
+			}
 
-		if (HasTenantPermission(TenantPermissionKeys.GoalsView))
-		{
-			_metricCards.Add(new DashboardMetricCard("Goals", (await AdministrationService.GetGoalsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
-			_favoriteGoals = string.IsNullOrWhiteSpace(userId)
-				? []
-				: await AdministrationService.GetDashboardFavoriteGoalsAsync(userId);
-		}
-		else
-		{
-			_favoriteGoals = [];
-		}
+			if (HasTenantPermission(TenantPermissionKeys.GoalsView))
+			{
+				_metricCards.Add(new DashboardMetricCard("Goals", (await AdministrationService.GetGoalsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
+				_favoriteGoals = string.IsNullOrWhiteSpace(userId)
+					? []
+					: await AdministrationService.GetDashboardFavoriteGoalsAsync(userId);
+			}
+			else
+			{
+				_favoriteGoals = [];
+			}
 
-		if (HasTenantPermission(TenantPermissionKeys.AssignmentsView))
-		{
-			_metricCards.Add(new DashboardMetricCard("Assignments", (await AdministrationService.GetAssignmentsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
-		}
+			if (HasTenantPermission(TenantPermissionKeys.AssignmentsView))
+			{
+				_metricCards.Add(new DashboardMetricCard("Assignments", (await AdministrationService.GetAssignmentsAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
+			}
 
-		if (HasTenantPermission(TenantPermissionKeys.ResponsesView))
+			if (HasTenantPermission(TenantPermissionKeys.ResponsesView))
+			{
+				_metricCards.Add(new DashboardMetricCard("Responses", (await AdministrationService.GetResponsesAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
+			}
+		}
+		finally
 		{
-			_metricCards.Add(new DashboardMetricCard("Responses", (await AdministrationService.GetResponsesAsync(ListPagingDefaults.CreateRequest(1))).TotalCount));
+			_hasLoadedInitialState = true;
 		}
 	}
 

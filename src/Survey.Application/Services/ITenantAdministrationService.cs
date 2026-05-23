@@ -16,6 +16,7 @@ public interface ITenantAdministrationService
 	Task<PagedResult<SurveyVersionListItem>> GetSurveyVersionsAsync(PagedQuery request, int? surveyDefinitionId, bool archivedOnly = false, CancellationToken cancellationToken = default);
 	Task<SurveyVersionEditModel> GetSurveyVersionAsync(int? id, int? surveyDefinitionId, CancellationToken cancellationToken = default);
 	Task<int> SaveSurveyVersionAsync(SurveyVersionEditModel model, CancellationToken cancellationToken = default);
+	Task SetSurveyVersionPublishedAsync(int id, bool isPublished, CancellationToken cancellationToken = default);
 	Task<int> CloneSurveyVersionAsync(int surveyVersionId, CancellationToken cancellationToken = default);
 	Task<PagedResult<SurveySectionListItem>> GetSurveySectionsAsync(PagedQuery request, int surveyVersionId, CancellationToken cancellationToken = default);
 	Task<SurveySectionEditModel> GetSurveySectionAsync(int? id, int? surveyVersionId, CancellationToken cancellationToken = default);

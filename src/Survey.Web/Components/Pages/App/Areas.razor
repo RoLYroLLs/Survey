@@ -26,7 +26,11 @@
 	</div>
 
 	<div class="list-card">
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">No areas have been created yet.</p>
 		}
@@ -90,11 +94,20 @@
 	private int _totalCount;
 	private bool _hasMore;
 	private bool _isLoadingMore;
+	private bool _hasLoadedInitialState;
 
 	protected override async Task OnParametersSetAsync()
 	{
 		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
-		await LoadAsync();
+		_hasLoadedInitialState = false;
+		try
+		{
+			await LoadAsync();
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private async Task LoadAsync(bool append = false)

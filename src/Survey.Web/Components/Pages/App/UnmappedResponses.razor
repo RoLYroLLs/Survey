@@ -26,7 +26,11 @@
 	</div>
 
 	<div class="list-card">
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">No unmapped responses match this ZIP filter.</p>
 		}
@@ -101,6 +105,7 @@
 	private int _totalCount;
 	private bool _hasMore;
 	private bool _isLoadingMore;
+	private bool _hasLoadedInitialState;
 
 	private bool IsMissingFilter => string.Equals(PostalCode, "Missing", StringComparison.OrdinalIgnoreCase);
 
@@ -112,7 +117,15 @@
 	{
 		var filter = string.IsNullOrWhiteSpace(PostalCode) ? "Missing" : PostalCode.Trim();
 		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
-		await LoadAsync(filter);
+		_hasLoadedInitialState = false;
+		try
+		{
+			await LoadAsync(filter);
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private async Task LoadAsync(string filter, bool append = false)

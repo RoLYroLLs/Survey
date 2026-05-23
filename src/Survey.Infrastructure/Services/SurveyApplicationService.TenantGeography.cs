@@ -139,7 +139,7 @@ public sealed partial class SurveyApplicationService
 			.Select(county => new SelectOption
 			{
 				Value = county.Id.ToString(),
-				Label = $"{county.StateProvince.Code} - {county.Name} ({county.FipsCode})"
+				Label = $"{county.StateProvince.Code} - {county.Name}"
 			})
 			.ToListAsync(cancellationToken);
 	}

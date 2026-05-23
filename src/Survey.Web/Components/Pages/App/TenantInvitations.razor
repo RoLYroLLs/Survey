@@ -38,7 +38,11 @@
 			</div>
 		</div>
 
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">No invitations matched the current filter.</p>
 		}
@@ -125,6 +129,7 @@
 	private int _totalCount;
 	private bool _hasMore;
 	private bool _isLoadingMore;
+	private bool _hasLoadedInitialState;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -135,7 +140,15 @@
 	protected override async Task OnParametersSetAsync()
 	{
 		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
-		await LoadAsync();
+		_hasLoadedInitialState = false;
+		try
+		{
+			await LoadAsync();
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private async Task LoadAsync(bool append = false)
@@ -238,12 +251,25 @@
 
 	private Task OnIncludeHistoryChangedAsync()
 	{
-		return LoadAsync();
+		return ReloadAsync();
 	}
 
 	private Task RefreshAsync()
 	{
-		return LoadAsync();
+		return ReloadAsync();
+	}
+
+	private async Task ReloadAsync()
+	{
+		_hasLoadedInitialState = false;
+		try
+		{
+			await LoadAsync();
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private string GetBaseUrl()

@@ -109,6 +109,9 @@
 	public int? PersonId { get; set; }
 
 	[SupplyParameterFromQuery]
+	public int? LocationId { get; set; }
+
+	[SupplyParameterFromQuery]
 	public bool ShowArchived { get; set; }
 
 	[SupplyParameterFromQuery(Name = "status")]
@@ -126,8 +129,44 @@
 		}
 
 		_model = await AdministrationService.GetAssignmentAsync(Id);
+		if (!Id.HasValue)
+		{
+			await ApplyPrefillAsync();
+		}
+
 		_expiresDate = _model.ExpiresAtUtc?.UtcDateTime.Date;
 		_errorMessage = null;
+	}
+
+	private async Task ApplyPrefillAsync()
+	{
+		if (PersonId.HasValue && _model.PersonOptions.Any(option => option.Value == PersonId.Value.ToString()))
+		{
+			_model.PersonId = PersonId.Value;
+		}
+
+		if (_model.PersonId <= 0)
+		{
+			return;
+		}
+
+		_model.LocationOptions = await AdministrationService.GetLocationSelectOptionsAsync(_model.PersonId);
+		if (LocationId.HasValue && _model.LocationOptions.Any(option => option.Value == LocationId.Value.ToString()))
+		{
+			_model.LocationId = LocationId.Value;
+			_model.LocationPhoneOptions = await AdministrationService.GetLocationPhoneSelectOptionsAsync(_model.LocationId);
+			_model.LocationEmailOptions = await AdministrationService.GetLocationEmailSelectOptionsAsync(_model.LocationId);
+			_model.LocationPhoneId = GetFirstOptionId(_model.LocationPhoneOptions);
+			_model.LocationEmailId = GetFirstOptionId(_model.LocationEmailOptions);
+		}
+		else
+		{
+			_model.LocationId = 0;
+			_model.LocationPhoneOptions = Array.Empty<SelectOption>();
+			_model.LocationEmailOptions = Array.Empty<SelectOption>();
+			_model.LocationPhoneId = null;
+			_model.LocationEmailId = null;
+		}
 	}
 
 	private async Task SaveAsync()
@@ -163,11 +202,8 @@
 		_model.LocationPhoneId = null;
 		_model.LocationEmailId = null;
 		_model.LocationOptions = await AdministrationService.GetLocationSelectOptionsAsync(_model.PersonId);
-		_model.LocationId = _model.LocationOptions.Select(option => int.TryParse(option.Value, out var value) ? value : 0).FirstOrDefault(value => value > 0);
-		_model.LocationPhoneOptions = await AdministrationService.GetLocationPhoneSelectOptionsAsync(_model.LocationId);
-		_model.LocationEmailOptions = await AdministrationService.GetLocationEmailSelectOptionsAsync(_model.LocationId);
-		_model.LocationPhoneId = GetFirstOptionId(_model.LocationPhoneOptions);
-		_model.LocationEmailId = GetFirstOptionId(_model.LocationEmailOptions);
+		_model.LocationPhoneOptions = Array.Empty<SelectOption>();
+		_model.LocationEmailOptions = Array.Empty<SelectOption>();
 	}
 
 	private async Task OnLocationChangedAsync()
@@ -227,6 +263,11 @@
 		if (PersonId.HasValue)
 		{
 			queryParts.Add($"personId={PersonId.Value}");
+		}
+
+		if (LocationId.HasValue)
+		{
+			queryParts.Add($"locationId={LocationId.Value}");
 		}
 
 		if (ShowArchived)

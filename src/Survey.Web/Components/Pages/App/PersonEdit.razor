@@ -127,6 +127,11 @@
 								<p>View the locations saved for this person.</p>
 							</div>
 							<div class="toolbar">
+								<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsCreate)">
+									<Authorized>
+										<a class="btn btn-outline-primary" href="/app/assignments/new?personId=@Id">Add Assignment</a>
+									</Authorized>
+								</AuthorizeView>
 								<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsView)">
 									<Authorized>
 										<a class="btn btn-outline-primary" href="/app/people/@Id/assignments">View Assignments</a>
@@ -169,6 +174,11 @@
 											<td>
 												<div class="table-actions">
 													<a class="btn btn-sm btn-outline-primary" href="/app/people/@Id/locations/@location.Id">View</a>
+													<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsCreate)">
+														<Authorized>
+															<a class="btn btn-sm btn-outline-primary" href="/app/assignments/new?personId=@Id&locationId=@location.Id">Add Assignment</a>
+														</Authorized>
+													</AuthorizeView>
 													<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.LocationsDelete)">
 														<Authorized>
 															@if (location.AssignmentCount == 0)
@@ -390,7 +400,7 @@
 		_ = InvokeAsync(StateHasChanged);
 	}
 
-	private RenderFragment AddressFields(AddressInputModel address, bool physical, bool mailing) => @<div class="form-grid">
+	private RenderFragment AddressFields(AddressInputModel address, bool physical, bool mailing) => @<div class="form-grid form-grid--address">
 		<div class="field-stack form-grid--single">
 			<FieldLabel Text="Country" Required="@(physical || mailing)" />
 			<SearchableSelect class="form-control"

@@ -18,6 +18,7 @@ public sealed partial class SurveyApplicationService
 			};
 		}
 
+		var normalizedUpper = normalizedQuery.ToUpperInvariant();
 		var sections = new List<TenantSearchSectionModel>();
 
 		if (context.TenantPermissions.Contains(TenantPermissionKeys.PeopleView, StringComparer.Ordinal))
@@ -26,10 +27,10 @@ public sealed partial class SurveyApplicationService
 				.AsNoTracking()
 				.Where(person =>
 					!person.IsArchived &&
-					((person.FirstName ?? string.Empty).Contains(normalizedQuery)
-					|| (person.LastName ?? string.Empty).Contains(normalizedQuery)
-					|| person.Email.Contains(normalizedQuery)
-					|| person.PhoneNumber.Contains(normalizedQuery)));
+					((person.FirstName ?? string.Empty).ToUpper().Contains(normalizedUpper)
+					|| (person.LastName ?? string.Empty).ToUpper().Contains(normalizedUpper)
+					|| person.Email.ToUpper().Contains(normalizedUpper)
+					|| person.PhoneNumber.ToUpper().Contains(normalizedUpper)));
 			var totalCount = await peopleQuery.CountAsync(cancellationToken);
 			if (totalCount > 0)
 			{
@@ -73,12 +74,12 @@ public sealed partial class SurveyApplicationService
 				.AsNoTracking()
 				.Include(location => location.Person)
 				.Where(location =>
-					location.Nickname.Contains(normalizedQuery)
-					|| (location.City ?? string.Empty).Contains(normalizedQuery)
-					|| location.Email.Contains(normalizedQuery)
-					|| location.PhoneNumber.Contains(normalizedQuery)
-					|| (location.Person.FirstName ?? string.Empty).Contains(normalizedQuery)
-					|| (location.Person.LastName ?? string.Empty).Contains(normalizedQuery));
+					location.Nickname.ToUpper().Contains(normalizedUpper)
+					|| (location.City ?? string.Empty).ToUpper().Contains(normalizedUpper)
+					|| location.Email.ToUpper().Contains(normalizedUpper)
+					|| location.PhoneNumber.ToUpper().Contains(normalizedUpper)
+					|| (location.Person.FirstName ?? string.Empty).ToUpper().Contains(normalizedUpper)
+					|| (location.Person.LastName ?? string.Empty).ToUpper().Contains(normalizedUpper));
 			var totalCount = await locationsQuery.CountAsync(cancellationToken);
 			if (totalCount > 0)
 			{
@@ -127,12 +128,12 @@ public sealed partial class SurveyApplicationService
 				.Include(assignment => assignment.SurveyVersion)
 					.ThenInclude(version => version.SurveyDefinition)
 				.Where(assignment =>
-					assignment.PublicToken.Contains(normalizedQuery)
-					|| assignment.Location.Nickname.Contains(normalizedQuery)
-					|| (assignment.Location.Person.FirstName ?? string.Empty).Contains(normalizedQuery)
-					|| (assignment.Location.Person.LastName ?? string.Empty).Contains(normalizedQuery)
-					|| assignment.SurveyVersion.DisplayName.Contains(normalizedQuery)
-					|| assignment.SurveyVersion.SurveyDefinition.Name.Contains(normalizedQuery));
+					assignment.PublicToken.ToUpper().Contains(normalizedUpper)
+					|| assignment.Location.Nickname.ToUpper().Contains(normalizedUpper)
+					|| (assignment.Location.Person.FirstName ?? string.Empty).ToUpper().Contains(normalizedUpper)
+					|| (assignment.Location.Person.LastName ?? string.Empty).ToUpper().Contains(normalizedUpper)
+					|| assignment.SurveyVersion.DisplayName.ToUpper().Contains(normalizedUpper)
+					|| assignment.SurveyVersion.SurveyDefinition.Name.ToUpper().Contains(normalizedUpper));
 			var totalCount = await assignmentsQuery.CountAsync(cancellationToken);
 			if (totalCount > 0)
 			{
@@ -188,8 +189,8 @@ public sealed partial class SurveyApplicationService
 				.AsNoTracking()
 				.Where(definition =>
 					!definition.IsArchived &&
-					(definition.Name.Contains(normalizedQuery)
-					|| (definition.Description != null && definition.Description.Contains(normalizedQuery))));
+					(definition.Name.ToUpper().Contains(normalizedUpper)
+					|| (definition.Description != null && definition.Description.ToUpper().Contains(normalizedUpper))));
 			var totalCount = await surveysQuery.CountAsync(cancellationToken);
 			if (totalCount > 0)
 			{
@@ -221,10 +222,10 @@ public sealed partial class SurveyApplicationService
 				.Include(version => version.SurveyDefinition)
 				.Where(version =>
 					!version.IsArchived &&
-					(version.DisplayName.Contains(normalizedQuery)
+					(version.DisplayName.ToUpper().Contains(normalizedUpper)
 					|| version.VersionNumber.ToString().Contains(normalizedQuery)
-					|| version.SurveyDefinition.Name.Contains(normalizedQuery)
-					|| (version.SurveyDefinition.Description != null && version.SurveyDefinition.Description.Contains(normalizedQuery))));
+					|| version.SurveyDefinition.Name.ToUpper().Contains(normalizedUpper)
+					|| (version.SurveyDefinition.Description != null && version.SurveyDefinition.Description.ToUpper().Contains(normalizedUpper))));
 			var versionTotalCount = await versionsQuery.CountAsync(cancellationToken);
 			if (versionTotalCount > 0)
 			{
@@ -258,8 +259,8 @@ public sealed partial class SurveyApplicationService
 			var goalsQuery = _dbContext.Goals
 				.AsNoTracking()
 				.Where(goal =>
-					goal.Name.Contains(normalizedQuery)
-					|| (goal.Description != null && goal.Description.Contains(normalizedQuery)));
+					goal.Name.ToUpper().Contains(normalizedUpper)
+					|| (goal.Description != null && goal.Description.ToUpper().Contains(normalizedUpper)));
 			var totalCount = await goalsQuery.CountAsync(cancellationToken);
 			if (totalCount > 0)
 			{
@@ -292,8 +293,8 @@ public sealed partial class SurveyApplicationService
 			var areasQuery = _dbContext.Areas
 				.AsNoTracking()
 				.Where(area =>
-					area.Name.Contains(normalizedQuery)
-					|| (area.Description != null && area.Description.Contains(normalizedQuery)));
+					area.Name.ToUpper().Contains(normalizedUpper)
+					|| (area.Description != null && area.Description.ToUpper().Contains(normalizedUpper)));
 			var totalCount = await areasQuery.CountAsync(cancellationToken);
 			if (totalCount > 0)
 			{
@@ -347,7 +348,7 @@ public sealed partial class SurveyApplicationService
 
 		if (context.TenantPermissions.Contains(TenantPermissionKeys.ReportsView, StringComparer.Ordinal)
 			&& ReportSearchTerms.Any(term => term.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)
-				|| normalizedQuery.Contains(term, StringComparison.OrdinalIgnoreCase)))
+				|| normalizedUpper.Contains(term.ToUpperInvariant(), StringComparison.Ordinal)))
 		{
 			sections.Add(new TenantSearchSectionModel
 			{
@@ -374,11 +375,11 @@ public sealed partial class SurveyApplicationService
 				.AsNoTracking()
 				.Include(response => response.SurveyAssignment)
 				.Where(response =>
-					response.RespondentFirstName.Contains(normalizedQuery)
-					|| response.RespondentLastName.Contains(normalizedQuery)
-					|| response.SurveyNameSnapshot.Contains(normalizedQuery)
-					|| response.SurveyVersionNameSnapshot.Contains(normalizedQuery)
-					|| (response.RespondentEmail != null && response.RespondentEmail.Contains(normalizedQuery)));
+					response.RespondentFirstName.ToUpper().Contains(normalizedUpper)
+					|| response.RespondentLastName.ToUpper().Contains(normalizedUpper)
+					|| response.SurveyNameSnapshot.ToUpper().Contains(normalizedUpper)
+					|| response.SurveyVersionNameSnapshot.ToUpper().Contains(normalizedUpper)
+					|| (response.RespondentEmail != null && response.RespondentEmail.ToUpper().Contains(normalizedUpper)));
 			var totalCount = await responsesQuery.CountAsync(cancellationToken);
 			if (totalCount > 0)
 			{
@@ -424,6 +425,11 @@ public sealed partial class SurveyApplicationService
 			}
 		}
 
+		sections = sections
+			.OrderBy(section => SearchSectionOrder.TryGetValue(section.Key, out var order) ? order : int.MaxValue)
+			.ThenBy(section => section.Title, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+
 		return new TenantSearchResultModel
 		{
 			Query = normalizedQuery,
@@ -457,4 +463,18 @@ public sealed partial class SurveyApplicationService
 		"unmapped zip",
 		"zip activity"
 	];
+
+	private static readonly IReadOnlyDictionary<string, int> SearchSectionOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+	{
+		["people"] = 10,
+		["locations"] = 11,
+		["assignments"] = 20,
+		["responses"] = 30,
+		["surveys"] = 40,
+		["versions"] = 50,
+		["reports"] = 60,
+		["areas"] = 70,
+		["goals"] = 80,
+		["users"] = 90
+	};
 }

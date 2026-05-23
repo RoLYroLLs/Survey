@@ -44,7 +44,11 @@
 		}
 
 		<div class="list-card">
-			@if (_items.Count == 0)
+			@if (!_hasLoadedInitialState)
+			{
+				<p class="empty-state">Loading...</p>
+			}
+			else if (_items.Count == 0)
 			{
 				<p class="empty-state">No sections exist for this version yet.</p>
 			}
@@ -114,6 +118,7 @@
 	private int _totalCount;
 	private bool _canReorder;
 	private bool _isSavingOrder;
+	private bool _hasLoadedInitialState;
 	private int? _draggedSectionId;
 	private int? _dropTargetSectionId;
 	private string? _reorderErrorMessage;
@@ -125,20 +130,29 @@
 			_items = Array.Empty<SurveySectionListItem>();
 			_totalCount = 0;
 			_canReorder = false;
+			_hasLoadedInitialState = true;
 			return;
 		}
 
-		var result = await AdministrationService.GetSurveySectionsAsync(new PagedQuery
+		_hasLoadedInitialState = false;
+		try
 		{
-			Limit = PagedQuery.MaxLimit
-		}, SurveyVersionId.Value);
-		_items = result.Items;
-		_totalCount = result.TotalCount;
-		_canReorder = await TenantPermissionEvaluator.HasPermissionAsync(TenantPermissionKeys.SurveysEdit)
-			&& _items.Count == _totalCount
-			&& _items.Count > 1
-			&& !_items.Any(item => item.IsLocked);
-		_reorderErrorMessage = null;
+			var result = await AdministrationService.GetSurveySectionsAsync(new PagedQuery
+			{
+				Limit = PagedQuery.MaxLimit
+			}, SurveyVersionId.Value);
+			_items = result.Items;
+			_totalCount = result.TotalCount;
+			_canReorder = await TenantPermissionEvaluator.HasPermissionAsync(TenantPermissionKeys.SurveysEdit)
+				&& _items.Count == _totalCount
+				&& _items.Count > 1
+				&& !_items.Any(item => item.IsLocked);
+			_reorderErrorMessage = null;
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private string GetAddUrl()

@@ -376,6 +376,36 @@ public sealed partial class SurveyApplicationService(
 		return entity.Id;
 	}
 
+	public async Task SetSurveyVersionPublishedAsync(int id, bool isPublished, CancellationToken cancellationToken = default)
+	{
+		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysEdit, cancellationToken);
+
+		var entity = await _dbContext.SurveyVersions
+			.Include(version => version.Assignments)
+			.FirstOrDefaultAsync(version => version.Id == id, cancellationToken)
+			?? throw new InvalidOperationException("The requested survey version was not found.");
+
+		if (entity.Assignments.Any() && entity.IsPublished != isPublished)
+		{
+			throw new InvalidOperationException("This survey version is locked because it has already been assigned.");
+		}
+
+		if (entity.IsPublished == isPublished)
+		{
+			return;
+		}
+
+		entity.Update(entity.DisplayName, entity.VersionNumber, isPublished);
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+		await AuditTenantEntityChangeAsync(
+			isPublished ? "tenant.survey-version.published" : "tenant.survey-version.unpublished",
+			nameof(SurveyVersion),
+			entity.Id,
+			$"Survey version '{entity.DisplayName}' was {(isPublished ? "published" : "unpublished")}.",
+			cancellationToken);
+	}
+
 	public async Task<int> CloneSurveyVersionAsync(int surveyVersionId, CancellationToken cancellationToken = default)
 	{
 		await RequireTenantPermissionAsync(TenantPermissionKeys.SurveysCreate, cancellationToken);
@@ -1269,23 +1299,18 @@ public sealed partial class SurveyApplicationService(
 		if (!id.HasValue)
 		{
 			var availableVersionOptions = await GetSurveyVersionOptionsAsync(includeUnpublished: false, includeVersionId: null, cancellationToken: cancellationToken);
-			var personId = personOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0);
-			var locationOptions = await GetLocationSelectOptionsAsync(personId, null, cancellationToken);
-			var locationId = locationOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0);
-			var locationPhoneOptions = await GetLocationPhoneSelectOptionsAsync(locationId, null, cancellationToken);
-			var locationEmailOptions = await GetLocationEmailSelectOptionsAsync(locationId, null, cancellationToken);
 			return new SurveyAssignmentEditModel
 			{
-				PersonId = personId,
-				LocationId = locationId,
-				LocationPhoneId = GetFirstOptionId(locationPhoneOptions),
-				LocationEmailId = GetFirstOptionId(locationEmailOptions),
+				PersonId = 0,
+				LocationId = 0,
+				LocationPhoneId = null,
+				LocationEmailId = null,
 				SurveyVersionId = availableVersionOptions.Select(option => TryParseInt(option.Value)).FirstOrDefault(value => value > 0),
 				PublicToken = GeneratePublicToken(),
 				IsArchived = false,
-				LocationOptions = locationOptions,
-				LocationPhoneOptions = locationPhoneOptions,
-				LocationEmailOptions = locationEmailOptions,
+				LocationOptions = Array.Empty<SelectOption>(),
+				LocationPhoneOptions = Array.Empty<SelectOption>(),
+				LocationEmailOptions = Array.Empty<SelectOption>(),
 				PersonOptions = personOptions,
 				SurveyVersionOptions = availableVersionOptions
 			};

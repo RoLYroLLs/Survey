@@ -67,7 +67,11 @@
 	</div>
 
 	<div class="list-card">
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">No background jobs matched the current filters.</p>
 		}
@@ -155,6 +159,7 @@
 	private int _totalCount;
 	private bool _hasMore;
 	private bool _isLoadingMore;
+	private bool _hasLoadedInitialState;
 
 	private static readonly IReadOnlyList<SelectOption> _kindOptions =
 	[
@@ -172,15 +177,23 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_tenantOptions = (await LoadTenantOptionsAsync())
-			.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
-			.ToArray();
-		_kind = Kind;
-		_status = Status;
-		_tenantId = TenantId;
-		_searchText = Search ?? string.Empty;
-		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
-		await LoadAsync();
+		_hasLoadedInitialState = false;
+		try
+		{
+			_tenantOptions = (await LoadTenantOptionsAsync())
+				.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
+				.ToArray();
+			_kind = Kind;
+			_status = Status;
+			_tenantId = TenantId;
+			_searchText = Search ?? string.Empty;
+			_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+			await LoadAsync();
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private void ApplyFilters()

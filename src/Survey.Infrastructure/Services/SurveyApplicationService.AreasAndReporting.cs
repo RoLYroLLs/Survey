@@ -627,7 +627,9 @@ public sealed partial class SurveyApplicationService
 			{
 				CountyFips = county.FipsCode,
 				CountyName = county.Name,
+				StateName = county.StateProvince.Name,
 				StateCode = county.StateProvince.Code,
+				CountryCode = county.StateProvince.Country.Iso2Code,
 				ZipCount = 0
 			})
 			.ToListAsync(cancellationToken);
@@ -661,7 +663,9 @@ public sealed partial class SurveyApplicationService
 			{
 				CountyFips = existingCounty.CountyFips,
 				CountyName = existingCounty.CountyName,
+				StateName = existingCounty.StateCode,
 				StateCode = existingCounty.StateCode,
+				CountryCode = string.Empty,
 				ZipCount = 0
 			});
 		}

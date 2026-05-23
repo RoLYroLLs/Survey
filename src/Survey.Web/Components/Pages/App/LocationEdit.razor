@@ -116,6 +116,11 @@
 				</div>
 
 				<div class="form-footer">
+					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.AssignmentsCreate)">
+						<Authorized>
+							<a class="btn btn-outline-primary" href="/app/assignments/new?personId=@PersonId&locationId=@Id">Add Assignment</a>
+						</Authorized>
+					</AuthorizeView>
 					<AuthorizeView Policy="@SurveyAuthorizationPolicies.TenantPermission(TenantPermissionKeys.LocationsEdit)">
 						<Authorized>
 							<a class="btn btn-primary" href="/app/people/@PersonId/locations/@Id/edit">Edit Location</a>
@@ -307,7 +312,7 @@
 		_ = InvokeAsync(StateHasChanged);
 	}
 
-	private RenderFragment AddressEditor(AddressInputModel address, AddressMode mode) => @<div class="form-grid">
+	private RenderFragment AddressEditor(AddressInputModel address, AddressMode mode) => @<div class="form-grid form-grid--address">
 		<div class="field-stack form-grid--single">
 			<FieldLabel Text="Country" Required="@(mode == AddressMode.Physical)" />
 			<SearchableSelect class="form-control"

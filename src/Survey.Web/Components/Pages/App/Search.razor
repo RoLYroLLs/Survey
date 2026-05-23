@@ -19,6 +19,12 @@
 			<p class="mb-0">Enter a search in the top bar to find people, locations, assignments, responses, surveys, versions, reports, areas, goals, users, and more.</p>
 		</div>
 	}
+	else if (!_hasLoadedInitialState)
+	{
+		<div class="status-card narrow-card">
+			<p class="mb-0">Loading...</p>
+		</div>
+	}
 	else if (_result.Sections.Count == 0)
 	{
 		<div class="status-card narrow-card">
@@ -70,11 +76,20 @@
 	public string? Query { get; set; }
 
 	private TenantSearchResultModel _result = new();
+	private bool _hasLoadedInitialState;
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_result = string.IsNullOrWhiteSpace(Query)
-			? new TenantSearchResultModel()
-			: await AdministrationService.SearchTenantAsync(Query);
+		_hasLoadedInitialState = string.IsNullOrWhiteSpace(Query);
+		try
+		{
+			_result = string.IsNullOrWhiteSpace(Query)
+				? new TenantSearchResultModel()
+				: await AdministrationService.SearchTenantAsync(Query);
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 }

@@ -60,7 +60,11 @@
 	</div>
 
 	<div class="list-card">
-		@if (_items.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_items.Count == 0)
 		{
 			<p class="empty-state">No audit rows matched the current filters.</p>
 		}
@@ -139,6 +143,7 @@
 	private int _totalCount;
 	private bool _hasMore;
 	private bool _isLoadingMore;
+	private bool _hasLoadedInitialState;
 
 	private static readonly IReadOnlyList<SelectOption> _planeOptions =
 	[
@@ -154,16 +159,24 @@
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_tenantOptions = (await LoadTenantOptionsAsync())
-			.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
-			.ToArray();
+		_hasLoadedInitialState = false;
+		try
+		{
+			_tenantOptions = (await LoadTenantOptionsAsync())
+				.Select(item => new SelectOption { Value = item.Id.ToString(), Label = item.Name })
+				.ToArray();
 
-		_plane = Plane;
-		_tenantId = TenantId;
-		_succeeded = Succeeded;
-		_searchText = Search ?? string.Empty;
-		_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
-		await LoadAsync();
+			_plane = Plane;
+			_tenantId = TenantId;
+			_succeeded = Succeeded;
+			_searchText = Search ?? string.Empty;
+			_pageSize = ListPagingDefaults.NormalizePageSize(PageSize);
+			await LoadAsync();
+		}
+		finally
+		{
+			_hasLoadedInitialState = true;
+		}
 	}
 
 	private void ApplyFilters()

@@ -17,7 +17,11 @@
 	</div>
 
 	<div class="list-card">
-		@if (_options.Count == 0)
+		@if (!_hasLoadedInitialState)
+		{
+			<p class="empty-state">Loading...</p>
+		}
+		else if (_options.Count == 0)
 		{
 			<p class="empty-state">No tenant memberships are available for this account.</p>
 		}
@@ -54,24 +58,33 @@
 
 @code {
 	private IReadOnlyList<TenantMembershipOption> _options = Array.Empty<TenantMembershipOption>();
+	private bool _hasLoadedInitialState;
 
 	protected override async Task OnParametersSetAsync()
 	{
-		_options = await TenantContextAccessor.GetMembershipOptionsAsync();
-		if (_options.Count == 0)
+		_hasLoadedInitialState = false;
+		try
 		{
-			var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-			var user = await UserManager.GetUserAsync(authenticationState.User);
-			if (user is not null)
+			_options = await TenantContextAccessor.GetMembershipOptionsAsync();
+			if (_options.Count == 0)
 			{
-				NavigationManager.NavigateTo(user.HasCompletedSelfSignupProfile() ? "/Account/CreateTenant" : "/Account/CompleteProfile", forceLoad: true);
-				return;
+				var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+				var user = await UserManager.GetUserAsync(authenticationState.User);
+				if (user is not null)
+				{
+					NavigationManager.NavigateTo(user.HasCompletedSelfSignupProfile() ? "/Account/CreateTenant" : "/Account/CompleteProfile", forceLoad: true);
+					return;
+				}
+			}
+
+			if (_options.Count == 1 && _options[0].IsEnabled && !_options[0].IsActive)
+			{
+				await SwitchAsync(_options[0].MembershipId);
 			}
 		}
-
-		if (_options.Count == 1 && _options[0].IsEnabled && !_options[0].IsActive)
+		finally
 		{
-			await SwitchAsync(_options[0].MembershipId);
+			_hasLoadedInitialState = true;
 		}
 	}
 

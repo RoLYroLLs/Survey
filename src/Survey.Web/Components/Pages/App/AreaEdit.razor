@@ -103,17 +103,57 @@
 						}
 						else
 						{
-							<div class="checkbox-grid">
-								@foreach (var county in _model.CountyOptions)
+							<div class="page-stack">
+								<div class="form-grid">
+									<div class="field-stack">
+										<label>Filter by State</label>
+										<SearchableSelect class="form-select"
+														  @bind-Value="_countyStateFilter"
+														  Options="GetCountyStateOptions()"
+														  IncludeEmptyOption="true"
+														  EmptyOptionLabel="All states"
+														  EmptyOptionValue="" />
+									</div>
+									<div class="field-stack">
+										<label>Search Counties</label>
+										<input class="form-control" value="@_countySearchInput" @oninput="OnCountySearchInputAsync" placeholder="Search by county or state code" />
+									</div>
+								</div>
+
+								<p class="helper-copy mb-0">
+									Showing @GetFilteredCountyOptions().Count of @_model.CountyOptions.Count counties.
+									@(_model.SelectedCountyFips.Count == 1 ? "1 county selected." : $"{_model.SelectedCountyFips.Count} counties selected.")
+								</p>
+
+								@if (_model.SelectedCountyFips.Count > 0)
 								{
-									<label class="checkbox-card">
-										<input
-											type="checkbox"
-											checked="@_model.SelectedCountyFips.Contains(county.CountyFips, StringComparer.OrdinalIgnoreCase)"
-											@onchange="@((ChangeEventArgs args) => ToggleCounty(county.CountyFips, args.Value is bool isChecked && isChecked))" />
-										<span>@county.CountyName, @county.StateCode</span>
-										<small>@county.ZipCount ZIPs</small>
-									</label>
+									<div class="detail-chip-list">
+										@foreach (var county in GetSelectedCountyOptions())
+										{
+											<div class="detail-chip">@GetCountyDisplayLabel(county)</div>
+										}
+									</div>
+								}
+
+								@if (GetFilteredCountyOptions().Count == 0)
+								{
+									<p class="helper-copy mb-0">No counties match the current filter.</p>
+								}
+								else
+								{
+									<div class="checkbox-grid">
+										@foreach (var county in GetFilteredCountyOptions())
+										{
+											<label class="checkbox-card">
+												<input
+													type="checkbox"
+													checked="@_model.SelectedCountyFips.Contains(county.CountyFips, StringComparer.OrdinalIgnoreCase)"
+													@onchange="@((ChangeEventArgs args) => ToggleCounty(county.CountyFips, args.Value is bool isChecked && isChecked))" />
+												<span>@GetCountyDisplayLabel(county)</span>
+												<small>@county.ZipCount ZIPs</small>
+											</label>
+										}
+									</div>
 								}
 							</div>
 						}
@@ -140,7 +180,12 @@
 
 	private AreaEditModel _model = new();
 	private string? _errorMessage;
+	private string _countyStateFilter = string.Empty;
+	private string _countySearchInput = string.Empty;
+	private string _countySearchApplied = string.Empty;
+	private CancellationTokenSource? _countySearchDebounceCts;
 	private bool IsViewMode => Id.HasValue && !NavigationManager.Uri.Contains("/edit", StringComparison.OrdinalIgnoreCase);
+	private static readonly TimeSpan CountySearchDebounceDelay = TimeSpan.FromSeconds(2);
 
 	protected override void OnInitialized()
 	{
@@ -156,6 +201,9 @@
 
 		_model = await AdministrationService.GetAreaAsync(Id);
 		_errorMessage = null;
+		_countySearchInput = string.Empty;
+		_countySearchApplied = string.Empty;
+		CancelCountySearchDebounce();
 	}
 
 	private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
@@ -176,6 +224,108 @@
 		}
 
 		_model.SelectedCountyFips.RemoveAll(value => string.Equals(value, countyFips, StringComparison.OrdinalIgnoreCase));
+	}
+
+	private IReadOnlyList<SelectOption> GetCountyStateOptions()
+	{
+		return _model.CountyOptions
+			.GroupBy(county => GetStateFilterValue(county), StringComparer.OrdinalIgnoreCase)
+			.Select(static group => group.First())
+			.OrderBy(county => GetStateFilterLabel(county), StringComparer.OrdinalIgnoreCase)
+			.Select(county => new SelectOption
+			{
+				Value = GetStateFilterValue(county),
+				Label = GetStateFilterLabel(county)
+			})
+			.ToList();
+	}
+
+	private IReadOnlyList<CountyOptionItem> GetFilteredCountyOptions()
+	{
+		var query = _model.CountyOptions.AsEnumerable();
+
+		if (!string.IsNullOrWhiteSpace(_countyStateFilter))
+		{
+			query = query.Where(county => string.Equals(GetStateFilterValue(county), _countyStateFilter, StringComparison.OrdinalIgnoreCase));
+		}
+
+		if (!string.IsNullOrWhiteSpace(_countySearchApplied))
+		{
+			var normalizedSearch = _countySearchApplied.Trim();
+			query = query.Where(county =>
+				county.CountyName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+				|| county.StateCode.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+				|| county.StateName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+				|| GetStateFilterLabel(county).Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+		}
+
+		return query.ToList();
+	}
+
+	private IReadOnlyList<CountyOptionItem> GetSelectedCountyOptions()
+	{
+		return _model.CountyOptions
+			.Where(county => _model.SelectedCountyFips.Contains(county.CountyFips, StringComparer.OrdinalIgnoreCase))
+			.OrderBy(county => county.StateCode, StringComparer.OrdinalIgnoreCase)
+			.ThenBy(county => county.CountyName, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	private static string GetStateFilterValue(CountyOptionItem county)
+	{
+		return string.IsNullOrWhiteSpace(county.CountryCode)
+			? county.StateCode
+			: $"{county.CountryCode}|{county.StateCode}";
+	}
+
+	private static string GetStateFilterLabel(CountyOptionItem county)
+	{
+		return string.IsNullOrWhiteSpace(county.CountryCode)
+			? county.StateCode
+			: $"{county.CountryCode} - {county.StateName} ({county.StateCode})";
+	}
+
+	private static string GetCountyDisplayLabel(CountyOptionItem county)
+	{
+		return $"{county.StateCode} - {county.CountyName}";
+	}
+
+	private async Task OnCountySearchInputAsync(ChangeEventArgs args)
+	{
+		_countySearchInput = args.Value?.ToString() ?? string.Empty;
+		CancelCountySearchDebounce();
+
+		var debounceCts = new CancellationTokenSource();
+		_countySearchDebounceCts = debounceCts;
+
+		try
+		{
+			await Task.Delay(CountySearchDebounceDelay, debounceCts.Token);
+			if (debounceCts.IsCancellationRequested)
+			{
+				return;
+			}
+
+			_countySearchApplied = _countySearchInput;
+			await InvokeAsync(StateHasChanged);
+		}
+		catch (OperationCanceledException)
+		{
+		}
+		finally
+		{
+			if (ReferenceEquals(_countySearchDebounceCts, debounceCts))
+			{
+				_countySearchDebounceCts = null;
+			}
+
+			debounceCts.Dispose();
+		}
+	}
+
+	private void CancelCountySearchDebounce()
+	{
+		_countySearchDebounceCts?.Cancel();
 	}
 
 	private async Task SaveAsync()
@@ -227,6 +377,8 @@
 
 	public void Dispose()
 	{
+		CancelCountySearchDebounce();
+		_countySearchDebounceCts?.Dispose();
 		NavigationManager.LocationChanged -= OnLocationChanged;
 	}
 }

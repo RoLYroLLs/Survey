@@ -56,7 +56,11 @@
 		}
 
 		<div class="list-card">
-			@if (_items.Count == 0)
+			@if (!_hasLoadedInitialState)
+			{
+				<p class="empty-state">Loading...</p>
+			}
+			else if (_items.Count == 0)
 			{
 				<p class="empty-state">No options exist for this question yet.</p>
 			}
@@ -131,6 +135,7 @@
 	private int _totalCount;
 	private bool _canReorder;
 	private bool _isSavingOrder;
+	private bool _hasLoadedInitialState;
 	private int? _draggedOptionId;
 	private int? _dropTargetOptionId;
 	private string? _reorderErrorMessage;
@@ -143,33 +148,42 @@
 			_items = Array.Empty<QuestionOptionListItem>();
 			_totalCount = 0;
 			_canReorder = false;
+			_hasLoadedInitialState = true;
 			return;
 		}
 
-		_context = await AdministrationService.GetQuestionOptionAsync(null, SurveyQuestionId.Value);
-		if (_context.SupportsOptions)
+		_hasLoadedInitialState = false;
+		try
 		{
-			var result = await AdministrationService.GetQuestionOptionsAsync(new PagedQuery
+			_context = await AdministrationService.GetQuestionOptionAsync(null, SurveyQuestionId.Value);
+			if (_context.SupportsOptions)
 			{
-				Limit = PagedQuery.MaxLimit
-			}, SurveyQuestionId.Value);
-			_items = result.Items;
-			_totalCount = result.TotalCount;
-			_canReorder = await TenantPermissionEvaluator.HasPermissionAsync(TenantPermissionKeys.SurveysEdit)
-				&& _items.Count == _totalCount
-				&& _items.Count > 1
-				&& !_items.Any(item => item.IsLocked);
+				var result = await AdministrationService.GetQuestionOptionsAsync(new PagedQuery
+				{
+					Limit = PagedQuery.MaxLimit
+				}, SurveyQuestionId.Value);
+				_items = result.Items;
+				_totalCount = result.TotalCount;
+				_canReorder = await TenantPermissionEvaluator.HasPermissionAsync(TenantPermissionKeys.SurveysEdit)
+					&& _items.Count == _totalCount
+					&& _items.Count > 1
+					&& !_items.Any(item => item.IsLocked);
+			}
+			else
+			{
+				_items = Array.Empty<QuestionOptionListItem>();
+				_totalCount = 0;
+				_canReorder = false;
+			}
+			SurveySectionId ??= _context.SurveySectionId;
+			SurveyVersionId ??= _context.SurveyVersionId;
+			SurveyDefinitionId ??= _context.SurveyDefinitionId;
+			_reorderErrorMessage = null;
 		}
-		else
+		finally
 		{
-			_items = Array.Empty<QuestionOptionListItem>();
-			_totalCount = 0;
-			_canReorder = false;
+			_hasLoadedInitialState = true;
 		}
-		SurveySectionId ??= _context.SurveySectionId;
-		SurveyVersionId ??= _context.SurveyVersionId;
-		SurveyDefinitionId ??= _context.SurveyDefinitionId;
-		_reorderErrorMessage = null;
 	}
 
 	private bool CanAddOptions()

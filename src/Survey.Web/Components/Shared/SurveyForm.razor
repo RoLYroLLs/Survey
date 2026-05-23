@@ -299,7 +299,7 @@ else
 		_errorMessage = null;
 	}
 
-	private RenderFragment AddressFields(AddressInputModel address, AddressMode mode) => @<div class="form-grid">
+	private RenderFragment AddressFields(AddressInputModel address, AddressMode mode) => @<div class="form-grid form-grid--address">
 		<div class="field-stack form-grid--single">
 			<FieldLabel Text="Country" Required="@(mode == AddressMode.Physical)" />
 			<SearchableSelect class="form-control"
